@@ -216,7 +216,8 @@ class QuantumLayer(nn.Module):
         self.thetas = []
         self.theta_names = []
 
-        # Setup trainable parameters - FIXED: Only add if not in reservoir mode
+        # In reservoir mode, the circuit has no trainable parameters because
+        # the interferometers use fixed random values instead of named parameters
         if not ansatz.experiment.reservoir_mode:
             for tp in ansatz.trainable_parameters:
                 if tp in spec_mappings:
@@ -228,17 +229,7 @@ class QuantumLayer(nn.Module):
                     self.register_parameter(tp, parameter)
                     self.thetas.append(parameter)
 
-        # Setup reservoir parameters if needed
-        if ansatz.experiment.reservoir_mode and "phi_" in spec_mappings:
-            phi_list = spec_mappings["phi_"]
-            if phi_list:
-                phi_values = []
-                for param_name in phi_list:
-                    # For reservoir mode, just use random values
-                    phi_values.append(2 * math.pi * np.random.rand())
 
-                phi_tensor = torch.tensor(phi_values, dtype=self.dtype, device=self.device)
-                self.register_buffer("phi_static", phi_tensor)
 
     def _setup_parameters_from_custom(self, trainable_parameters: List[str]):
         """Setup parameters from custom circuit configuration."""
@@ -319,7 +310,7 @@ class QuantumLayer(nn.Module):
         """Create dummy parameters for initialization."""
         params = [theta for theta in self.thetas]
 
-        # Add dummy input parameters - FIXED: Use correct parameter count
+        # Add dummy input parameters
         if self.auto_generation_mode:
             dummy_input = torch.zeros(self.ansatz.total_shifters, dtype=self.dtype, device=self.device)
             params.append(dummy_input)
@@ -332,10 +323,6 @@ class QuantumLayer(nn.Module):
                     param_count = len(spec_mappings[ip])
                     dummy_input = torch.zeros(param_count, dtype=self.dtype, device=self.device)
                     params.append(dummy_input)
-
-        # Add static phi parameters if in reservoir mode
-        if hasattr(self, "phi_static"):
-            params.append(self.phi_static)
 
         return params
 
@@ -353,7 +340,8 @@ class QuantumLayer(nn.Module):
             )
         else:
             # For custom circuits, apply 2π scaling directly
-            return x * torch.pi
+            return x
+
 
     def prepare_parameters(self, input_parameters: List[torch.Tensor]) -> List[torch.Tensor]:
         """Prepare parameter list for circuit evaluation."""
@@ -373,14 +361,6 @@ class QuantumLayer(nn.Module):
             for x in input_parameters:
                 encoded = self._prepare_input_encoding(x)
                 params.append(encoded)
-
-        # Add static phi parameters if in reservoir mode
-        if hasattr(self, "phi_static"):
-            if input_parameters and input_parameters[0].dim() > 1:
-                batch_size = input_parameters[0].shape[0]
-                params.append(self.phi_static.expand(batch_size, -1))
-            else:
-                params.append(self.phi_static)
 
         return params
 
@@ -510,14 +490,15 @@ class QuantumLayer(nn.Module):
             state_pattern=StatePattern.PERIODIC  # Default to PERIODIC
         )
 
-        # Create ansatz using AnsatzFactory
+        # Create ansatz using AnsatzFactory - NOW WITH no_bunching
         ansatz = AnsatzFactory.create(
             PhotonicBackend=experiment,
             input_size=input_size,
-            output_size=output_size,  # Can be None for automatic calculation
+            output_size=output_size,
             output_mapping_strategy=output_mapping_strategy,
             dtype=dtype,
-            device= device
+            device=device,
+            no_bunching=no_bunching  # PASS no_bunching to ansatz
         )
 
         # IMPORTANT: Override the ansatz's output_mapping_strategy to ensure our parameter is used
@@ -532,8 +513,8 @@ class QuantumLayer(nn.Module):
             output_mapping_strategy=output_mapping_strategy,
             shots=shots,
             no_bunching=no_bunching,
-            device= device,
-            dtype= dtype
+            device=device,
+            dtype=dtype
         )
     def __str__(self) -> str:
         """String representation of the quantum layer."""

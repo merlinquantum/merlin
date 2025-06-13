@@ -365,9 +365,6 @@ class TestOutputMappingStrategies:
         assert len(trainable_params) == 0
         print("  ✓ No trainable parameters in reservoir mode")
 
-        # Check that phi_static buffer exists
-        assert hasattr(layer, 'phi_static')
-        print("  ✓ phi_static buffer exists")
 
         # Test forward pass
         x = torch.rand(3, 4)
