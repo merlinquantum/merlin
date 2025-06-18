@@ -1,0 +1,256 @@
+
+import torch
+import perceval as pcvl
+import numpy as np
+
+from .utils import generate_all_fock_states
+from ..sampling.autodiff import AutoDiffProcess
+from ..pcvl_pytorch.locirc_to_tensor import CircuitConverter
+from ..pcvl_pytorch.slos_torchscript import build_slos_distribution_computegraph as build_slos_graph
+
+from typing import Union
+from torch import Tensor
+
+
+class FeatureMap:
+    """ 
+    Feature Map object embeds a datapoint within a quantum circuit and      
+    computes the associated unitary for quantum kernel methods.
+    
+    :param circuit: Circuit with data-embedding parameters.
+    :param input_parameters: Parameters which encode.
+    :param dtype: Data type for generated unitary.
+    :param device: Device on which to calculate the unitary.
+    """
+    def __init__(self, circuit: pcvl.Circuit, input_parameters, dtype = torch.float32, device = None):
+        self.circuit = circuit
+        self._circuit_graph = CircuitConverter(circuit, input_parameters, dtype, device)
+        self.input_size = (len(circuit.get_parameters()),)
+    
+    def compute_unitary(self, x: Union[Tensor, np.ndarray, float]) -> Tensor:
+        """Computes the unitary associated with the feature map and given datapoint."""
+        if not isinstance(x, torch.Tensor):
+            x = [x] if isinstance(x, (float, int)) else x
+            x = torch.tensor(x)
+        
+        return self._circuit_graph.to_tensor(x)
+    
+    def is_datapoint(self, x: Union[Tensor, np.ndarray, float]) -> bool:
+        """Checks whether an input data is a singular datapoint or dataset."""
+        if isinstance(x, (float, int)):
+            return True
+        if x.shape == self.input_size:
+            return True 
+        elif x.shape[1:] == self.input_size:
+            return False
+        elif self.input_size == (1,) and len(x.shape) == 1:
+            return False
+        raise ValueError(f'Given value shape {tuple(x.shape)} does not match data shape {self.input_size}.')
+
+
+class FidelityQuantumKernel:
+    r"""
+    Feature Map object embeds a datapoint within a quantum circuit and      
+    Fidelity Quantum Kernel
+    
+    For a given input Fock state, :math:`|s \rangle` and feature map, 
+    :math:`U`, the quantum kernel estimates the following inner product 
+    using SLOS:
+    .. math:: 
+        |\langle s | U^{\dagger}(x2) U(x1) | s \rangle|^{2}
+        
+    Transition probabilities are computed in parallel for each pair of 
+    datapoints in the input datasets.
+    
+    :param feature_map: Feature map object that encodes a given datapoint 
+        within its circuit.
+    :param input_state: Input state into circuit with which the transition 
+        probability is calculated. 
+    :param shots: Number of circuit shots
+    :param sampling_method: Probability distributions are post-processed with 
+        some psuedo-sampling method: 'multinomial', 'binomial' or 'gaussian'.
+    :param no_bunching: Whether or not to post-select out results with bunching.
+    :param force_psd: Projects training kernel matrix to closest positive semi-
+        definite. Default: `True`.
+    :param device: Device on which to perform SLOS
+    :param dtype: Datatype with which to perform SLOS
+    
+    Examples
+    --------
+    For a given training and test datasets, one can construct the training and 
+    test kernel matrices in the following structure:
+    .. code-block:: python
+        >>> circuit = Circuit(2) // PS(P("X0") // BS() // PS(P("X1") // BS()
+        >>> feature_map = FeatureMap(circuit, ["X"])
+        >>>
+        >>> quantum_kernel = FidelityQuantumKernel(
+        >>>     feature_map,
+        >>>     input_state=[0, 4],
+        >>>     no_bunching=False,
+        >>> )
+        >>> # Construct the training & test kernel matrices
+        >>> K_train = quantum_kernel(X_train, X_train)
+        >>> K_test = quantum_kernel(X_test, X_train)
+    
+    Use with scikit-learn for kernel-based machine learning:.
+    .. code-block:: python
+        >>> from sklearn import SVC
+        >>> 
+        >>> # For a support vector classification problem
+        >>> svc = SVC(kernel='precomputed')
+        >>> svc.fit(K_train)
+        >>> y_pred = svc.predict(K_test)
+    """
+    def __init__(
+        self,
+        feature_map: FeatureMap,
+        input_state: list,
+        *,
+        shots: int = None,
+        sampling_method: str = 'multinomial',
+        no_bunching = True,
+        force_psd = True,
+        device = None,
+        dtype = None
+    ):
+        self.feature_map = feature_map 
+        self.input_state = input_state
+        self.shots = shots or 0
+        self.sampling_method = sampling_method
+        self.no_bunching = no_bunching
+        self.force_psd = force_psd
+        self.device = device 
+        self.dtype = dtype if dtype is not None else feature_map.dtype
+        
+        if max(input_state) > 1 and no_bunching:
+            raise ValueError(f"Bunching must be enabled for an input state with {max(input_state)} in one mode.")
+        
+        m, n = len(input_state), sum(input_state)
+        
+        self._slos_graph = build_slos_graph(
+            m=m,
+            n_photons=n,
+            no_bunching=no_bunching,
+            keep_keys=False, 
+            device=device,
+            dtype=dtype
+        )
+        # Find index of input states in output
+        all_fock_states = list(generate_all_fock_states(m, n))
+        self._input_state_index = all_fock_states.index(tuple(input_state))
+        
+        # For sampling
+        self._autodiff_process = AutoDiffProcess()
+        
+        
+    def __call__(self, x1: Union[float, np.ndarray, Tensor], x2 = None):
+        """ 
+        Calculate the quantum kernel for input data x1 and x2. If x1 and x2 are datapoints,
+        a scalar value is returned.
+        
+        :param x1: Input datapoint or dataset. If datapoint, a scalar value is returned. 
+            If a dataset, the kernel matrix is returned. The kernel matrix returned matches 
+            the type of the input dataset.
+        :param x2: Input datapoint or dataset. If `None`, the kernel matrix is assumed to be symmetric
+            with input datasets, x1, x1 and only the upper triangular is calculated. Default: `None`.
+            
+        If you would like the diagonal and lower triangular to be explicitly calculated, 
+        for identical inputs, please specify an argument `x2`.
+        """
+        if x2 is not None and type(x1) is not type(x2):
+            raise TypeError('x2 should be of the same type as x1 if x2 is not None.')
+        
+        # Return scalar value for input datapoints
+        if self.feature_map.is_datapoint(x1):
+            if x2 is None:
+                raise ValueError('For input datapoints, please specify an x2 argument.')
+            return self._return_kernel_scalar(x1, x2)
+        
+        # For 1D feature maps, vectors are treated as datasets.
+        if self.feature_map.input_size[0] == 1:
+            x1 = x1.reshape(len(x1), 1)
+            x2 = x2.reshape(len(x2), 1) if x2 is not None else None
+        
+        # Check if we are constructing training matrix
+        equal_inputs = x2 is None or (
+            isinstance(x1, np.ndarray) and np.allclose(x1, x2)
+        ) or (
+            isinstance(x1, Tensor) and torch.allclose(x1, x2)
+        )
+        
+        # Calculate feature map unitary for every input x1.
+        U_forward = torch.stack([self.feature_map.compute_unitary(x) for x in x1])
+        
+        if x2 is not None:
+            U_adjoint = [self.feature_map.compute_unitary(x).transpose(0, 1).conj() for x in x2]
+            
+            # Calculate circuit unitary for every pair of datapoints
+            all_circuits = torch.stack([U @ U_dag for U in U_forward for U_dag in U_adjoint])
+        else:
+            U_adj = U_forward.conj().transpose(1, 2)
+            
+            # Calculate circuit unitaries for upper diagonal of kernel matrix only
+            all_circuits = torch.stack(
+                [U @ U_adj[j] for i, U in enumerate(U_forward) 
+                for j in range(i + 1, len(U_adj))]
+            )
+        
+        all_probs_per_circuit = self._slos_graph.compute(all_circuits, self.input_state)[1]
+        
+        if self.shots > 0:
+            all_probs_per_circuit = self._autodiff_process.sampling_noise.pcvl_sampler(
+                all_probs_per_circuit, self.shots, self.sampling_method
+            )
+        
+        transition_probs = all_probs_per_circuit[:, self._input_state_index]
+        
+        d = len(x1)
+        if x2 is None:
+            # Copy transition probs to upper triangular & reflect
+            kernel_matrix = torch.zeros(d, d)
+            upper_indices = torch.triu_indices(d, d, offset=1)
+            kernel_matrix[upper_indices[0], upper_indices[1]] = transition_probs 
+            kernel_matrix[upper_indices[1], upper_indices[0]] = transition_probs 
+            kernel_matrix.fill_diagonal_(1)
+            
+            if self.force_psd:
+                kernel_matrix = self._project_psd(kernel_matrix)
+            
+        else:
+            kernel_matrix = transition_probs.reshape(d, len(x2))
+            
+            if self.force_psd and equal_inputs:
+                # Symmetrize the matrix
+                kernel_matrix = 0.5 * (kernel_matrix + kernel_matrix.transpose(0, 1))
+                kernel_matrix = self._project_psd(kernel_matrix)
+        
+        if isinstance(x1, np.ndarray):
+            kernel_matrix = kernel_matrix.detach().numpy()
+        
+        return kernel_matrix
+    
+    def _return_kernel_scalar(self, x1, x2):
+        """Returns scalar kernel value for input datapoints"""
+        U = self.feature_map.compute_unitary(x1)
+        U_adjoint = self.feature_map.compute_unitary(x2).conj().transpose(0, 1)
+        
+        probs = self._slos_graph.compute(U @ U_adjoint, self.input_state)[1]
+        
+        if self.shots > 0:
+            probs = self._autodiff_process.sampling_noise.pcvl_sampler(
+                probs, self.shots, self.sampling_method
+            )
+        return probs[self._input_state_index].item()
+
+    @staticmethod 
+    def _project_psd(matrix: Tensor) -> Tensor:
+        """Projects a symmetric matrix to closest positive semi-definite"""
+        # Perform spectral decomposition and set negative eigenvalues to 0
+        eigenvals, eigenvecs = torch.linalg.eig(matrix)
+        eigenvals = torch.diag(torch.where(eigenvals.real > 0, eigenvals.real, 0))
+                
+        matrix_psd = eigenvecs.real @ eigenvals @ eigenvecs.transpose(0, 1).real
+        
+        matrix_psd.fill_diagonal_(1)
+        
+        return matrix_psd.real
