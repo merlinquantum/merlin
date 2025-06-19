@@ -67,7 +67,7 @@ def prepare_vectorized_operations(operations_list, device=None):
 def layer_compute_vectorized(unitary: torch.Tensor, prev_amplitudes: torch.Tensor,
                              sources: torch.Tensor, destinations: torch.Tensor,
                              modes: torch.Tensor,
-                             p: int, return_contributions=False) -> torch.Tensor:
+                             p: int) -> torch.Tensor:
     """
     Compute amplitudes for a single layer using vectorized operations.
 
@@ -117,17 +117,17 @@ def layer_compute_vectorized(unitary: torch.Tensor, prev_amplitudes: torch.Tenso
         destinations.repeat(batch_size, 1),  # repeat destinations for each batch
         contributions.to(destinations.device)  # values to add
     )
-    if return_contributions:
-        return result, contributions
 
     return result
 
 
 
-def layer_compute_backward(unitary: torch.Tensor, contributions: torch.Tensor,
+def layer_compute_backward(unitary: torch.Tensor,
                              sources: torch.Tensor,
+                             destinations: torch.Tensor,
                              modes: torch.Tensor,
-                             p: int) -> torch.Tensor:
+                             m: int,
+                           ) -> torch.Tensor:
     """
     Compute amplitudes for a single layer using vectorized operations.
 
@@ -142,38 +142,35 @@ def layer_compute_backward(unitary: torch.Tensor, contributions: torch.Tensor,
     Returns:
         Next layer amplitudes [batch_size, next_size]
     """
-    batch_size = unitary.shape[0]
+    inverts = []
+    computing_tensors = []
+    for p in range(m):
+        batch_size = unitary.shape[0]
 
-    # Handle empty operations case
-    if sources.shape[0] == 0:
-        return contributions
+        # Determine output size
+        size_sources = int(sources.max().item()) + 1 # 220
+        size_destinations = int(destinations.max().item()) + 1 # 715
+        # Get unitary elements for all operations
+        # Shape: [batch_size, num_ops)
 
-    # Determine output size
-    next_size = int(sources.max().item()) + 1
+        # Get source amplitudes for all operations
+        # Shape: [batch_size, num_ops]
 
-    # Get unitary elements for all operations
-    # Shape: [batch_size, num_ops]
-    u_elements = unitary[:, modes, p]
+        u_elements = torch.diag_embed(unitary[:, modes, p])
 
-    # Get source amplitudes for all operations
-    # Shape: [batch_size, num_ops]
-    dtype = contributions.dtype
-    # Compute contributions
-    # Shape: [batch_size, num_ops]
-    contributions = (u_elements)**(-1) * contributions
+        destinations_tensor = torch.zeros((1, size_destinations, modes.shape[0]), dtype=u_elements.dtype)
+        destinations_tensor[:, destinations, torch.arange(destinations.shape[0])] = 1
 
-    # Create result tensor with same dtype as input
-    result = torch.zeros((batch_size, next_size), dtype=dtype, device=unitary.device)
-    counts = torch.zeros((batch_size, next_size), dtype=dtype, device=unitary.device)
-    # Now we can use scatter_add_ with a 2D index tensor
-    result.scatter_add_(
-        1,  # dimension to scatter on (1 for the state indices)
-        sources.repeat(batch_size, 1),  # repeat destinations for each batch
-        contributions  # values to add
-    )
-    counts.scatter_add_(1, sources.repeat(batch_size, 1), torch.ones_like(contributions))
+        sources_tensor = torch.zeros((1, sources.shape[0], size_sources), dtype=u_elements.dtype)
+        sources_tensor[:, torch.arange(sources.shape[0]), sources] = 1
 
-    return result / counts
+        computing_tensor = destinations_tensor @ u_elements @ sources_tensor
+        computing_tensors.append(computing_tensor)
+    batch_tensors = torch.stack(computing_tensors, dim=0)
+    inverts = torch.linalg.pinv(batch_tensors)
+
+
+    return inverts
 
 class SLOSComputeGraph:
     """
@@ -219,6 +216,7 @@ class SLOSComputeGraph:
         self.device = device
         self.prev_amplitudes = None
         self.dtype = dtype
+        self.ct_inverts = None
 
         if index_photons is None:
             index_photons = [(0, self.m - 1)] * self.n_photons
@@ -327,8 +325,8 @@ class SLOSComputeGraph:
 
             # Create a partial function with fixed operations
             def make_layer_fn(s, d, m):
-                return lambda u, prev, p_val, return_contributions=False: layer_compute_vectorized(
-                    u, prev, s, d, m, p_val, return_contributions=return_contributions)
+                return lambda u, prev, p_val: layer_compute_vectorized(
+                    u, prev, s, d, m, p_val)
 
             self.layer_functions.append(
                 make_layer_fn(sources, destinations, modes)
@@ -426,7 +424,7 @@ class SLOSComputeGraph:
         # Apply each layer
         for layer_idx, layer_fn in enumerate(self.layer_functions):
             p = idx_n[layer_idx]
-            amplitudes, self.contributions = layer_fn(unitary, amplitudes, p, return_contributions=True)
+            amplitudes = layer_fn(unitary, amplitudes, p)
 
         self.prev_amplitudes = amplitudes
         # Calculate probabilities
@@ -457,6 +455,103 @@ class SLOSComputeGraph:
 
         return keys, probabilities
 
+    def _prepare_pa_inc(self, unitary):
+        self.ct_inverts = []
+        for layer_idx, (sources, destinations, modes) in enumerate(self.vectorized_operations):
+            self.ct_inverts.append(layer_compute_backward(unitary, sources, destinations, modes, self.m))
+
+
+
+    def compute_pa_inc(self, unitary: torch.Tensor,
+                       input_state_prev: list[int],
+                       input_state: list[int],
+                       changed_unitary=False) -> Tuple[List[Tuple[int, ...]], torch.Tensor]:
+
+        if len(unitary.shape) == 2:
+            is_batched = False
+            unitary = unitary.unsqueeze(0)  # Add batch dimension [1 x m x m]
+        else:
+            is_batched = True
+
+        if any(n < 0 for n in input_state) or sum(input_state) == 0:
+            raise ValueError("Photon numbers cannot be negative or all zeros")
+
+        if self.no_bunching and not all(x in [0, 1] for x in input_state):
+            raise ValueError("Input state must be binary (0s and 1s only) in non-bunching mode")
+
+        batch_size, m, m2 = unitary.shape
+        if m != m2 or m != self.m:
+            raise ValueError(f"Unitary matrix must be square with dimension {self.m}x{self.m}")
+
+        # Check dtype - it should match the complex dtype used for the graph building
+        if unitary.dtype != self.complex_dtype:
+            # Raise an error instead of just warning and converting
+            raise ValueError(
+                f"Unitary dtype {unitary.dtype} doesn't match the expected complex dtype {self.complex_dtype} "
+                f"for the graph built with dtype {self.dtype}. Please provide a unitary with the correct dtype "
+                f"or rebuild the graph with a compatible dtype."
+            )
+
+        if self.ct_inverts is None or changed_unitary:
+            self._prepare_pa_inc(unitary)
+        idx_n_pos = []
+        idx_n_neg = []
+        self.norm_factor_input = 1
+        for i, count in enumerate(input_state):
+            for c in range(count):
+                self.norm_factor_input *= c + 1
+            p = input_state[i] - input_state_prev[i]
+            if p > 0:
+                idx_n_pos.extend([i] * p)
+            elif p < 0:
+                idx_n_neg.extend([i] * abs(p))
+
+        amplitudes = self.prev_amplitudes
+        num_changes = len(idx_n_pos)
+        if num_changes > 0:
+            vectorized_operations = self.vectorized_operations[-num_changes:]
+
+
+            for k in range(num_changes - 1, -1, -1):
+                p_neg = idx_n_neg[k]
+                invert = self.ct_inverts[k + self.n_photons - num_changes][p_neg]
+                amplitudes = amplitudes.unsqueeze(1) @ torch.transpose(invert, -2, -1)
+                amplitudes = amplitudes.squeeze(1)
+
+
+            for layer_idx, (sources, destinations, modes) in enumerate(vectorized_operations):
+                p_pos = idx_n_pos[layer_idx]
+                amplitudes = layer_compute_vectorized(unitary, amplitudes, sources, destinations, modes, p_pos)
+
+        self.prev_amplitudes = amplitudes
+
+        # Calculate probabilities
+        probabilities = amplitudes.real ** 2 + amplitudes.imag ** 2
+        probabilities *= self.norm_factor_output.to(device=unitary.device)
+        probabilities /= self.norm_factor_input
+
+        # Apply output mapping if needed
+        if self.output_map_func is not None:
+            probabilities = self.mapping_function(probabilities)
+            keys = self.mapped_keys
+        else:
+            if self.no_bunching:
+                sum_probs = probabilities.sum(dim=1, keepdim=True)
+                # Only normalize when sum > 0 to avoid division by zero
+                valid_entries = sum_probs > 0
+                if valid_entries.any():
+                    probabilities = torch.where(
+                        valid_entries,
+                        probabilities / torch.where(valid_entries, sum_probs, torch.ones_like(sum_probs)),
+                        probabilities
+                    )
+            keys = self.final_keys if self.keep_keys else None
+
+        # Remove batch dimension if input was single unitary
+        if not is_batched:
+            probabilities = probabilities.squeeze(0)
+
+        return keys, probabilities
 
 
     def to(self, dtype: torch.dtype, device: str | torch.device):
@@ -485,89 +580,6 @@ class SLOSComputeGraph:
 
 
         return self
-
-
-    def compute_pa_inc(self, unitary: torch.Tensor,
-                       input_state_prev: list[int],
-                       contributions: torch.Tensor,
-                       input_state: list[int]) -> Tuple[List[Tuple[int, ...]], torch.Tensor]:
-
-        if len(unitary.shape) == 2:
-            is_batched = False
-            unitary = unitary.unsqueeze(0)  # Add batch dimension [1 x m x m]
-        else:
-            is_batched = True
-
-        if any(n < 0 for n in input_state) or sum(input_state) == 0:
-            raise ValueError("Photon numbers cannot be negative or all zeros")
-
-        if self.no_bunching and not all(x in [0, 1] for x in input_state):
-            raise ValueError("Input state must be binary (0s and 1s only) in non-bunching mode")
-
-        batch_size, m, m2 = unitary.shape
-        if m != m2 or m != self.m:
-            raise ValueError(f"Unitary matrix must be square with dimension {self.m}x{self.m}")
-
-        # Check dtype - it should match the complex dtype used for the graph building
-        if unitary.dtype != self.complex_dtype:
-            # Raise an error instead of just warning and converting
-            raise ValueError(
-                f"Unitary dtype {unitary.dtype} doesn't match the expected complex dtype {self.complex_dtype} "
-                f"for the graph built with dtype {self.dtype}. Please provide a unitary with the correct dtype "
-                f"or rebuild the graph with a compatible dtype."
-            )
-
-
-        idx_n_pos = []
-        idx_n_neg = []
-        self.norm_factor_input = 1
-        for i, count in enumerate(input_state):
-            for c in range(count):
-                self.norm_factor_input *= c + 1
-            p = input_state[i] - input_state_prev[i]
-            if p > 0:
-                idx_n_pos.extend([i]*(abs(p)))
-            else:
-                idx_n_neg.extend([i]*(abs(p)))
-
-        num_changes = len(idx_n_pos)
-        vectorized_operations = self.vectorized_operations[-num_changes:]
-        for layer_idx, (sources, destinations, modes) in enumerate(vectorized_operations):
-            p_neg = idx_n_neg[layer_idx]
-            amplitudes = layer_compute_backward(unitary, contributions, sources, modes, p_neg)
-            p_pos = idx_n_pos[layer_idx]
-            amplitudes, contributions = layer_compute_vectorized(unitary, amplitudes, sources, destinations, modes, p_pos, return_contributions=True)
-
-
-        self.contributions = contributions
-        # Calculate probabilities
-        #probabilities = (amplitudes.abs() ** 2).real
-        probabilities = amplitudes.real ** 2 + amplitudes.imag ** 2
-        probabilities *= self.norm_factor_output.to(device=device)
-        probabilities /= self.norm_factor_input
-
-        # Apply output mapping if needed
-        if self.output_map_func is not None:
-            probabilities = self.mapping_function(probabilities)
-            keys = self.mapped_keys
-        else:
-            if self.no_bunching:
-                sum_probs = probabilities.sum(dim=1, keepdim=True)
-                # Only normalize when sum > 0 to avoid division by zero
-                valid_entries = sum_probs > 0
-                if valid_entries.any():
-                    probabilities = torch.where(
-                        valid_entries,
-                        probabilities / torch.where(valid_entries, sum_probs, torch.ones_like(sum_probs)),
-                        probabilities
-                    )
-            keys = self.final_keys if self.keep_keys else None
-
-        # Remove batch dimension if input was single unitary
-        if not is_batched:
-            probabilities = probabilities.squeeze(0)
-
-        return keys, probabilities
 
 
 def build_slos_distribution_computegraph(
@@ -792,3 +804,4 @@ if __name__ == "__main__":
         print(f"  Method 2 (using compute_slos_distribution with inferred dtype):")
         print(f"    Total time: {total_time:.4f} seconds")
         print(f"    Probability sum: {probs2.sum().item():.8f}")
+

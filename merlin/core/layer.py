@@ -392,7 +392,10 @@ class QuantumLayer(nn.Module):
         params = self.prepare_parameters(list(input_parameters))
 
         # Get quantum output
-        distribution = self.computation_process.compute(params)
+        if type(self.computation_process.input_state) is dict:
+            distribution = self.computation_process.compute_superposition_state(params)
+        else:
+            distribution = self.computation_process.compute(params)
 
         # Handle sampling
         needs_gradient = self.training and torch.is_grad_enabled() and any(p.requires_grad for p in self.parameters())

@@ -36,7 +36,9 @@ class ComputationProcess(AbstractComputationProcess):
         self.index_photons = index_photons
 
         # Extract circuit parameters for graph building
-        self.m = len(input_state)  # Number of modes
+        if type(input_state) is dict:
+            input_state = list(input_state.keys())[0]
+        self.m = len(input_state)# Number of modes
         self.n_photons = sum(input_state)  # Total number of photons
 
         # Build computation graphs
@@ -71,9 +73,61 @@ class ComputationProcess(AbstractComputationProcess):
         unitary = self.converter.to_tensor(*parameters)
 
         # Compute output distribution using the input state
-        keys, distribution = self.simulation_graph.compute(unitary, self.input_state)
+        if type(self.input_state) is dict:
+            input_state = list(self.input_state.keys())[0]
+        else:
+            input_state = self.input_state
+        keys, distribution = self.simulation_graph.compute(unitary, input_state)
 
         return distribution
+
+
+    def compute_superposition_state(self, parameters: List[torch.Tensor]) -> torch.Tensor:
+        unitary = self.converter.to_tensor(*parameters)
+
+
+        def is_swap_permutation(t1, t2):
+
+            if t1 == t2:
+                return False
+            diff = [(i, i) for i, (x, y) in enumerate(zip(t1, t2)) if x != y]
+            if len(diff) != 2:
+                return False
+            i, j = diff[0][0], diff[1][0]
+
+            return t1[i] == t2[j] and t1[j] == t2[i]
+
+        def reorder_swap_chain(lst):
+
+            from collections import deque
+
+            remaining = lst[:]
+            chain = [remaining.pop(0)]  # Commence avec le premier élément
+            while remaining:
+                for i, candidate in enumerate(remaining):
+                    if is_swap_permutation(chain[-1], candidate):
+                        chain.append(remaining.pop(i))
+                        break
+                else:
+                    chain.append(remaining.pop(0))
+
+            return chain
+
+        state_list = reorder_swap_chain(list(self.input_state.keys()))
+
+
+
+
+        prev_state = state_list.pop(0)
+        keys, distribution = self.simulation_graph.compute(unitary, prev_state)
+        distributions = distribution * self.input_state[prev_state]
+
+        for fock_state in state_list:
+            keys, distribution = self.simulation_graph.compute_pa_inc(unitary, prev_state, fock_state)
+            distributions += distribution * self.input_state[fock_state]
+            prev_state = fock_state
+
+        return distributions
 
     def compute_with_keys(self, parameters: List[torch.Tensor]):
         """Compute quantum output distribution and return both keys and probabilities."""
