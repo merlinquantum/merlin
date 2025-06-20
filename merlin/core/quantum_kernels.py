@@ -1,4 +1,3 @@
-
 import torch
 import perceval as pcvl
 import numpy as np
@@ -18,7 +17,7 @@ class FeatureMap:
     computes the associated unitary for quantum kernel methods.
 
     :param circuit: Circuit with data-embedding parameters.
-    :param input_parameters: Parameters which encode.
+    :param input_parameters: Parameters which encode each datapoint.
     :param dtype: Data type for generated unitary.
     :param device: Device on which to calculate the unitary.
     """
@@ -26,45 +25,77 @@ class FeatureMap:
     def __init__(
         self, 
         circuit: pcvl.Circuit, 
-        input_parameters: list[str],
+        input_size: int,
+        input_parameters: str,
+        *,
+        trainable_parameters: list[str] = None,
         dtype: str = torch.float32, 
         device = None
     ):
         self.circuit = circuit
-        self.input_size = (len(circuit.get_parameters()),)
+        self.input_size = input_size
+        self.trainable_parameters = trainable_parameters or []
         self.dtype = dtype_to_torch.get(dtype, torch.float32)
         self.device = device
+        self.is_trainable = bool(trainable_parameters)
+        
+        if isinstance(input_parameters, list):
+            raise ValueError('Only a single input parameter is allowed.')
         
         self._circuit_graph = CircuitConverter(
             circuit,
-            input_parameters,
-            self.dtype,
-            device
+            [input_parameters]+self.trainable_parameters,
+            dtype=self.dtype,
+            device=device
         )
+        # Set training parameters as torch parameters
+        self._training_dict = {}
+        for param_name in self.trainable_parameters:
+            param_length = len(self._circuit_graph.spec_mappings[param_name])
+            
+            p = torch.empty(param_length, requires_grad=True)
+            self._training_dict[param_name] = torch.nn.Parameter(p)
 
-    def compute_unitary(self, x: Union[Tensor, np.ndarray, float]) -> Tensor:
-        """Computes the unitary associated with the feature map and given datapoint."""
+    def compute_unitary(self, x: Union[Tensor, np.ndarray, float], *training_parameters: Tensor) -> Tensor:
+        """
+        Computes the unitary associated with the feature map and given datapoint
+        and training parameters.
+        
+        :param x: Input datapoint or dataset. If
+        
+        """
         if not isinstance(x, torch.Tensor):
             x = [x] if isinstance(x, (float, int)) else x
-            x = torch.tensor(x)
-
-        return self._circuit_graph.to_tensor(x)
-
+            return torch.tensor(x)
+        else:
+            x = x.to(dtype=self.dtype, device=self.device)
+        
+        if not self.is_trainable:
+            return self._circuit_graph.to_tensor(x)
+        
+        if not training_parameters:
+            training_parameters = self._training_dict.values()
+        
+        return self._circuit_graph.to_tensor(x, *training_parameters)
+        
     def is_datapoint(self, x: Union[Tensor, np.ndarray, float]) -> bool:
         """Checks whether an input data is a singular datapoint or dataset."""
         if isinstance(x, (float, int)):
             return True
         if x.shape == self.input_size:
             return True
-        elif x.shape[1:] == self.input_size:
-            return False
-        elif self.input_size == (1,) and len(x.shape) == 1:
+        elif self.input_size == 1 and x.dim() in (0, 1):
+            if x.numel() == 1:
+                return True 
+            elif x.dim() == 1:
+                return False
+        elif x.shape > 1 and x.shape[1] == self.input_size:
             return False
         raise ValueError(
             f'Given value shape {tuple(x.shape)} does not match data shape {self.input_size}.')
+    
 
-
-class FidelityQuantumKernel:
+class FidelityQuantumKernel(torch.nn.Module):
     r"""
     Feature Map object embeds a datapoint within a quantum circuit and      
     Fidelity Quantum Kernel
@@ -80,9 +111,9 @@ class FidelityQuantumKernel:
 
     :param feature_map: Feature map object that encodes a given datapoint 
         within its circuit.
-    :param input_state: Input state into circuit with which the transition 
-        probability is calculated. 
-    :param shots: Number of circuit shots
+    :param input_state: Input state into circuit. 
+    :param shots: Number of circuit shots. If `None`, the exact transition 
+        probabilities are returned. Default: `None`.
     :param sampling_method: Probability distributions are post-processed with 
         some psuedo-sampling method: 'multinomial', 'binomial' or 'gaussian'.
     :param no_bunching: Whether or not to post-select out results with bunching.
@@ -105,7 +136,7 @@ class FidelityQuantumKernel:
         >>>     no_bunching=False,
         >>> )
         >>> # Construct the training & test kernel matrices
-        >>> K_train = quantum_kernel(X_train, X_train)
+        >>> K_train = quantum_kernel(X_train)
         >>> K_test = quantum_kernel(X_test, X_train)
 
     Use with scikit-learn for kernel-based machine learning:.
@@ -114,22 +145,23 @@ class FidelityQuantumKernel:
         >>> 
         >>> # For a support vector classification problem
         >>> svc = SVC(kernel='precomputed')
-        >>> svc.fit(K_train)
+        >>> svc.fit(K_train, y_train)
         >>> y_pred = svc.predict(K_test)
     """
 
     def __init__(
         self,
-        feature_map: FeatureMap,
+        feature_map: Union[FeatureMap, pcvl.Circuit],
         input_state: list,
         *,
         shots: int = None,
         sampling_method: str = 'multinomial',
-        no_bunching=True,
-        force_psd=True,
-        device=None,
-        dtype=None
+        no_bunching = True,
+        force_psd = True,
+        device = None,
+        dtype = None
     ):
+        super().__init__()
         self.feature_map = feature_map
         self.input_state = input_state
         self.shots = shots or 0
@@ -138,6 +170,11 @@ class FidelityQuantumKernel:
         self.force_psd = force_psd
         self.device = device
         self.dtype = dtype or feature_map.dtype
+        
+        self.is_trainable = feature_map.is_trainable
+        if self.is_trainable:
+            for param_name, param in feature_map._training_dict.items():
+                self.register_parameter(param_name, param)
         
         if max(input_state) > 1 and no_bunching:
             raise ValueError(
@@ -153,14 +190,14 @@ class FidelityQuantumKernel:
             device=device,
             dtype=self.dtype
         )
-        # Find index of input states in output
+        # Find index of input state in output distribution
         all_fock_states = list(generate_all_fock_states(m, n))
         self._input_state_index = all_fock_states.index(tuple(input_state))
 
         # For sampling
         self._autodiff_process = AutoDiffProcess()
 
-    def __call__(self, x1: Union[float, np.ndarray, Tensor], x2=None):
+    def forward(self, x1: Union[float, np.ndarray, Tensor], x2 = None):
         """
         Calculate the quantum kernel for input data x1 and x2. If x1 and x2 are 
         datapoints, a scalar value is returned.
@@ -169,7 +206,7 @@ class FidelityQuantumKernel:
             returned. If a dataset, the kernel matrix is returned. The kernel 
             matrix returned matches the type of the input dataset.
         :param x2: Input datapoint or dataset. If `None`, the kernel matrix is 
-            assumed to be symmetric with input datasets, x1, x1 and only the 
+            assumed to be symmetric with input datasets, x1, x1 and only the
             upper triangular is calculated. Default: `None`.
 
         If you would like the diagonal and lower triangular to be explicitly 
@@ -177,7 +214,7 @@ class FidelityQuantumKernel:
         """
         if x2 is not None and type(x1) is not type(x2):
             raise TypeError(
-                'x2 should be of the same type as x1 if x2 is not None.')
+                'x2 should be of the same type as x1, if x2 is not None.')
 
         # Return scalar value for input datapoints
         if self.feature_map.is_datapoint(x1):
@@ -187,7 +224,7 @@ class FidelityQuantumKernel:
             return self._return_kernel_scalar(x1, x2)
 
         # For 1D feature maps, vectors are treated as datasets.
-        if self.feature_map.input_size[0] == 1:
+        if self.feature_map.input_size == 1:
             x1 = x1.reshape(len(x1), 1)
             x2 = x2.reshape(len(x2), 1) if x2 is not None else None
 
@@ -202,7 +239,6 @@ class FidelityQuantumKernel:
         elif isinstance(x1, Tensor) and torch.allclose(x1, x2):
             equal_inputs = True
 
-        x1 = torch.tensor(x1)
         U_forward = torch.stack([self.feature_map.compute_unitary(x) for x in x1])
 
         if x2 is not None:
@@ -219,8 +255,7 @@ class FidelityQuantumKernel:
             # Calculate circuit unitaries for upper diagonal of kernel matrix only
             all_circuits = torch.stack(
                 [U @ U_adj[j] for i, U in enumerate(U_forward)
-                for j in range(i + 1, len(U_adj))]
-            )
+                for j in range(i + 1, len(U_adj))])
 
         # Distribution for every evaluated circuit
         all_probs = self._slos_graph.compute(
@@ -230,13 +265,13 @@ class FidelityQuantumKernel:
             all_probs = self._autodiff_process.sampling_noise.pcvl_sampler(
                 all_probs, self.shots, self.sampling_method
             )
-
+        
         transition_probs = all_probs[:, self._input_state_index]
-
+        
         d = len(x1)
         if x2 is None:
             # Copy transition probs to upper triangular & reflect
-            kernel_matrix = torch.zeros(d, d, dtype=dtype_to_torch[x1.dtype])
+            kernel_matrix = torch.zeros(d, d, dtype=self.dtype, device=self.device)
             upper_indices = torch.triu_indices(d, d, offset=1)
             kernel_matrix[upper_indices[0], upper_indices[1]] = transition_probs
             kernel_matrix[upper_indices[1], upper_indices[0]] = transition_probs
@@ -279,11 +314,9 @@ class FidelityQuantumKernel:
         eigenvals = torch.diag(torch.where(eigenvals.real > 0, eigenvals.real, 0))
 
         matrix_psd = eigenvecs.real @ eigenvals @ eigenvecs.transpose(0, 1).real
-
         matrix_psd.fill_diagonal_(1)
 
         return matrix_psd.real
-
 
 dtype_to_torch = {
     'float64': torch.float64,
