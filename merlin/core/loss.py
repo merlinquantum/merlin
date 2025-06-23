@@ -1,6 +1,6 @@
-'''
+"""
 Specialized loss functions for QML
-'''
+"""
 import torch
 from torch.nn.modules.loss import _Loss
 from torch import Tensor
