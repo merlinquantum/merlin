@@ -19,18 +19,3 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-
-"""
-Output mapping strategy definitions.
-"""
-
-from enum import Enum
-
-
-class OutputMappingStrategy(Enum):
-    """Strategy for mapping quantum probability distributions to classical outputs."""
-    LINEAR = 'linear'
-    GROUPING = 'grouping'
-    LEXGROUPING = 'lexgrouping'
-    MODGROUPING = 'modgrouping'
-    NONE = 'none'
