@@ -10,6 +10,22 @@ from ..pcvl_pytorch.slos_torchscript import build_slos_distribution_computegraph
 from typing import Union
 from torch import Tensor
 
+dtype_to_torch = {
+    'float': torch.float64,
+    'complex': torch.complex128,
+    'float64': torch.float64,
+    'float32': torch.float32,
+    'complex128': torch.complex128,
+    'complex64': torch.complex64,
+    torch.float64: torch.float64,
+    torch.float32: torch.float32,
+    torch.complex128: torch.complex128,
+    torch.complex64: torch.complex64,
+    np.float64: torch.float64,
+    np.float32: torch.float32,
+    np.complex128: torch.complex128,
+    np.complex64: torch.complex64,
+}
 
 class FeatureMap:
     """
@@ -28,7 +44,7 @@ class FeatureMap:
         self,
         circuit: pcvl.Circuit,
         input_size: int,
-        input_parameters: str,
+        input_parameters: Union[str, list[str]],
         *,
         trainable_parameters: list[str] = None,
         dtype: str = torch.float32,
@@ -38,15 +54,20 @@ class FeatureMap:
         self.input_size = input_size
         self.trainable_parameters = trainable_parameters or []
         self.dtype = dtype_to_torch.get(dtype, torch.float32)
-        self.device = device
+        self.device = device or torch.device('cpu')
         self.is_trainable = bool(trainable_parameters)
 
-        if isinstance(input_parameters, list) and len(input_parameters) > 1:
-            raise ValueError('Only a single input parameter is allowed.')
+        if isinstance(input_parameters, list):            
+            if len(input_parameters) > 1:
+                raise ValueError('Only a single input parameter is allowed.')
+            
+            self.input_parameters = input_parameters[0]
+        else:
+            self.input_parameters = input_parameters
 
         self._circuit_graph = CircuitConverter(
             circuit,
-            [input_parameters]+self.trainable_parameters,
+            [self.input_parameters]+self.trainable_parameters,
             dtype=self.dtype,
             device=device
         )
@@ -55,7 +76,7 @@ class FeatureMap:
         for param_name in self.trainable_parameters:
             param_length = len(self._circuit_graph.spec_mappings[param_name])
 
-            p = torch.empty(param_length, requires_grad=True)
+            p = torch.rand(param_length, requires_grad=True)
             self._training_dict[param_name] = torch.nn.Parameter(p)
 
     def compute_unitary(self, x: Union[Tensor, np.ndarray, float], *training_parameters: Tensor) -> Tensor:
@@ -70,7 +91,7 @@ class FeatureMap:
         """
         if not isinstance(x, torch.Tensor):
             x = [x] if isinstance(x, (float, int)) else x
-            return torch.tensor(x)
+            x = torch.tensor(x, dtype=self.dtype, device=self.device)
         else:
             x = x.to(dtype=self.dtype, device=self.device)
 
@@ -82,21 +103,31 @@ class FeatureMap:
 
         return self._circuit_graph.to_tensor(x, *training_parameters)
 
-    def is_datapoint(self, x: Union[Tensor, np.ndarray, float]) -> bool:
+    def is_datapoint(self, x: Union[Tensor, np.ndarray, float, int]) -> bool:
         """Checks whether an input data is a singular datapoint or dataset."""
-        if isinstance(x, (float, int)):
+        if self.input_size == 1 and (isinstance(x, (float, int)) or x.ndim == 0):
             return True
-        if x.shape == self.input_size:
-            return True
-        elif self.input_size == 1 and x.dim() in (0, 1):
-            if x.numel() == 1:
+        
+        error_msg = f'Given value shape {tuple(x.shape)} does not match data shape {self.input_size}.'
+        num_elements = x.numel() if isinstance(x, Tensor) else x.size
+        
+        if num_elements % self.input_size or x.ndim > 2:
+            raise ValueError(error_msg)
+            
+        if self.input_size == 1:
+            if num_elements == 1:
                 return True
-            elif x.dim() == 1:
+            elif x.ndim == 1:
                 return False
-        elif x.shape > 1 and x.shape[1] == self.input_size:
-            return False
-        raise ValueError(
-            f'Given value shape {tuple(x.shape)} does not match data shape {self.input_size}.')
+            elif x.ndim == 2 and 1 in x.shape:
+                return False
+        else:
+            if x.ndim == 1 and x.shape[0] == self.input_size:
+                return True
+            elif x.ndim == 2:
+                return 1 in x.shape and self.input_size in x.shape
+        
+        raise ValueError(error_msg)
 
 
 class FidelityKernel(torch.nn.Module):
@@ -118,7 +149,7 @@ class FidelityKernel(torch.nn.Module):
     :param shots: Number of circuit shots. If `None`, the exact 
         transition probabilities are returned. Default: `None`.
     :param sampling_method: Probability distributions are post-
-        processed with some psuedo-sampling method: 'multinomial', 
+        processed with some pseudo-sampling method: 'multinomial', 
         'binomial' or 'gaussian'.
     :param no_bunching: Whether or not to post-select out results with 
         bunching.
@@ -173,9 +204,13 @@ class FidelityKernel(torch.nn.Module):
         self.sampling_method = sampling_method
         self.no_bunching = no_bunching
         self.force_psd = force_psd
-        self.device = device
+        self.device = device or feature_map.device
         self.dtype = dtype or feature_map.dtype
-
+        self.input_size = self.feature_map.input_size
+        
+        if self.feature_map.circuit.m != len(input_state):
+            raise ValueError('Input state length does not match circuit size.')
+        
         self.is_trainable = feature_map.is_trainable
         if self.is_trainable:
             for param_name, param in feature_map._training_dict.items():
@@ -183,7 +218,12 @@ class FidelityKernel(torch.nn.Module):
 
         if max(input_state) > 1 and no_bunching:
             raise ValueError(
-                f"Bunching must be enabled for an input state with {max(input_state)} in one mode.")
+                f"Bunching must be enabled for an input state with"
+                f"{max(input_state)} in one mode.")
+        elif all(x == 1 for x in input_state) and no_bunching:
+            raise ValueError(
+                "For `no_bunching = True`, the kernel value will always be 1"
+                " for an input state with a photon in all modes.")
 
         m, n = len(input_state), sum(input_state)
 
@@ -196,11 +236,12 @@ class FidelityKernel(torch.nn.Module):
             dtype=self.dtype
         )
         # Find index of input state in output distribution
-        all_fock_states = list(generate_all_fock_states(m, n))
+        all_fock_states = list(generate_all_fock_states(m, n, no_bunching=no_bunching))
         self._input_state_index = all_fock_states.index(tuple(input_state))
 
         # For sampling
         self._autodiff_process = AutoDiffProcess()
+
 
     def forward(self, x1: Union[float, np.ndarray, Tensor], x2=None):
         """
@@ -219,48 +260,43 @@ class FidelityKernel(torch.nn.Module):
         if x2 is not None and type(x1) is not type(x2):
             raise TypeError(
                 'x2 should be of the same type as x1, if x2 is not None.')
-
+        
         # Return scalar value for input datapoints
         if self.feature_map.is_datapoint(x1):
             if x2 is None:
                 raise ValueError(
                     'For input datapoints, please specify an x2 argument.')
             return self._return_kernel_scalar(x1, x2)
-
-        # For 1D feature maps, vectors are treated as datasets.
-        if self.feature_map.input_size == 1:
-            x1 = x1.reshape(len(x1), 1)
-            x2 = x2.reshape(len(x2), 1) if x2 is not None else None
-
+        
+        x1 = x1.reshape(-1, self.input_size)
+        x2 = x2.reshape(-1, self.input_size) if x2 is not None else None
+        
         # Check if we are constructing training matrix
-        equal_inputs = False
-        if x2 is None:
-            equal_inputs = True
-        elif x1.shape != x2.shape:
-            equal_inputs = False
-        elif isinstance(x1, np.ndarray) and np.allclose(x1, x2):
-            equal_inputs = True
-        elif isinstance(x1, Tensor) and torch.allclose(x1, x2):
-            equal_inputs = True
+        equal_inputs = self._check_equal_inputs(x1, x2)
 
         U_forward = torch.stack(
             [self.feature_map.compute_unitary(x) for x in x1])
-
+        
+        len_x1 = len(x1)
         if x2 is not None:
-            U_adjoint = [
+            U_adjoint = torch.stack([
                 self.feature_map.compute_unitary(x).transpose(0, 1).conj()
-                for x in x2
-            ]
+                for x in x2])
+            
             # Calculate circuit unitary for every pair of datapoints
-            all_circuits = torch.stack(
-                [U @ U_dag for U in U_forward for U_dag in U_adjoint])
+            all_circuits = U_forward.unsqueeze(1) @ U_adjoint.unsqueeze(0)
+            all_circuits = all_circuits.view(-1, *all_circuits.shape[2:])
         else:
-            U_adj = U_forward.conj().transpose(1, 2)
+            U_adjoint = U_forward.conj().transpose(1, 2)
 
-            # Calculate circuit unitaries for upper diagonal of kernel matrix only
-            all_circuits = torch.stack(
-                [U @ U_adj[j] for i, U in enumerate(U_forward)
-                for j in range(i + 1, len(U_adj))])
+            # Take circuit unitaries for upper diagonal of kernel matrix only
+            upper_idx = torch.triu_indices(
+                len_x1, len_x1,
+                offset=1,
+                dtype=self.feature_map.dtype,
+                device=self.feature_map.device,
+            )
+            all_circuits = U_forward[upper_idx[0]] @ U_adjoint[upper_idx[1]]
 
         # Distribution for every evaluated circuit
         all_probs = self._slos_graph.compute(
@@ -273,26 +309,25 @@ class FidelityKernel(torch.nn.Module):
 
         transition_probs = all_probs[:, self._input_state_index]
 
-        d = len(x1)
         if x2 is None:
-            # Copy transition probs to upper triangular & reflect
+            # Copy transition probs to upper & lower diagonal
             kernel_matrix = torch.zeros(
-                d, d, dtype=self.dtype, device=self.device)
-            upper_indices = torch.triu_indices(d, d, offset=1)
-            kernel_matrix[upper_indices[0], upper_indices[1]] = transition_probs
-            kernel_matrix[upper_indices[1], upper_indices[0]] = transition_probs
+                len_x1, len_x1, dtype=self.dtype, device=self.device)
+            
+            upper_idx = upper_idx.to(self.device)
+            kernel_matrix[upper_idx[0], upper_idx[1]] = transition_probs
+            kernel_matrix[upper_idx[1], upper_idx[0]] = transition_probs
             kernel_matrix.fill_diagonal_(1)
 
             if self.force_psd:
                 kernel_matrix = self._project_psd(kernel_matrix)
 
         else:
-            kernel_matrix = transition_probs.reshape(d, len(x2))
+            kernel_matrix = transition_probs.reshape(len_x1, len(x2))
 
             if self.force_psd and equal_inputs:
                 # Symmetrize the matrix
-                kernel_matrix = 0.5 * \
-                    (kernel_matrix + kernel_matrix.transpose(0, 1))
+                kernel_matrix = 0.5 * (kernel_matrix + kernel_matrix.transpose(0, 1))
                 kernel_matrix = self._project_psd(kernel_matrix)
 
         if isinstance(x1, np.ndarray):
@@ -302,8 +337,14 @@ class FidelityKernel(torch.nn.Module):
 
     def _return_kernel_scalar(self, x1, x2):
         """Returns scalar kernel value for input datapoints"""
+        if isinstance(x1, float):
+            x1, x2 = np.array(x1), np.array(x2)
+            
+        x1, x2 = x1.reshape(self.input_size), x2.reshape(self.input_size)
+        
         U = self.feature_map.compute_unitary(x1)
-        U_adjoint = self.feature_map.compute_unitary(x2).conj().transpose(0, 1)
+        U_adjoint = self.feature_map.compute_unitary(x2)
+        U_adjoint = U_adjoint.conj().transpose(0, 1)
 
         probs = self._slos_graph.compute(U @ U_adjoint, self.input_state)[1]
 
@@ -317,27 +358,24 @@ class FidelityKernel(torch.nn.Module):
     def _project_psd(matrix: Tensor) -> Tensor:
         """Projects a symmetric matrix to closest positive semi-definite"""
         # Perform spectral decomposition and set negative eigenvalues to 0
-        eigenvals, eigenvecs = torch.linalg.eig(matrix)
-        eigenvals = torch.diag(torch.where(eigenvals.real > 0, eigenvals.real, 0))
+        eigenvals, eigenvecs = torch.linalg.eigh(matrix)
+        eigenvals = torch.diag(torch.where(eigenvals > 0, eigenvals, 0))
 
-        matrix_psd = eigenvecs.real @ eigenvals @ eigenvecs.transpose(
-            0, 1).real
+        matrix_psd = eigenvecs @ eigenvals @ eigenvecs.transpose(0, 1)
         matrix_psd.fill_diagonal_(1)
+        
+        return matrix_psd
+    
+    @staticmethod
+    def _check_equal_inputs(x1, x2) -> bool:
+        """Checks whether x1 and x2 are equal."""
+        if x2 is None:
+            return True
+        elif x1.shape != x2.shape:
+            return False
+        elif isinstance(x1, Tensor):
+            return torch.allclose(x1, x2)
+        elif isinstance(x1, np.ndarray):
+            return np.allclose(x1, x2)
+        return False
 
-        return matrix_psd.real
-
-
-dtype_to_torch = {
-    'float64': torch.float64,
-    'float32': torch.float32,
-    'complex128': torch.complex128,
-    'complex64': torch.complex64,
-    torch.float64: torch.float64,
-    torch.float32: torch.float32,
-    torch.complex128: torch.complex128,
-    torch.complex64: torch.complex64,
-    np.float64: torch.float64,
-    np.float32: torch.float32,
-    np.complex128: torch.complex128,
-    np.complex64: torch.complex64,
-}
