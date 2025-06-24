@@ -44,6 +44,8 @@ from .torch_utils.torch_codes import SamplingProcess
 from .sampling.autodiff import AutoDiffProcess
 from .sampling.mappers import OutputMapper, LexGroupingMapper, ModGroupingMapper
 from .pcvl_pytorch import CircuitConverter, build_slos_distribution_computegraph
+from .core.quantum_kernels import FeatureMap, FidelityKernel 
+from .core.loss import NKernelAlignment
 
 # Version and metadata
 __version__ = "0.1.0"
@@ -72,6 +74,8 @@ __all__ = [
     "OutputMapper",
     "LexGroupingMapper",
     "ModGroupingMapper",
+    "FeatureMap",
+    "FidelityKernel",
 
     "CircuitConverter",
     "build_slos_distribution_computegraph"
