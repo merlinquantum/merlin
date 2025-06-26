@@ -1,14 +1,37 @@
+# MIT License
+#
+# Copyright (c) 2025 Quandela
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
 """
 Tests for no_bunching functionality in quantum computation.
 """
 
-import pytest
-import torch
 import math
-import merlin as ML
-from merlin.core.process import ComputationProcessFactory
-from merlin.core.generators import CircuitGenerator,StateGenerator
 
+import torch
+
+import merlin as ML
+from merlin import QuantumLayer, OutputMappingStrategy
+from merlin.core.generators import CircuitGenerator, StateGenerator
+from merlin.core.process import ComputationProcessFactory
 
 
 def calculate_fock_space_size(n_modes: int, n_photons: int) -> int:
@@ -64,7 +87,9 @@ class TestNoBunchingFunctionality:
         circuit, _ = CircuitGenerator.generate_circuit(
             ML.CircuitType.PARALLEL_COLUMNS, n_modes, 2
         )
-        input_state = StateGenerator.generate_state(n_modes, n_photons, ML.StatePattern.SEQUENTIAL)
+        input_state = StateGenerator.generate_state(
+            n_modes, n_photons, ML.StatePattern.SEQUENTIAL
+        )
 
         # Create computation process with no_bunching=False
         process = ComputationProcessFactory.create(
@@ -72,7 +97,7 @@ class TestNoBunchingFunctionality:
             input_state=input_state,
             trainable_parameters=["phi_"],
             input_parameters=["pl"],
-            no_bunching=False
+            no_bunching=False,
         )
 
         # Create dummy parameters
@@ -92,7 +117,9 @@ class TestNoBunchingFunctionality:
         actual_size = distribution.shape[-1]
 
         print(f"Full Fock space - Expected: {expected_size}, Actual: {actual_size}")
-        assert actual_size == expected_size, f"Expected Fock space size {expected_size}, got {actual_size}"
+        assert (
+            actual_size == expected_size
+        ), f"Expected Fock space size {expected_size}, got {actual_size}"
 
     def test_computation_process_with_no_bunching_true(self):
         """Test computation process with no_bunching=True (single photon states only)."""
@@ -103,7 +130,9 @@ class TestNoBunchingFunctionality:
         circuit, _ = CircuitGenerator.generate_circuit(
             ML.CircuitType.PARALLEL_COLUMNS, n_modes, 2
         )
-        input_state = StateGenerator.generate_state(n_modes, n_photons, ML.StatePattern.SEQUENTIAL)
+        input_state = StateGenerator.generate_state(
+            n_modes, n_photons, ML.StatePattern.SEQUENTIAL
+        )
 
         # Create computation process with no_bunching=True
         process = ComputationProcessFactory.create(
@@ -111,7 +140,7 @@ class TestNoBunchingFunctionality:
             input_state=input_state,
             trainable_parameters=["phi_"],
             input_parameters=["pl"],
-            no_bunching=True
+            no_bunching=True,
         )
 
         # Create dummy parameters
@@ -131,13 +160,13 @@ class TestNoBunchingFunctionality:
         actual_size = distribution.shape[-1]
 
         print(f"No-bunching space - Expected: {expected_size}, Actual: {actual_size}")
-        assert actual_size == expected_size, f"Expected no-bunching size {expected_size}, got {actual_size}"
+        assert (
+            actual_size == expected_size
+        ), f"Expected no-bunching size {expected_size}, got {actual_size}"
 
     def test_quantum_layer_with_no_bunching_parameter(self):
         """Test QuantumLayer integration with no_bunching parameter."""
 
-        # We need to update the layer to support no_bunching
-        # For now, let's test the computation process directly
         n_modes = 5
         n_photons = 2
 
@@ -146,26 +175,23 @@ class TestNoBunchingFunctionality:
             circuit, _ = CircuitGenerator.generate_circuit(
                 ML.CircuitType.SERIES, n_modes, 2
             )
-            input_state = StateGenerator.generate_state(n_modes, n_photons, ML.StatePattern.PERIODIC)
-
-            process = ComputationProcessFactory.create(
-                circuit=circuit,
-                input_state=input_state,
-                trainable_parameters=["phi_"],
-                input_parameters=["pl"],
-                no_bunching=no_bunching
+            input_state = StateGenerator.generate_state(
+                n_modes, n_photons, ML.StatePattern.PERIODIC
             )
 
+            q_layer = QuantumLayer(
+                            input_size=2,
+                            circuit=circuit,
+                            input_state=input_state,
+                            trainable_parameters=["phi_"],
+                            input_parameters=["pl"],
+                            output_mapping_strategy=OutputMappingStrategy.NONE,
+                            no_bunching=no_bunching)
+
             # Create dummy parameters
-            spec_mappings = process.converter.spec_mappings
-            dummy_params = []
+            dummy_params = q_layer._create_dummy_parameters()
 
-            for spec in ["phi_", "pl"]:
-                if spec in spec_mappings:
-                    param_count = len(spec_mappings[spec])
-                    dummy_params.append(torch.randn(param_count))
-
-            distribution = process.compute(dummy_params)
+            distribution = q_layer.computation_process.compute(dummy_params)
 
             if no_bunching:
                 expected_size = calculate_no_bunching_size(n_modes, n_photons)
@@ -174,7 +200,9 @@ class TestNoBunchingFunctionality:
 
             actual_size = distribution.shape[-1]
 
-            print(f"no_bunching={no_bunching}: Expected {expected_size}, Actual {actual_size}")
+            print(
+                f"no_bunching={no_bunching}: Expected {expected_size}, Actual {actual_size}"
+            )
             assert actual_size == expected_size
 
     def test_different_photon_numbers(self):
@@ -187,7 +215,9 @@ class TestNoBunchingFunctionality:
             circuit, _ = CircuitGenerator.generate_circuit(
                 ML.CircuitType.PARALLEL, n_modes, 2
             )
-            input_state = StateGenerator.generate_state(n_modes, n_photons, ML.StatePattern.SPACED)
+            input_state = StateGenerator.generate_state(
+                n_modes, n_photons, ML.StatePattern.SPACED
+            )
 
             # Test with no_bunching=True
             process_no_bunching = ComputationProcessFactory.create(
@@ -195,7 +225,7 @@ class TestNoBunchingFunctionality:
                 input_state=input_state,
                 trainable_parameters=["phi_"],
                 input_parameters=["pl"],
-                no_bunching=True
+                no_bunching=True,
             )
 
             # Test with no_bunching=False
@@ -204,7 +234,7 @@ class TestNoBunchingFunctionality:
                 input_state=input_state,
                 trainable_parameters=["phi_"],
                 input_parameters=["pl"],
-                no_bunching=False
+                no_bunching=False,
             )
 
             # Create dummy parameters
@@ -224,8 +254,12 @@ class TestNoBunchingFunctionality:
             expected_no_bunching = calculate_no_bunching_size(n_modes, n_photons)
             expected_full_fock = calculate_fock_space_size(n_modes, n_photons)
 
-            print(f"  No-bunching: {dist_no_bunching.shape[-1]} (expected {expected_no_bunching})")
-            print(f"  Full Fock: {dist_full_fock.shape[-1]} (expected {expected_full_fock})")
+            print(
+                f"  No-bunching: {dist_no_bunching.shape[-1]} (expected {expected_no_bunching})"
+            )
+            print(
+                f"  Full Fock: {dist_full_fock.shape[-1]} (expected {expected_full_fock})"
+            )
 
             assert dist_no_bunching.shape[-1] == expected_no_bunching
             assert dist_full_fock.shape[-1] == expected_full_fock
@@ -249,7 +283,7 @@ class TestNoBunchingFunctionality:
             input_state=input_state,
             trainable_parameters=["phi_"],
             input_parameters=["pl"],
-            no_bunching=True
+            no_bunching=True,
         )
 
         # The calculation shows this should be 0, but the system might handle it differently
@@ -284,7 +318,9 @@ class TestNoBunchingFunctionality:
         circuit, _ = CircuitGenerator.generate_circuit(
             ML.CircuitType.PARALLEL_COLUMNS, n_modes, 2
         )
-        input_state = StateGenerator.generate_state(n_modes, n_photons, ML.StatePattern.SEQUENTIAL)
+        input_state = StateGenerator.generate_state(
+            n_modes, n_photons, ML.StatePattern.SEQUENTIAL
+        )
 
         for no_bunching in [False, True]:
             process = ComputationProcessFactory.create(
@@ -292,7 +328,7 @@ class TestNoBunchingFunctionality:
                 input_state=input_state,
                 trainable_parameters=["phi_"],
                 input_parameters=["pl"],
-                no_bunching=no_bunching
+                no_bunching=no_bunching,
             )
 
             spec_mappings = process.converter.spec_mappings
@@ -312,48 +348,114 @@ class TestNoBunchingFunctionality:
                 # For single photon, Fock space = n_modes (same as no-bunching)
                 expected = n_modes
 
-            print(f"Single photon, no_bunching={no_bunching}: size={distribution.shape[-1]}, expected={expected}")
+            print(
+                f"Single photon, no_bunching={no_bunching}: size={distribution.shape[-1]}, expected={expected}"
+            )
             assert distribution.shape[-1] == expected
 
     def test_compute_with_keys_functionality(self):
-        """Test that compute_with_keys works with no_bunching."""
-        n_modes = 4
-        n_photons = 2
+        """
+        Test that compute_with_keys works with no_bunching and on full Fock space.
+        Test sizes of keys and  distributions.
+        Test values of distributions (convert from full Fock space to no_bunching).
+        """
+        # Test cases: (n_modes, n_photons)
+        test_cases = [
+            (3, 1),  # 3 modes, 1 photon
+            (4, 2),  # 4 modes, 2 photons
+            (5, 3),  # 5 modes, 3 photons
+            (6, 2),  # 6 modes, 2 photons
+        ]
 
-        circuit, _ = CircuitGenerator.generate_circuit(
-            ML.CircuitType.SERIES, n_modes, 2
-        )
-        input_state = StateGenerator.generate_state(n_modes, n_photons, ML.StatePattern.PERIODIC)
+        # Test for every test case
+        for n_modes, n_photons in test_cases:
+            print(f"\nTesting compute_with_keys {n_photons} photons in {n_modes} modes:")
+            circuit, _ = CircuitGenerator.generate_circuit(
+                ML.CircuitType.SERIES, n_modes, 2
+            )
+            input_state = StateGenerator.generate_state(
+                n_modes, n_photons, ML.StatePattern.PERIODIC
+            )
 
-        process = ComputationProcessFactory.create(
-            circuit=circuit,
-            input_state=input_state,
-            trainable_parameters=["phi_"],
-            input_parameters=["pl"],
-            no_bunching=True
-        )
+            # Process with no_bunching
+            process_no_bunching = ComputationProcessFactory.create(
+                circuit=circuit,
+                input_state=input_state,
+                trainable_parameters=["phi_"],
+                input_parameters=["pl"],
+                no_bunching=True,
+            )
 
-        spec_mappings = process.converter.spec_mappings
-        dummy_params = []
+            # Process with full Fock space
+            process_full_fock_space = ComputationProcessFactory.create(
+                circuit=circuit,
+                input_state=input_state,
+                trainable_parameters=["phi_"],
+                input_parameters=["pl"],
+                no_bunching=False,
+            )
 
-        for spec in ["phi_", "pl"]:
-            if spec in spec_mappings:
-                param_count = len(spec_mappings[spec])
-                dummy_params.append(torch.randn(param_count))
+            spec_mappings_no_bunching = process_no_bunching.converter.spec_mappings
+            spec_mappings_full_fock_space = process_full_fock_space.converter.spec_mappings
+            dummy_params = []
 
-        # Test compute_with_keys
-        keys, distribution = process.compute_with_keys(dummy_params)
+            # Replace parameters by the same random values for the two circuits
+            for spec in ["phi_", "pl"]:
+                if spec in spec_mappings_no_bunching:
+                    param_count_n_b = len(spec_mappings_no_bunching[spec])
+                    if spec in spec_mappings_full_fock_space:
+                        param_count_f_f_s = len(spec_mappings_full_fock_space[spec])
+                        assert param_count_n_b == param_count_f_f_s, "Different circuits for no_bunching and full_fock_space"
+                        dummy_params.append(torch.randn(param_count_f_f_s))
+                    else:
+                        raise Exception("Different circuits for no_bunching and full_fock_space")
+                else:
+                    if spec in spec_mappings_full_fock_space:
+                        raise Exception("Different circuits for no_bunching and full_fock_space")
 
-        # Should have the same distribution size
-        expected_size = calculate_no_bunching_size(n_modes, n_photons)
-        assert distribution.shape[-1] == expected_size
+            # Test compute_with_keys with no_bunching
+            keys_no_bunching, distribution_no_bunching = process_no_bunching.compute_with_keys(dummy_params)
 
-        # Keys should correspond to the states
-        assert len(keys) == expected_size
+            # Should have the same distribution size
+            expected_size = calculate_no_bunching_size(n_modes, n_photons)
+            assert distribution_no_bunching.shape[-1] == expected_size
 
-        print(f"Keys: {keys}")
-        print(f"Distribution shape: {distribution.shape}")
-        print(f"Expected size: {expected_size}")
+            # Keys should correspond to the states
+            assert len(keys_no_bunching) == expected_size
+            print("Correct distribution and keys size with no_bunching")
+
+            # Test compute_with_keys on full Fock space
+            keys_full_fock_space, distribution_full_fock_space = process_full_fock_space.compute_with_keys(dummy_params)
+
+            # Should have the same distribution size
+            expected_size = calculate_fock_space_size(n_modes, n_photons)
+            assert distribution_full_fock_space.shape[-1] == expected_size
+
+            # Keys should correspond to the states
+            assert len(keys_full_fock_space) == expected_size
+            print("Correct distribution and keys size on full Fock state")
+
+            # We can convert the full Fock space distribution to the no_bunching distribution by removing any state
+            # that has a mode with more than 1 photon followed by renormalization.
+            new_keys = [0] * len(keys_no_bunching)
+            new_distribution = [0] * len(keys_no_bunching)
+
+            for key, proba in zip(keys_full_fock_space, distribution_full_fock_space):
+                if any(key_elem > 1 for key_elem in key):
+                    continue
+                else:
+                    index = keys_no_bunching.index(key)
+                    new_keys[index] = key
+                    new_distribution[index] = proba
+
+            new_distribution = torch.tensor(new_distribution) / torch.sum(torch.tensor(new_distribution))
+
+            # new_distribution must be close to distribution_no_bunching
+            assert torch.isclose(torch.sum(new_distribution), torch.tensor(1.0))
+            assert torch.isclose(torch.sum(distribution_no_bunching), torch.tensor(1.0))
+            assert new_keys == keys_no_bunching
+            assert torch.allclose(new_distribution, distribution_no_bunching)
+            print("Convertion from distribution_full_fock_space to distribution_no_bunching completed successfully")
 
 
 if __name__ == "__main__":
@@ -369,7 +471,19 @@ if __name__ == "__main__":
     test.test_computation_process_with_no_bunching_false()
     test.test_computation_process_with_no_bunching_true()
 
-    print("\n3. Testing different photon numbers...")
+    print("\n3. Testing quantum layer...")
+    test.test_quantum_layer_with_no_bunching_parameter()
+
+    print("\n4. Testing different photon numbers...")
     test.test_different_photon_numbers()
+
+    print("\n5. Testing impossible no_bunching case...")
+    test.test_impossible_no_bunching_case()
+
+    print("\n6. Testing single photon case...")
+    test.test_single_photon_case()
+
+    print("\n7. Testing compute_with_keys...")
+    test.test_compute_with_keys_functionality()
 
     print("\n✅ All tests passed!")
