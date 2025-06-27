@@ -29,6 +29,7 @@ import math
 import torch
 
 import merlin as ML
+from merlin import OutputMappingStrategy, QuantumLayer
 from merlin.core.generators import CircuitGenerator, StateGenerator
 from merlin.core.process import ComputationProcessFactory
 
@@ -166,8 +167,6 @@ class TestNoBunchingFunctionality:
     def test_quantum_layer_with_no_bunching_parameter(self):
         """Test QuantumLayer integration with no_bunching parameter."""
 
-        # We need to update the layer to support no_bunching
-        # For now, let's test the computation process directly
         n_modes = 5
         n_photons = 2
 
@@ -180,24 +179,20 @@ class TestNoBunchingFunctionality:
                 n_modes, n_photons, ML.StatePattern.PERIODIC
             )
 
-            process = ComputationProcessFactory.create(
+            q_layer = QuantumLayer(
+                input_size=2,
                 circuit=circuit,
                 input_state=input_state,
                 trainable_parameters=["phi_"],
                 input_parameters=["pl"],
+                output_mapping_strategy=OutputMappingStrategy.NONE,
                 no_bunching=no_bunching,
             )
 
             # Create dummy parameters
-            spec_mappings = process.converter.spec_mappings
-            dummy_params = []
+            dummy_params = q_layer._create_dummy_parameters()
 
-            for spec in ["phi_", "pl"]:
-                if spec in spec_mappings:
-                    param_count = len(spec_mappings[spec])
-                    dummy_params.append(torch.randn(param_count))
-
-            distribution = process.compute(dummy_params)
+            distribution = q_layer.computation_process.compute(dummy_params)
 
             if no_bunching:
                 expected_size = calculate_no_bunching_size(n_modes, n_photons)
@@ -360,46 +355,128 @@ class TestNoBunchingFunctionality:
             assert distribution.shape[-1] == expected
 
     def test_compute_with_keys_functionality(self):
-        """Test that compute_with_keys works with no_bunching."""
-        n_modes = 4
-        n_photons = 2
+        """
+        Test that compute_with_keys works with no_bunching and on full Fock space.
+        Test sizes of keys and  distributions.
+        Test values of distributions (convert from full Fock space to no_bunching).
+        """
+        # Test cases: (n_modes, n_photons)
+        test_cases = [
+            (3, 1),  # 3 modes, 1 photon
+            (4, 2),  # 4 modes, 2 photons
+            (5, 3),  # 5 modes, 3 photons
+            (6, 2),  # 6 modes, 2 photons
+        ]
 
-        circuit, _ = CircuitGenerator.generate_circuit(
-            ML.CircuitType.SERIES, n_modes, 2
-        )
-        input_state = StateGenerator.generate_state(
-            n_modes, n_photons, ML.StatePattern.PERIODIC
-        )
+        # Test for every test case
+        for n_modes, n_photons in test_cases:
+            print(
+                f"\nTesting compute_with_keys {n_photons} photons in {n_modes} modes:"
+            )
+            circuit, _ = CircuitGenerator.generate_circuit(
+                ML.CircuitType.SERIES, n_modes, 2
+            )
+            input_state = StateGenerator.generate_state(
+                n_modes, n_photons, ML.StatePattern.PERIODIC
+            )
 
-        process = ComputationProcessFactory.create(
-            circuit=circuit,
-            input_state=input_state,
-            trainable_parameters=["phi_"],
-            input_parameters=["pl"],
-            no_bunching=True,
-        )
+            # Process with no_bunching
+            process_no_bunching = ComputationProcessFactory.create(
+                circuit=circuit,
+                input_state=input_state,
+                trainable_parameters=["phi_"],
+                input_parameters=["pl"],
+                no_bunching=True,
+            )
 
-        spec_mappings = process.converter.spec_mappings
-        dummy_params = []
+            # Process with full Fock space
+            process_full_fock_space = ComputationProcessFactory.create(
+                circuit=circuit,
+                input_state=input_state,
+                trainable_parameters=["phi_"],
+                input_parameters=["pl"],
+                no_bunching=False,
+            )
 
-        for spec in ["phi_", "pl"]:
-            if spec in spec_mappings:
-                param_count = len(spec_mappings[spec])
-                dummy_params.append(torch.randn(param_count))
+            spec_mappings_no_bunching = process_no_bunching.converter.spec_mappings
+            spec_mappings_full_fock_space = (
+                process_full_fock_space.converter.spec_mappings
+            )
+            dummy_params = []
 
-        # Test compute_with_keys
-        keys, distribution = process.compute_with_keys(dummy_params)
+            # Replace parameters by the same random values for the two circuits
+            for spec in ["phi_", "pl"]:
+                if spec in spec_mappings_no_bunching:
+                    param_count_n_b = len(spec_mappings_no_bunching[spec])
+                    if spec in spec_mappings_full_fock_space:
+                        param_count_f_f_s = len(spec_mappings_full_fock_space[spec])
+                        assert (
+                            param_count_n_b == param_count_f_f_s
+                        ), "Different circuits for no_bunching and full_fock_space"
+                        dummy_params.append(torch.randn(param_count_f_f_s))
+                    else:
+                        raise Exception(
+                            "Different circuits for no_bunching and full_fock_space"
+                        )
+                else:
+                    if spec in spec_mappings_full_fock_space:
+                        raise Exception(
+                            "Different circuits for no_bunching and full_fock_space"
+                        )
 
-        # Should have the same distribution size
-        expected_size = calculate_no_bunching_size(n_modes, n_photons)
-        assert distribution.shape[-1] == expected_size
+            # Test compute_with_keys with no_bunching
+            keys_no_bunching, distribution_no_bunching = (
+                process_no_bunching.compute_with_keys(dummy_params)
+            )
 
-        # Keys should correspond to the states
-        assert len(keys) == expected_size
+            # Should have the same distribution size
+            expected_size = calculate_no_bunching_size(n_modes, n_photons)
+            assert distribution_no_bunching.shape[-1] == expected_size
 
-        print(f"Keys: {keys}")
-        print(f"Distribution shape: {distribution.shape}")
-        print(f"Expected size: {expected_size}")
+            # Keys should correspond to the states
+            assert len(keys_no_bunching) == expected_size
+            print("Correct distribution and keys size with no_bunching")
+
+            # Test compute_with_keys on full Fock space
+            keys_full_fock_space, distribution_full_fock_space = (
+                process_full_fock_space.compute_with_keys(dummy_params)
+            )
+
+            # Should have the same distribution size
+            expected_size = calculate_fock_space_size(n_modes, n_photons)
+            assert distribution_full_fock_space.shape[-1] == expected_size
+
+            # Keys should correspond to the states
+            assert len(keys_full_fock_space) == expected_size
+            print("Correct distribution and keys size on full Fock state")
+
+            # We can convert the full Fock space distribution to the no_bunching distribution by removing any state
+            # that has a mode with more than 1 photon followed by renormalization.
+            new_keys = [0] * len(keys_no_bunching)
+            new_distribution = [0] * len(keys_no_bunching)
+
+            for key, proba in zip(
+                keys_full_fock_space, distribution_full_fock_space, strict=False
+            ):
+                if any(key_elem > 1 for key_elem in key):
+                    continue
+                else:
+                    index = keys_no_bunching.index(key)
+                    new_keys[index] = key
+                    new_distribution[index] = proba
+
+            new_distribution = torch.tensor(new_distribution) / torch.sum(
+                torch.tensor(new_distribution)
+            )
+
+            # new_distribution must be close to distribution_no_bunching
+            assert torch.isclose(torch.sum(new_distribution), torch.tensor(1.0))
+            assert torch.isclose(torch.sum(distribution_no_bunching), torch.tensor(1.0))
+            assert new_keys == keys_no_bunching
+            assert torch.allclose(new_distribution, distribution_no_bunching)
+            print(
+                "Convertion from distribution_full_fock_space to distribution_no_bunching completed successfully"
+            )
 
 
 if __name__ == "__main__":
@@ -415,7 +492,19 @@ if __name__ == "__main__":
     test.test_computation_process_with_no_bunching_false()
     test.test_computation_process_with_no_bunching_true()
 
-    print("\n3. Testing different photon numbers...")
+    print("\n3. Testing quantum layer...")
+    test.test_quantum_layer_with_no_bunching_parameter()
+
+    print("\n4. Testing different photon numbers...")
     test.test_different_photon_numbers()
+
+    print("\n5. Testing impossible no_bunching case...")
+    test.test_impossible_no_bunching_case()
+
+    print("\n6. Testing single photon case...")
+    test.test_single_photon_case()
+
+    print("\n7. Testing compute_with_keys...")
+    test.test_compute_with_keys_functionality()
 
     print("\n✅ All tests passed!")
