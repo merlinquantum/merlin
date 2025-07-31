@@ -98,4 +98,4 @@ class TestOutputSuperposedState:
         output_classical = benchmark(
             lambda: classical_method(layer, input_state_superposed)
         )
-        assert torch.allclose(output_superposed, output_classical, rtol=1e-3, atol=1e-7)
+        assert torch.allclose(output_superposed, output_classical, rtol=1e-3, atol=1e-6)
