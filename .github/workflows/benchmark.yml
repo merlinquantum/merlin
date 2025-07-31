@@ -94,38 +94,39 @@ jobs:
 
     - name: Parse memory benchmark results
       run: |
-        python -c "
-import json
-import re
-
-# Read memory benchmark output
-with open('memory-benchmark-output.txt', 'r') as f:
-    content = f.read()
-
-# Extract memory usage values (this is a simple parser, adjust based on actual output)
-results = []
-lines = content.split('\n')
-for line in lines:
-    if 'MB' in line and ('allocated' in line or 'used' in line):
-        # Extract numerical value
-        numbers = re.findall(r'(\d+\.?\d*)\s*MB', line)
-        if numbers:
-            value = float(numbers[0])
-            name = 'memory_usage_mb'
-            if 'allocated' in line:
-                name = 'pytorch_allocated_mb'
-            elif 'reserved' in line:
-                name = 'pytorch_reserved_mb'
-            results.append({
-                'name': name,
-                'unit': 'MB',
-                'value': value
-            })
-
-# Save in github-action-benchmark format
-with open('memory-benchmark-results.json', 'w') as f:
-    json.dump(results, f, indent=2)
-        "
+        cat > parse_memory.py << 'EOF'
+        import json
+        import re
+        
+        # Read memory benchmark output
+        with open('memory-benchmark-output.txt', 'r') as f:
+            content = f.read()
+        
+        # Extract memory usage values (this is a simple parser, adjust based on actual output)
+        results = []
+        lines = content.split('\n')
+        for line in lines:
+            if 'MB' in line and ('allocated' in line or 'used' in line):
+                # Extract numerical value
+                numbers = re.findall(r'(\d+\.?\d*)\s*MB', line)
+                if numbers:
+                    value = float(numbers[0])
+                    name = 'memory_usage_mb'
+                    if 'allocated' in line:
+                        name = 'pytorch_allocated_mb'
+                    elif 'reserved' in line:
+                        name = 'pytorch_reserved_mb'
+                    results.append({
+                        'name': name,
+                        'unit': 'MB',
+                        'value': value
+                    })
+        
+        # Save in github-action-benchmark format
+        with open('memory-benchmark-results.json', 'w') as f:
+            json.dump(results, f, indent=2)
+        EOF
+        python parse_memory.py
 
     - name: Store memory benchmark result
       uses: benchmark-action/github-action-benchmark@v1
