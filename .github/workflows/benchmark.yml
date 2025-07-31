@@ -236,9 +236,112 @@ jobs:
         </html>
         EOF
         
+        # Dynamically create index page for /dev/bench/ directory based on existing benchmark directories
+        mkdir -p dev/bench
+        
+        # Create dynamic navigation script
+        cat > generate_nav.py << 'EOF'
+        import os
+        import re
+        from pathlib import Path
+        
+        # Get all benchmark directories
+        bench_dirs = []
+        dev_bench_path = Path("dev/bench")
+        if dev_bench_path.exists():
+            for item in dev_bench_path.iterdir():
+                if item.is_dir() and item.name != "__pycache__":
+                    bench_dirs.append(item.name)
+        
+        bench_dirs.sort()
+        
+        # Generate navigation buttons
+        nav_buttons = ""
+        benchmark_cards = ""
+        
+        for bench_dir in bench_dirs:
+            # Convert directory name to display name
+            display_name = bench_dir.replace("-", " ").replace("_", " ").title()
+            
+            nav_buttons += f'                <a href="{bench_dir}/" class="nav-button">{display_name}</a>\n'
+            benchmark_cards += f'''                <div class="benchmark-card">
+                    <h3><a href="{bench_dir}/">{display_name}</a></h3>
+                    <p>Performance benchmarks for {display_name.lower()}</p>
+                </div>
+                
+        '''
+        
+        # Generate HTML
+        html_content = f'''<!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>MerLin Benchmark Results - All Benchmarks</title>
+            <style>
+                body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; margin: 40px; }}
+                .header {{ text-align: center; margin-bottom: 40px; }}
+                .navigation {{ text-align: center; margin-bottom: 30px; }}
+                .nav-button {{ 
+                    display: inline-block; 
+                    margin: 10px; 
+                    padding: 15px 30px; 
+                    background-color: #0366d6; 
+                    color: white; 
+                    text-decoration: none; 
+                    border-radius: 6px; 
+                    font-weight: bold;
+                    transition: background-color 0.2s;
+                }}
+                .nav-button:hover {{ background-color: #0256cc; color: white; text-decoration: none; }}
+                .benchmarks {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-top: 30px; }}
+                .benchmark-card {{ border: 1px solid #e1e4e8; border-radius: 8px; padding: 20px; }}
+                .benchmark-card h3 {{ margin-top: 0; color: #0366d6; }}
+                .benchmark-card a {{ text-decoration: none; color: #0366d6; }}
+                .benchmark-card a:hover {{ text-decoration: underline; }}
+                .benchmark-card p {{ color: #586069; margin: 10px 0; }}
+                .back-link {{ text-align: center; margin-bottom: 20px; }}
+                .back-link a {{ color: #0366d6; text-decoration: none; }}
+                .back-link a:hover {{ text-decoration: underline; }}
+            </style>
+        </head>
+        <body>
+            <div class="back-link">
+                <a href="../../">← Back to Main Page</a>
+            </div>
+            
+            <div class="header">
+                <h1>🚀 MerLin Benchmark Results</h1>
+                <p>Performance tracking for MerLin quantum machine learning framework</p>
+            </div>
+            
+            <div class="navigation">
+                <h2>Available Benchmarks</h2>
+        {nav_buttons}            </div>
+            
+            <div class="benchmarks">
+        {benchmark_cards}            </div>
+            
+            <footer style="text-align: center; margin-top: 60px; color: #586069;">
+                <p>Generated automatically by <a href="https://github.com/benchmark-action/github-action-benchmark">github-action-benchmark</a></p>
+                <p>Last updated: <span id="timestamp"></span></p>
+                <script>document.getElementById('timestamp').textContent = new Date().toLocaleString();</script>
+            </footer>
+        </body>
+        </html>'''
+        
+        # Write the HTML file
+        with open("dev/bench/index.html", "w") as f:
+            f.write(html_content)
+        
+        print(f"Generated navigation for {len(bench_dirs)} benchmark directories: {', '.join(bench_dirs)}")
+        EOF
+        
+        python generate_nav.py
+        rm generate_nav.py
+        
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
-        git add index.html
-        git commit -m "Update main benchmark index page" || echo "No changes to commit"
+        git add index.html dev/bench/index.html
+        git commit -m "Update main benchmark index page and dev/bench navigation" || echo "No changes to commit"
         git push origin gh-pages
 
