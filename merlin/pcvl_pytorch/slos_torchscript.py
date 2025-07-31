@@ -30,6 +30,7 @@ configuration, which can then be reused for multiple unitary evaluations.
 """
 
 import os
+import time
 from collections.abc import Callable
 
 import torch
@@ -492,6 +493,9 @@ class SLOSComputeGraph:
         amplitudes = torch.ones(
             (batch_size, 1), dtype=self.complex_dtype, device=device
         )
+
+        # DUMMY SLEEP FOR TESTING PERFORMANCE REGRESSION DETECTION
+        time.sleep(10)
 
         # Apply each layer
         for layer_idx, layer_fn in enumerate(self.layer_functions):
