@@ -1,0 +1,140 @@
+name: Continuous Benchmarking
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Build benchmark container
+      run: |
+        docker build -f Dockerfile.benchmark -t merlin-benchmark:latest .
+
+    - name: Run SLOS core benchmarks in container
+      run: |
+        docker run --rm \
+          -v ${{ github.workspace }}:/app/results \
+          -w /app \
+          merlin-benchmark:latest \
+          pytest tests/benchmark_slos_core.py --benchmark-json=/app/results/benchmark-results.json -v --benchmark-only
+
+    - name: Store benchmark result
+      uses: benchmark-action/github-action-benchmark@v1
+      with:
+        tool: 'pytest'
+        output-file-path: benchmark-results.json
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        auto-push: true
+        # Fail the workflow if performance regression is detected
+        fail-on-alert: true
+        # Alert if performance is 20% worse than previous
+        alert-threshold: '120%'
+        # Comment on PR with benchmark results
+        comment-on-alert: true
+        summary-always: true
+
+  # Fallback benchmark job without container (for comparison/debugging)
+  benchmark-native:
+    runs-on: ubuntu-latest
+    if: failure() # Only run if containerized benchmark fails
+    
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.11"
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
+
+    - name: Run SLOS core benchmarks (native)
+      run: |
+        pytest tests/benchmark_slos_core.py --benchmark-json=benchmark-results-native.json -v --benchmark-only
+
+    - name: Store native benchmark result
+      uses: benchmark-action/github-action-benchmark@v1
+      with:
+        tool: 'pytest'
+        output-file-path: benchmark-results-native.json
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        auto-push: true
+        benchmark-data-dir-path: 'dev/bench/native'
+        fail-on-alert: false # Don't fail on native benchmarks
+        alert-threshold: '120%'
+        comment-on-alert: false
+
+  memory-benchmark:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Build benchmark container
+      run: |
+        docker build -f Dockerfile.benchmark -t merlin-benchmark:latest .
+
+    - name: Run memory benchmarks in container
+      run: |
+        docker run --rm \
+          -v ${{ github.workspace }}:/app/results \
+          -w /app \
+          merlin-benchmark:latest \
+          python tests/memory_benchmark.py > /app/results/memory-benchmark-output.txt
+
+    - name: Parse memory benchmark results
+      run: |
+        python -c "
+import json
+import re
+
+# Read memory benchmark output
+with open('memory-benchmark-output.txt', 'r') as f:
+    content = f.read()
+
+# Extract memory usage values (this is a simple parser, adjust based on actual output)
+results = []
+lines = content.split('\n')
+for line in lines:
+    if 'MB' in line and ('allocated' in line or 'used' in line):
+        # Extract numerical value
+        numbers = re.findall(r'(\d+\.?\d*)\s*MB', line)
+        if numbers:
+            value = float(numbers[0])
+            name = 'memory_usage_mb'
+            if 'allocated' in line:
+                name = 'pytorch_allocated_mb'
+            elif 'reserved' in line:
+                name = 'pytorch_reserved_mb'
+            results.append({
+                'name': name,
+                'unit': 'MB',
+                'value': value
+            })
+
+# Save in github-action-benchmark format
+with open('memory-benchmark-results.json', 'w') as f:
+    json.dump(results, f, indent=2)
+        "
+
+    - name: Store memory benchmark result
+      uses: benchmark-action/github-action-benchmark@v1
+      with:
+        tool: 'customSmallerIsBetter'
+        output-file-path: memory-benchmark-results.json
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        auto-push: true
+        benchmark-data-dir-path: 'dev/bench/memory'
+        fail-on-alert: true
+        alert-threshold: '115%'  # More strict for memory usage
+        comment-on-alert: true

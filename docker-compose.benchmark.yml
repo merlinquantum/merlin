@@ -1,0 +1,53 @@
+# Docker Compose for MerLin Benchmarking
+# Provides easy local benchmarking environment
+
+version: '3.8'
+
+services:
+  benchmark:
+    build:
+      context: .
+      dockerfile: Dockerfile.benchmark
+    volumes:
+      - ./benchmark-results:/app/results
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: >
+      pytest tests/benchmark_slos_core.py 
+      --benchmark-json=/app/results/benchmark-results.json 
+      -v --benchmark-only
+
+  benchmark-quick:
+    build:
+      context: .
+      dockerfile: Dockerfile.benchmark
+    volumes:
+      - ./benchmark-results:/app/results
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: >
+      pytest tests/benchmark_slos_core.py 
+      --benchmark-json=/app/results/benchmark-results.json 
+      -v --benchmark-only -k "config0"
+
+  correctness:
+    build:
+      context: .
+      dockerfile: Dockerfile.benchmark
+    volumes:
+      - ./test-results:/app/results
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: >
+      pytest tests/test_slos_correctness.py -v
+
+  memory:
+    build:
+      context: .
+      dockerfile: Dockerfile.benchmark
+    volumes:
+      - ./benchmark-results:/app/results
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: >
+      python tests/memory_benchmark.py

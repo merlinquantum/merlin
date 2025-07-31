@@ -1,0 +1,54 @@
+# Dockerfile for MerLin Benchmarking
+# Provides consistent environment for reproducible benchmark results
+
+FROM python:3.11.9-slim
+
+# Set environment variables for consistent behavior
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PIP_NO_CACHE_DIR=1
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements first for better caching
+COPY pyproject.toml setup.py ./
+
+# Install Python dependencies with pinned versions for reproducibility
+RUN pip install --upgrade pip==24.0 && \
+    pip install wheel==0.43.0 && \
+    pip install torch==2.1.2 --index-url https://download.pytorch.org/whl/cpu && \
+    pip install pytest==8.0.0 && \
+    pip install pytest-benchmark==4.0.0 && \
+    pip install numpy==1.26.3 && \
+    pip install pandas==2.2.0
+
+# Install perceval-quandela with specific version
+RUN pip install perceval-quandela==0.13.1
+
+# Copy the entire project
+COPY . .
+
+# Install the project in development mode
+RUN pip install -e .
+
+# Create non-root user for security
+RUN useradd --create-home --shell /bin/bash benchmarkuser && \
+    chown -R benchmarkuser:benchmarkuser /app
+USER benchmarkuser
+
+# Set CPU affinity and performance settings for consistent results
+ENV OMP_NUM_THREADS=1
+ENV MKL_NUM_THREADS=1
+ENV NUMEXPR_NUM_THREADS=1
+ENV OPENBLAS_NUM_THREADS=1
+
+# Default command
+CMD ["pytest", "tests/benchmark_slos_core.py", "--benchmark-json=benchmark-results.json", "-v", "--benchmark-only"]
