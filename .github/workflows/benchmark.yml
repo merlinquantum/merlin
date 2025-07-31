@@ -26,6 +26,27 @@ jobs:
           merlin-benchmark:latest \
           bash -c "pytest tests/benchmark_slos_core.py --benchmark-json=/app/host/benchmark-results.json -v --benchmark-only"
 
+    - name: Setup gh-pages branch
+      run: |
+        git config --global user.name 'github-action-benchmark'
+        git config --global user.email 'github@users.noreply.github.com'
+        
+        # Check if gh-pages branch exists remotely
+        if git ls-remote --exit-code --heads origin gh-pages; then
+          echo "gh-pages branch exists remotely, fetching it"
+          git fetch origin gh-pages:gh-pages
+        else
+          echo "gh-pages branch doesn't exist, creating orphan branch"
+          git checkout --orphan gh-pages
+          git rm -rf .
+          echo "# Benchmark Results" > README.md
+          git add README.md
+          git commit -m "Initial gh-pages commit"
+          git push origin gh-pages
+          git checkout main
+          git fetch origin gh-pages:gh-pages
+        fi
+
     - name: Store benchmark result
       uses: benchmark-action/github-action-benchmark@v1
       with:
@@ -40,8 +61,6 @@ jobs:
         # Comment on PR with benchmark results
         comment-on-alert: true
         summary-always: true
-        # Skip fetching gh-pages if it doesn't exist yet
-        skip-fetch-gh-pages: true
 
   # Fallback benchmark job without container (for comparison/debugging)
   benchmark-native:
@@ -76,8 +95,6 @@ jobs:
         fail-on-alert: false # Don't fail on native benchmarks
         alert-threshold: '120%'
         comment-on-alert: false
-        # Skip fetching gh-pages if it doesn't exist yet
-        skip-fetch-gh-pages: true
 
   memory-benchmark:
     runs-on: ubuntu-latest
@@ -145,5 +162,3 @@ jobs:
         fail-on-alert: true
         alert-threshold: '115%'  # More strict for memory usage
         comment-on-alert: true
-        # Skip fetching gh-pages if it doesn't exist yet
-        skip-fetch-gh-pages: true
