@@ -40,6 +40,8 @@ jobs:
         # Comment on PR with benchmark results
         comment-on-alert: true
         summary-always: true
+        # Skip fetching gh-pages if it doesn't exist yet
+        skip-fetch-gh-pages: true
 
   # Fallback benchmark job without container (for comparison/debugging)
   benchmark-native:
@@ -74,6 +76,8 @@ jobs:
         fail-on-alert: false # Don't fail on native benchmarks
         alert-threshold: '120%'
         comment-on-alert: false
+        # Skip fetching gh-pages if it doesn't exist yet
+        skip-fetch-gh-pages: true
 
   memory-benchmark:
     runs-on: ubuntu-latest
@@ -141,3 +145,5 @@ jobs:
         fail-on-alert: true
         alert-threshold: '115%'  # More strict for memory usage
         comment-on-alert: true
+        # Skip fetching gh-pages if it doesn't exist yet
+        skip-fetch-gh-pages: true
