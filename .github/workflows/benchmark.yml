@@ -19,11 +19,15 @@ jobs:
 
     - name: Run SLOS core benchmarks in container
       run: |
+        # Create results directory with proper permissions
+        mkdir -p ${{ github.workspace }}/benchmark-results
+        chmod 777 ${{ github.workspace }}/benchmark-results
+        
         docker run --rm \
-          -v ${{ github.workspace }}:/app/results \
+          -v ${{ github.workspace }}:/app/host \
           -w /app \
           merlin-benchmark:latest \
-          pytest tests/benchmark_slos_core.py --benchmark-json=/app/results/benchmark-results.json -v --benchmark-only
+          bash -c "pytest tests/benchmark_slos_core.py --benchmark-json=/tmp/benchmark-results.json -v --benchmark-only && cp /tmp/benchmark-results.json /app/host/benchmark-results.json"
 
     - name: Store benchmark result
       uses: benchmark-action/github-action-benchmark@v1
@@ -86,11 +90,15 @@ jobs:
 
     - name: Run memory benchmarks in container
       run: |
+        # Create results directory with proper permissions
+        mkdir -p ${{ github.workspace }}/benchmark-results
+        chmod 777 ${{ github.workspace }}/benchmark-results
+        
         docker run --rm \
-          -v ${{ github.workspace }}:/app/results \
+          -v ${{ github.workspace }}:/app/host \
           -w /app \
           merlin-benchmark:latest \
-          python tests/memory_benchmark.py > /app/results/memory-benchmark-output.txt
+          bash -c "python tests/memory_benchmark.py > /tmp/memory-benchmark-output.txt && cp /tmp/memory-benchmark-output.txt /app/host/memory-benchmark-output.txt"
 
     - name: Parse memory benchmark results
       run: |
