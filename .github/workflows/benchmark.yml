@@ -54,7 +54,7 @@ jobs:
           -v ${{ github.workspace }}:/app/host \
           -w /app \
           merlin-benchmark:latest \
-          bash -c "pytest tests/benchmark_slos_core.py --benchmark-json=/app/host/slos-core-results.json -v --benchmark-only"
+          bash -c "pytest benchmarks/benchmark_slos_core.py --benchmark-json=/app/host/slos-core-results.json -v --benchmark-only"
 
     - name: Store SLOS core benchmark results
       uses: benchmark-action/github-action-benchmark@v1
@@ -86,7 +86,7 @@ jobs:
           -v ${{ github.workspace }}:/app/host \
           -w /app \
           merlin-benchmark:latest \
-          bash -c "pytest tests/test_no_bunching.py --benchmark-json=/app/host/no-bunching-results.json -v --benchmark-only"
+          bash -c "pytest benchmarks/benchmark_no_bunching.py --benchmark-json=/app/host/no-bunching-results.json -v --benchmark-only"
 
     - name: Store no bunching benchmark results
       uses: benchmark-action/github-action-benchmark@v1
@@ -118,7 +118,7 @@ jobs:
           -v ${{ github.workspace }}:/app/host \
           -w /app \
           merlin-benchmark:latest \
-          bash -c "pytest tests/test_layer.py --benchmark-json=/app/host/layer-results.json -v --benchmark-only"
+          bash -c "pytest benchmarks/benchmark_layer.py --benchmark-json=/app/host/layer-results.json -v --benchmark-only"
 
     - name: Store layer benchmark results
       uses: benchmark-action/github-action-benchmark@v1
@@ -150,7 +150,7 @@ jobs:
           -v ${{ github.workspace }}:/app/host \
           -w /app \
           merlin-benchmark:latest \
-          bash -c "pytest tests/test_robustness.py --benchmark-json=/app/host/robustness-results.json -v --benchmark-only"
+          bash -c "pytest benchmarks/benchmark_robustness.py --benchmark-json=/app/host/robustness-results.json -v --benchmark-only"
 
     - name: Store robustness benchmark results
       uses: benchmark-action/github-action-benchmark@v1
@@ -203,21 +203,29 @@ jobs:
                 <div class="benchmark-card">
                     <h3><a href="dev/bench/slos-core/">SLOS Core Functions</a></h3>
                     <p>Performance benchmarks for core SLOS functions: build_graph, compute, and compute_pa_inc</p>
+                    <p><strong>Functions tested:</strong> build_slos_distribution_computegraph, SLOSComputeGraph.compute</p>
+                    <p><strong>Configurations:</strong> 4-10 modes, CPU, multiple precisions</p>
                 </div>
                 
                 <div class="benchmark-card">
                     <h3><a href="dev/bench/no-bunching/">No Bunching Tests</a></h3>
                     <p>Performance benchmarks for photon bunching prevention algorithms</p>
+                    <p><strong>Functions tested:</strong> No bunching computation, Fock space comparison</p>
+                    <p><strong>Configurations:</strong> 6 modes, 3 photons, both bunching modes</p>
                 </div>
                 
                 <div class="benchmark-card">
                     <h3><a href="dev/bench/layer/">Quantum Layer Tests</a></h3>
                     <p>Performance benchmarks for quantum layer operations and transformations</p>
+                    <p><strong>Functions tested:</strong> Forward pass, batched computation</p>
+                    <p><strong>Configurations:</strong> Various batch sizes, multiple circuit types</p>
                 </div>
                 
                 <div class="benchmark-card">
                     <h3><a href="dev/bench/robustness/">Robustness Tests</a></h3>
                     <p>Performance benchmarks for system robustness and stability testing</p>
+                    <p><strong>Functions tested:</strong> Large batches, extreme values, numerical stability</p>
+                    <p><strong>Configurations:</strong> Stress testing with edge cases</p>
                 </div>
             </div>
             
