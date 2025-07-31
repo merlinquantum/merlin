@@ -28,7 +28,8 @@ RUN pip install --upgrade pip==24.0 && \
     pip install pytest==8.0.0 && \
     pip install pytest-benchmark==4.0.0 && \
     pip install numpy==1.26.3 && \
-    pip install pandas==2.2.0
+    pip install pandas==2.2.0 && \
+    pip install psutil==5.9.8
 
 # Install perceval-quandela with specific version
 RUN pip install perceval-quandela==0.13.1
