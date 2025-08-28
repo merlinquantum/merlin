@@ -34,6 +34,7 @@ from collections.abc import Callable
 
 import torch
 import torch.jit as jit
+import math
 
 
 def _get_complex_dtype_for_float(dtype):
@@ -502,37 +503,18 @@ class SLOSComputeGraph:
                 p,
             )
 
+        amplitudes *= torch.sqrt(self.norm_factor_output.to(amplitudes.device))
+        amplitudes /= math.sqrt(self.norm_factor_input)
         self.prev_amplitudes = amplitudes  # type: ignore[assignment]
-        # Calculate probabilities
-        # probabilities = (amplitudes.abs() ** 2).real
-        probabilities = amplitudes.real**2 + amplitudes.imag**2
-        probabilities *= self.norm_factor_output.to(probabilities.device)
-        probabilities /= self.norm_factor_input
 
         # Apply output mapping if needed
         if self.output_map_func is not None:
-            probabilities = self.mapping_function(probabilities)
             keys = self.mapped_keys
         else:
-            if self.no_bunching:
-                sum_probs = probabilities.sum(dim=1, keepdim=True)
-                # Only normalize when sum > 0 to avoid division by zero
-                valid_entries = sum_probs > 0
-                if valid_entries.any():
-                    probabilities = torch.where(
-                        valid_entries,
-                        probabilities
-                        / torch.where(
-                            valid_entries, sum_probs, torch.ones_like(sum_probs)
-                        ),
-                        probabilities,
-                    )
             keys = self.final_keys if self.keep_keys else None
         # Remove batch dimension if input was single unitary
-        if not is_batched:
-            probabilities = probabilities.squeeze(0)
 
-        return keys, probabilities
+        return keys, amplitudes
 
     def _prepare_pa_inc(self, unitary):
         self.ct_inverts = []
@@ -657,12 +639,21 @@ class SLOSComputeGraph:
                 amplitudes = layer_compute_vectorized(
                     unitary, amplitudes, sources, destinations, modes, p_pos
                 )
-
+        amplitudes *= torch.sqrt(self.norm_factor_output.to(amplitudes.device))
+        amplitudes /= math.sqrt(self.norm_factor_input)
         self.prev_amplitudes = amplitudes  # type: ignore[assignment]
         # Calculate probabilities
         # probabilities = (amplitudes.abs() ** 2).real
-        probabilities = amplitudes.real**2 + amplitudes.imag**2
-        probabilities *= self.norm_factor_output.to(device=self.device)
+
+        return amplitudes
+
+    def post_pa_inc(self, amplitudes, unitary):
+        if len(unitary.shape) == 2:
+            is_batched = False
+        else:
+            is_batched = True
+        probabilities = amplitudes.real ** 2 + amplitudes.imag ** 2
+        probabilities *= self.norm_factor_output.to(probabilities.device)
         probabilities /= self.norm_factor_input
 
         # Apply output mapping if needed
@@ -684,13 +675,11 @@ class SLOSComputeGraph:
                         probabilities,
                     )
             keys = self.final_keys if self.keep_keys else None
-
         # Remove batch dimension if input was single unitary
         if not is_batched:
             probabilities = probabilities.squeeze(0)
 
         return keys, probabilities
-
 
 def build_slos_distribution_computegraph(
     m,

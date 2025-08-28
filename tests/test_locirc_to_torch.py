@@ -26,7 +26,7 @@ import torch
 from perceval.components import BS, PERM, PS, Circuit, Unitary
 from perceval.utils import Matrix, Parameter
 
-from merlin.pcvl_pytorch import CircuitConverter
+from merlin.backends.pcvl_pytorch import CircuitConverter
 
 
 def test_ps_to_torch():

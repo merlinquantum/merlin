@@ -48,7 +48,7 @@ import perceval as pcvl
 import pytest
 import torch
 
-from merlin.pcvl_pytorch import CircuitConverter
+from merlin.backends.pcvl_pytorch import CircuitConverter
 
 
 def generic_interferometer_weightparamweight(circuit_size):

@@ -76,7 +76,7 @@ class CircuitConverter:
 
         >>> import torch
         >>> import perceval as pcvl
-        >>> from merlin.pcvl_pytorch.locirc_to_tensor import CircuitConverter
+        >>> from merlin2.pcvl_pytorch.locirc_to_tensor import CircuitConverter
         >>>
         >>> # Create a simple circuit with one phase shifter
         >>> circuit = pcvl.Circuit(1) // pcvl.PS(pcvl.P("phi"))
@@ -515,7 +515,6 @@ class CircuitConverter:
             phase = torch.tensor(
                 comp.param("phi")._value, dtype=self.tensor_fdtype, device=self.device
             )
-        phase = phase.to(self.tensor_cdtype)
 
         if comp._max_error:
             err = float(comp._max_error) * random.uniform(-1, 1)
