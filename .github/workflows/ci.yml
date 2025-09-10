@@ -32,6 +32,6 @@ jobs:
         ruff format --check merlin/
         mypy merlin/ --ignore-missing-imports --no-strict-optional --allow-untyped-defs --disable-error-code=no-redef
     
-    - name: Run tests
+    - name: Run tests with coverage
       run: |
         pytest tests/ -v

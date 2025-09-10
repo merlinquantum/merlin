@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "merlinquantum"
-dynamic = ["version", "optional-dependencies"]
+dynamic = ["version"]
 description = "Quantum neural network models using photonic circuits - Preview"
 readme= "README.md"
 requires-python = ">=3.10"
@@ -36,6 +36,35 @@ dependencies = [
     "pandas"
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-benchmark>=4.0.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0",
+]
+docs = [
+    "sphinx>=6.2.1,<7.0.0",
+    "sphinx-autodoc-typehints>=1.0.0",
+    "sphinxcontrib-bibtex>=2.5.0",
+    "renku-sphinx-theme",
+    "enum-tools[sphinx]",
+    "nbsphinx",
+    "nbformat",
+    "ipython",
+    "ipykernel",
+    "gitpython",
+    "jinja2==3.0.0",
+    "sphinx-multiversion-contrib @ git+https://github.com/Quandela/sphinx-multiversion-contrib.git@1.1.1",
+    "scikit-learn>=1.0.0",
+]
+examples = [
+    "matplotlib>=3.5.0",
+    "scikit-learn>=1.0.0",
+    "jupyter>=1.0.0",
+]
+
 [project.urls]
 homepage = "https://merlinquantum.ai"
 documentation = "https://merlinquantum.ai"
@@ -49,6 +78,45 @@ packages = ["merlin", "merlin.core", "merlin.datasets", "merlin.pcvl_pytorch", "
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+addopts = "--cov=merlin --cov-report=term-missing --cov-report=xml --cov-report=html"
+
+[tool.coverage.run]
+source = ["merlin"]
+omit = [
+    "*/tests/*",
+    "*/test_*",
+    "*/__pycache__/*",
+    "*/migrations/*",
+    "*/venv/*",
+    "*/.venv/*",
+    "setup.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == \"__main__\":",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
+show_missing = true
+precision = 2
+skip_covered = false
+# Warning threshold - coverage below this will show warning but won't fail
+fail_under = 0
+# 80% is our monitoring threshold (configured in workflows)
+
+[tool.coverage.html]
+directory = "htmlcov"
+
+[tool.coverage.xml]
+output = "coverage.xml"
 
 [tool.ruff]
 target-version = "py310"
