@@ -180,18 +180,30 @@ Add a new job to `.github/workflows/benchmark.yml`:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Build benchmark container
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
       run: |
-        docker build -f Dockerfile.benchmark -t merlin-benchmark:latest .
+        python -m pip install --upgrade pip
+        pip install torch --index-url https://download.pytorch.org/whl/cpu
+        pip install pytest pytest-benchmark numpy pandas psutil
+        pip install perceval-quandela==0.13.1
+        pip install -e .
+
+    - name: Set performance environment variables
+      run: |
+        echo "OMP_NUM_THREADS=1" >> $GITHUB_ENV
+        echo "MKL_NUM_THREADS=1" >> $GITHUB_ENV
+        echo "NUMEXPR_NUM_THREADS=1" >> $GITHUB_ENV
+        echo "OPENBLAS_NUM_THREADS=1" >> $GITHUB_ENV
 
     - name: Run your feature benchmarks
       run: |
-        docker run --rm \
-          --user $(id -u):$(id -g) \
-          -v ${{ github.workspace }}:/app/host \
-          -w /app \
-          merlin-benchmark:latest \
-          bash -c "pytest benchmarks/benchmark_your_feature.py --benchmark-json=/app/host/your-feature-results.json -v --benchmark-only"
+        pytest benchmarks/benchmark_your_feature.py --benchmark-json=your-feature-results.json -v --benchmark-only
 
     - name: Store your feature benchmark results
       uses: benchmark-action/github-action-benchmark@v1
@@ -268,7 +280,7 @@ Each benchmark category gets its own interactive chart showing:
 
 ### CI/CD Integration:
 1. **Parallel Execution**: Benchmarks run in parallel for speed
-2. **Containerization**: Docker ensures consistent results across environments
+2. **Consistent Environment**: GitHub Actions runners provide stable, reproducible environments
 3. **Conditional Updates**: Only update baselines from main branch
 4. **Failure Handling**: Configure appropriate failure behaviors
 
@@ -282,8 +294,8 @@ python benchmarks/benchmark_your_feature.py
 # Run specific benchmark with pytest
 python -m pytest benchmarks/benchmark_your_feature.py -v --benchmark-only
 
-# Check Docker container
-docker run -it merlin-benchmark:latest bash
+# Install benchmark dependencies
+pip install pytest pytest-benchmark numpy pandas psutil perceval-quandela
 
 # Validate benchmark results format
 python -c "import json; print(json.load(open('results.json')))"

@@ -15,10 +15,6 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Build benchmark container
-      run: |
-        docker build -f Dockerfile.benchmark -t merlin-benchmark:latest .
-
     - name: Setup gh-pages branch
       run: |
         git config --global user.name 'github-action-benchmark'
@@ -46,18 +42,29 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Build benchmark container
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
       run: |
-        docker build -f Dockerfile.benchmark -t merlin-benchmark:latest .
+        python -m pip install --upgrade pip
+        pip install torch --index-url https://download.pytorch.org/whl/cpu
+        pip install pytest pytest-benchmark numpy pandas psutil
+        pip install perceval-quandela==0.13.1
+        pip install -e .
+
+    - name: Set performance environment variables
+      run: |
+        echo "OMP_NUM_THREADS=1" >> $GITHUB_ENV
+        echo "MKL_NUM_THREADS=1" >> $GITHUB_ENV
+        echo "NUMEXPR_NUM_THREADS=1" >> $GITHUB_ENV
+        echo "OPENBLAS_NUM_THREADS=1" >> $GITHUB_ENV
 
     - name: Run SLOS core benchmarks
       run: |
-        docker run --rm \
-          --user $(id -u):$(id -g) \
-          -v ${{ github.workspace }}:/app/host \
-          -w /app \
-          merlin-benchmark:latest \
-          bash -c "pytest benchmarks/benchmark_slos_core.py --benchmark-json=/app/host/slos-core-results.json -v --benchmark-only"
+        pytest benchmarks/benchmark_slos_core.py --benchmark-json=slos-core-results.json -v --benchmark-only
 
     - name: Store SLOS core benchmark results
       uses: benchmark-action/github-action-benchmark@v1
@@ -78,18 +85,29 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Build benchmark container
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
       run: |
-        docker build -f Dockerfile.benchmark -t merlin-benchmark:latest .
+        python -m pip install --upgrade pip
+        pip install torch --index-url https://download.pytorch.org/whl/cpu
+        pip install pytest pytest-benchmark numpy pandas psutil
+        pip install perceval-quandela==0.13.1
+        pip install -e .
+
+    - name: Set performance environment variables
+      run: |
+        echo "OMP_NUM_THREADS=1" >> $GITHUB_ENV
+        echo "MKL_NUM_THREADS=1" >> $GITHUB_ENV
+        echo "NUMEXPR_NUM_THREADS=1" >> $GITHUB_ENV
+        echo "OPENBLAS_NUM_THREADS=1" >> $GITHUB_ENV
 
     - name: Run no bunching benchmarks
       run: |
-        docker run --rm \
-          --user $(id -u):$(id -g) \
-          -v ${{ github.workspace }}:/app/host \
-          -w /app \
-          merlin-benchmark:latest \
-          bash -c "pytest benchmarks/benchmark_no_bunching.py --benchmark-json=/app/host/no-bunching-results.json -v --benchmark-only"
+        pytest benchmarks/benchmark_no_bunching.py --benchmark-json=no-bunching-results.json -v --benchmark-only
 
     - name: Store no bunching benchmark results
       uses: benchmark-action/github-action-benchmark@v1
@@ -110,18 +128,29 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Build benchmark container
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
       run: |
-        docker build -f Dockerfile.benchmark -t merlin-benchmark:latest .
+        python -m pip install --upgrade pip
+        pip install torch --index-url https://download.pytorch.org/whl/cpu
+        pip install pytest pytest-benchmark numpy pandas psutil
+        pip install perceval-quandela==0.13.1
+        pip install -e .
+
+    - name: Set performance environment variables
+      run: |
+        echo "OMP_NUM_THREADS=1" >> $GITHUB_ENV
+        echo "MKL_NUM_THREADS=1" >> $GITHUB_ENV
+        echo "NUMEXPR_NUM_THREADS=1" >> $GITHUB_ENV
+        echo "OPENBLAS_NUM_THREADS=1" >> $GITHUB_ENV
 
     - name: Run layer benchmarks
       run: |
-        docker run --rm \
-          --user $(id -u):$(id -g) \
-          -v ${{ github.workspace }}:/app/host \
-          -w /app \
-          merlin-benchmark:latest \
-          bash -c "pytest benchmarks/benchmark_layer.py --benchmark-json=/app/host/layer-results.json -v --benchmark-only"
+        pytest benchmarks/benchmark_layer.py --benchmark-json=layer-results.json -v --benchmark-only
 
     - name: Store layer benchmark results
       uses: benchmark-action/github-action-benchmark@v1
@@ -142,18 +171,29 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Build benchmark container
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
       run: |
-        docker build -f Dockerfile.benchmark -t merlin-benchmark:latest .
+        python -m pip install --upgrade pip
+        pip install torch --index-url https://download.pytorch.org/whl/cpu
+        pip install pytest pytest-benchmark numpy pandas psutil
+        pip install perceval-quandela==0.13.1
+        pip install -e .
+
+    - name: Set performance environment variables
+      run: |
+        echo "OMP_NUM_THREADS=1" >> $GITHUB_ENV
+        echo "MKL_NUM_THREADS=1" >> $GITHUB_ENV
+        echo "NUMEXPR_NUM_THREADS=1" >> $GITHUB_ENV
+        echo "OPENBLAS_NUM_THREADS=1" >> $GITHUB_ENV
 
     - name: Run robustness benchmarks
       run: |
-        docker run --rm \
-          --user $(id -u):$(id -g) \
-          -v ${{ github.workspace }}:/app/host \
-          -w /app \
-          merlin-benchmark:latest \
-          bash -c "pytest benchmarks/benchmark_robustness.py --benchmark-json=/app/host/robustness-results.json -v --benchmark-only"
+        pytest benchmarks/benchmark_robustness.py --benchmark-json=robustness-results.json -v --benchmark-only
 
     - name: Store robustness benchmark results
       uses: benchmark-action/github-action-benchmark@v1
