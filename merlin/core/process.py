@@ -37,9 +37,10 @@ class ComputationProcess(AbstractComputationProcess):
     def __init__(
         self,
         circuit: pcvl.Circuit,
-        input_state: list[int] | dict[list[int], float],
+        input_state: list[int] | torch.Tensor,
         trainable_parameters: list[str],
         input_parameters: list[str],
+        n_photons: int = None,
         reservoir_mode: bool = False,
         dtype: torch.dtype = torch.float32,
         device: torch.device | None = None,
@@ -49,6 +50,7 @@ class ComputationProcess(AbstractComputationProcess):
     ):
         self.circuit = circuit
         self.input_state = input_state
+        self.n_photons = n_photons
         self.trainable_parameters = trainable_parameters
         self.input_parameters = input_parameters
         self.reservoir_mode = reservoir_mode
@@ -59,11 +61,15 @@ class ComputationProcess(AbstractComputationProcess):
         self.index_photons = index_photons
 
         # Extract circuit parameters for graph building
-        if isinstance(input_state, dict):
-            input_state = list(input_state.keys())[0]
-        self.m = len(input_state)  # Number of modes
-        self.n_photons = sum(input_state)  # Total number of photons
 
+        self.m = circuit.m  # Number of modes
+        if n_photons is None:
+            if type(input_state) is list:
+                self.n_photons = sum(input_state)  # Total number of photons
+            else:
+                raise ValueError("The number of photons should be provided")
+        else:
+            self.n_photons = n_photons
         # Build computation graphs
         self._setup_computation_graphs()
 
@@ -81,7 +87,6 @@ class ComputationProcess(AbstractComputationProcess):
         self.simulation_graph = build_slos_distribution_computegraph(
             m=self.m,  # Number of modes
             n_photons=self.n_photons,  # Total number of photons
-            output_map_func=self.output_map_func,
             no_bunching=self.no_bunching,
             keep_keys=True,  # Usually want to keep keys for output interpretation
             device=self.device,
@@ -93,20 +98,21 @@ class ComputationProcess(AbstractComputationProcess):
         """Compute quantum output distribution."""
         # Generate unitary matrix from parameters
         unitary = self.converter.to_tensor(*parameters)
-
+        self.unitary = unitary
         # Compute output distribution using the input state
-        if isinstance(self.input_state, dict):
-            input_state = list(self.input_state.keys())[0]
+        if isinstance(self.input_state, torch.Tensor):
+            input_state = [1] * self.n_photons + [0] * (self.m - self.n_photons)
         else:
             input_state = self.input_state
-        keys, distribution = self.simulation_graph.compute(unitary, input_state)
 
-        return distribution
+        keys, amplitudes = self.simulation_graph.compute(unitary, input_state)
+        return amplitudes
 
     def compute_superposition_state(
         self, parameters: list[torch.Tensor]
     ) -> torch.Tensor:
         unitary = self.converter.to_tensor(*parameters)
+        changed_unitary = True
 
         def is_swap_permutation(t1, t2):
             if t1 == t2:
@@ -125,7 +131,7 @@ class ComputationProcess(AbstractComputationProcess):
             chain = [remaining.pop(0)]  # Commence avec le premier élément
             while remaining:
                 for i, candidate in enumerate(remaining):
-                    if is_swap_permutation(chain[-1], candidate):
+                    if is_swap_permutation(chain[-1][1], candidate[1]):
                         chain.append(remaining.pop(i))
                         break
                 else:
@@ -133,26 +139,56 @@ class ComputationProcess(AbstractComputationProcess):
 
             return chain
 
-        if isinstance(self.input_state, dict):
-            state_list = reorder_swap_chain(list(self.input_state.keys()))
+        if type(self.input_state) is torch.Tensor:
+            if len(self.input_state.shape) == 1:
+                self.input_state = self.input_state.unsqueeze(0)
+            if self.input_state.dtype == torch.float32:
+                self.input_state = self.input_state.to(torch.complex64)
+            elif self.input_state.dtype == torch.float64:
+                self.input_state = self.input_state.to(torch.complex128)
+
         else:
-            # If input_state is a list, we shouldn't be in this code path
-            raise ValueError(
-                "input_state must be a dict for superposition state computation"
-            )
+            raise TypeError("Input state should be a tensor")
 
-        prev_state = state_list.pop(0)
-        keys, distribution = self.simulation_graph.compute(unitary, prev_state)
-        distributions = distribution * self.input_state[prev_state]
+        sum_input = self.input_state.abs().pow(2).sum(dim=1).sqrt().unsqueeze(1)
+        self.input_state = self.input_state / sum_input
 
-        for fock_state in state_list:
-            keys, distribution = self.simulation_graph.compute_pa_inc(
-                unitary, prev_state, fock_state
+        mask = (self.input_state.real**2 + self.input_state.imag**2 < 1e-13).all(dim=0)
+
+        masked_input_state = (~mask).int().tolist()
+
+        input_states = [
+            (k, self.simulation_graph.mapped_keys[k])
+            for k, mask in enumerate(masked_input_state)
+            if mask == 1
+        ]
+
+        state_list = reorder_swap_chain(input_states)
+
+        prev_state_index, prev_state = state_list.pop(0)
+
+        _, amplitude = self.simulation_graph.compute(unitary, prev_state)
+        amplitudes = torch.zeros(
+            (self.input_state.shape[-1], len(self.simulation_graph.mapped_keys)),
+            dtype=amplitude.dtype,
+            device=self.input_state.device,
+        )
+        amplitudes[prev_state_index] = amplitude
+
+        for index, fock_state in state_list:
+            amplitudes[index] = self.simulation_graph.compute_pa_inc(
+                unitary,
+                prev_state,
+                fock_state,
+                changed_unitary=changed_unitary,
             )
-            distributions += distribution * self.input_state[fock_state]
+            changed_unitary = False
             prev_state = fock_state
+        input_state = self.input_state.to(amplitudes.dtype)
 
-        return distributions
+        final_amplitudes = input_state @ amplitudes
+
+        return final_amplitudes
 
     def compute_with_keys(self, parameters: list[torch.Tensor]):
         """Compute quantum output distribution and return both keys and probabilities."""
@@ -160,9 +196,9 @@ class ComputationProcess(AbstractComputationProcess):
         unitary = self.converter.to_tensor(*parameters)
 
         # Compute output distribution using the input state
-        keys, distribution = self.simulation_graph.compute(unitary, self.input_state)
+        keys, amplitudes = self.simulation_graph.compute(unitary, self.input_state)
 
-        return keys, distribution
+        return keys, amplitudes
 
 
 class ComputationProcessFactory:
@@ -171,7 +207,7 @@ class ComputationProcessFactory:
     @staticmethod
     def create(
         circuit: pcvl.Circuit,
-        input_state: list[int] | dict[list[int], float],
+        input_state: list[int] | torch.Tensor,
         trainable_parameters: list[str],
         input_parameters: list[str],
         reservoir_mode: bool = False,

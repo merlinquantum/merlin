@@ -74,6 +74,11 @@ def test_switch_model_to_cuda():
     )
     assert layer.device == torch.device("cpu")
     layer = layer.to(torch.device("cuda"))
+    _ = layer()
+    layer.computation_process.input_state = torch.rand(
+        (3, 6), device=torch.device("cuda")
+    )
+    _ = layer()
     assert layer.device == torch.device("cuda")
     if len(layer.thetas) > 0:
         assert layer.thetas[0].device == torch.device("cuda", index=0)
@@ -89,12 +94,18 @@ def test_switch_model_to_cuda():
 
 class QuantumClassifier_withAnsatz(nn.Module):
     def __init__(
-        self, input_dim, hidden_dim=100, modes=10, num_classes=2, input_state=None, device="cpu",
+        self,
+        input_dim,
+        hidden_dim=100,
+        modes=10,
+        num_classes=2,
+        input_state=None,
+        device="cpu",
     ):
         super().__init__()
 
         # This layer downscales the inputs to fit in the QLayer
-        self.downscaling_layer = nn.Linear(input_dim, hidden_dim, device = device)
+        self.downscaling_layer = nn.Linear(input_dim, hidden_dim, device=device)
 
         # Building the QLayer with Merlin
         experiment = ml.PhotonicBackend(
@@ -115,10 +126,14 @@ class QuantumClassifier_withAnsatz(nn.Module):
         )
 
         # Build the QLayer using Merlin
-        self.q_circuit = ml.QuantumLayer(input_size=hidden_dim, ansatz=ansatz, device = device)
+        self.q_circuit = ml.QuantumLayer(
+            input_size=hidden_dim, ansatz=ansatz, device=device
+        )
 
         # Linear output layer as in the original paper
-        self.output_layer = nn.Linear(self.q_circuit.output_size, num_classes, device = device)
+        self.output_layer = nn.Linear(
+            self.q_circuit.output_size, num_classes, device=device
+        )
 
     def forward(self, x):
         # Forward pass through the quantum-classical hybrid
@@ -150,7 +165,7 @@ def test_QuantumClassifier_withAnsatz():
         modes=modes,
         num_classes=num_classes,
         input_state=input_state,
-        device = device,
+        device=device,
     )
 
     # Move model to GPU
@@ -168,7 +183,7 @@ def test_QuantumClassifier_withAnsatz():
     for test_batch_size in [1, 2, 8]:
         test_input = torch.randn(test_batch_size, input_dim, device=device)
         with torch.no_grad():
-            test_output = model(test_input)
+            model(test_input)
 
     # Test training mode
     model.train()
@@ -212,15 +227,14 @@ def test_different_configurations():
         {"modes": 6, "hidden_dim": 100, "input_state": [1, 0, 1, 0, 1, 0]},
     ]
 
-    for i, config in enumerate(configs):
-
+    for _i, config in enumerate(configs):
         model = QuantumClassifier_withAnsatz(
             input_dim=768,
-            hidden_dim=config['hidden_dim'],
-            modes=config['modes'],
+            hidden_dim=config["hidden_dim"],
+            modes=config["modes"],
             num_classes=2,
-            input_state=config['input_state'],
-            device=device
+            input_state=config["input_state"],
+            device=device,
         ).to(device)
 
         # Test with sample input

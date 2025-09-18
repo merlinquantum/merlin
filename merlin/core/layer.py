@@ -205,11 +205,13 @@ class QuantumLayer(nn.Module):
             raise ValueError("Either input_state or n_photons must be provided")
 
         # Create computation process with index_photons support
+
         self.computation_process = ComputationProcessFactory.create(
             circuit=circuit,
             input_state=self.input_state,
             trainable_parameters=trainable_parameters,
             input_parameters=input_parameters,
+            n_photons=n_photons,
             device=self.device,
             dtype=self.dtype,
             no_bunching=self.no_bunching,
@@ -482,16 +484,16 @@ class QuantumLayer(nn.Module):
         *input_parameters: torch.Tensor,
         apply_sampling: bool | None = None,
         shots: int | None = None,
-    ) -> torch.Tensor:
+        return_amplitudes: bool = False,
+    ) -> tuple[torch.Tensor, torch.Tensor] | torch.Tensor:
         """Forward pass through the quantum layer."""
         # Prepare parameters
         params = self.prepare_parameters(list(input_parameters))
-
         # Get quantum output
-        if type(self.computation_process.input_state) is dict:
-            distribution = self.computation_process.compute_superposition_state(params)
+        if type(self.computation_process.input_state) is torch.Tensor:
+            amplitudes = self.computation_process.compute_superposition_state(params)
         else:
-            distribution = self.computation_process.compute(params)
+            amplitudes = self.computation_process.compute(params)
 
         # Handle sampling
         needs_gradient = (
@@ -502,13 +504,35 @@ class QuantumLayer(nn.Module):
         apply_sampling, shots = self.autodiff_process.autodiff_backend(
             needs_gradient, apply_sampling or False, shots or self.shots
         )
+        distribution = amplitudes.real**2 + amplitudes.imag**2
+        if self.no_bunching:
+            sum_probs = distribution.sum(dim=1, keepdim=True)
 
+            # Only normalize when sum > 0 to avoid division by zero
+            valid_entries = sum_probs > 0
+            if valid_entries.any():
+                distribution = torch.where(
+                    valid_entries,
+                    distribution
+                    / torch.where(valid_entries, sum_probs, torch.ones_like(sum_probs)),
+                    distribution,
+                )
+                amplitudes = torch.where(
+                    valid_entries,
+                    amplitudes
+                    / torch.where(
+                        valid_entries, sum_probs.sqrt(), torch.ones_like(sum_probs)
+                    ),
+                    amplitudes,
+                )
         if apply_sampling and shots > 0:
             distribution = self.autodiff_process.sampling_noise.pcvl_sampler(
                 distribution, shots
             )
-
+        if return_amplitudes:
+            return self.output_mapping(distribution), amplitudes
         # Apply output mapping
+
         return self.output_mapping(distribution)
 
     def set_sampling_config(self, shots: int | None = None, method: str | None = None):
@@ -534,11 +558,15 @@ class QuantumLayer(nn.Module):
         if device is not None:
             self.device = device
             self.computation_process.simulation_graph = (
-                self.computation_process.simulation_graph.to(self.dtype, device)
+                self.computation_process.simulation_graph.to(device)
             )
             self.computation_process.converter = self.computation_process.converter.to(
                 self.dtype, device
             )
+            if hasattr(self.output_mapping, "weight"):
+                self.output_mapping = self.output_mapping.to(
+                    dtype=self.dtype, device=self.device
+                )
         return self
 
     def get_index_photons_info(self) -> dict:

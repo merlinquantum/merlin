@@ -129,6 +129,7 @@ class CircuitGenerator:
     @staticmethod
     def _build_parallel_columns_circuit(n_modes, n_features, reservoir_mode=False):
         """Build a PARALLEL_COLUMNS type circuit."""
+
         circuit = pcvl.Circuit(n_modes)
         ps_idx = 0
         for stage in range(n_features + 1):

@@ -13,3 +13,4 @@ User Guide
    circuit_types
    hybrid_models
    output_mappings
+   feed_forward

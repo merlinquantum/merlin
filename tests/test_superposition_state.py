@@ -8,11 +8,22 @@ from merlin import (  # Replace with actual import path
 
 
 def classical_method(layer, input_state):
-    output_classical = torch.zeros(layer.output_size, dtype=layer.dtype, device=layer.device)
+    output_classical = torch.zeros(1, layer.output_size)
+    dtype = layer.computation_process.simulation_graph.prev_amplitudes.dtype
+    output_classical = output_classical.to(dtype)
+
     for key, value in input_state.items():
         layer.computation_process.input_state = key
-        output_classical += value * layer()
-    return output_classical
+        _ = layer()
+
+        output_classical += (
+            value * layer.computation_process.simulation_graph.prev_amplitudes
+        )
+
+    output_probs = layer.computation_process.simulation_graph.post_pa_inc(
+        output_classical, layer.computation_process.unitary
+    )
+    return output_probs[1]
 
 
 class TestOutputSuperposedState:
@@ -25,39 +36,41 @@ class TestOutputSuperposedState:
         # When using NONE strategy without specifying output_size,
         # the output size should equal the distribution size
         circuit = pcvl.components.GenericInterferometer(
-            6,
+            10,
             pcvl.components.catalog["mzi phase last"].generate,
             shape=pcvl.InterferometerShape.RECTANGLE,
         )
-        input_state_superposed = {
-            (1, 1, 1, 0, 0, 0): 0.6,
-            (0, 1, 1, 1, 0, 0): 0.3,
-            (0, 0, 1, 0, 1, 1): 0.4,
-            (0, 1, 1, 0, 1, 0): 0.25,
-            (0, 0, 1, 1, 0, 1): 0.45,
-            (1, 1, 0, 1, 0, 0): 0.4,
-            (1, 1, 0, 0, 0, 1): 0.25,
-        }
-        sum_values = sum(k**2 for k in input_state_superposed.values())
-        for key in input_state_superposed.keys():
-            input_state_superposed[key] = (
-                input_state_superposed[key] / (sum_values) ** 0.5
-            )
+
+        input_state = torch.rand(3, 10).to(torch.float64)
+
+        sum_values = (input_state**2).sum(dim=-1, keepdim=True)
+
+        input_state = input_state / sum_values
+
         layer = QuantumLayer(
             input_size=0,
             circuit=circuit,
             n_photons=3,
             output_mapping_strategy=OutputMappingStrategy.NONE,
-            input_state=input_state_superposed,
+            input_state=input_state,
             trainable_parameters=["phi"],
             input_parameters=[],
             dtype=torch.float64,
+            no_bunching=True,
         )
+
+        input_state_superposed = {
+            layer.computation_process.simulation_graph.mapped_keys[k]: input_state[1, k]
+            for k in range(len(input_state[0]))
+        }
 
         output_superposed = benchmark(layer)
 
         output_classical = classical_method(layer, input_state_superposed)
-        assert torch.allclose(output_superposed, output_classical, rtol=1e-3, atol=1e-6)
+
+        assert torch.allclose(
+            output_superposed[1], output_classical, rtol=3e-4, atol=1e-7
+        )
 
     def test_classical_method(self, benchmark):
         """Test NONE strategy when output_size is not specified."""
@@ -66,38 +79,40 @@ class TestOutputSuperposedState:
         # When using NONE strategy without specifying output_size,
         # the output size should equal the distribution size
         circuit = pcvl.components.GenericInterferometer(
-            6,
+            10,
             pcvl.components.catalog["mzi phase last"].generate,
             shape=pcvl.InterferometerShape.RECTANGLE,
         )
-        input_state_superposed = {
-            (1, 1, 1, 0, 0, 0): 0.6,
-            (0, 1, 1, 1, 0, 0): 0.3,
-            (0, 0, 1, 0, 1, 1): 0.4,
-            (0, 1, 1, 0, 1, 0): 0.25,
-            (0, 0, 1, 1, 0, 1): 0.45,
-            (1, 1, 0, 1, 0, 0): 0.4,
-            (1, 1, 0, 0, 0, 1): 0.25,
-        }
-        sum_values = sum(k**2 for k in input_state_superposed.values())
-        for key in input_state_superposed.keys():
-            input_state_superposed[key] = (
-                input_state_superposed[key] / (sum_values) ** 0.5
-            )
+
+        input_state = torch.rand(3, 10).to(torch.float64)
+
+        sum_values = (input_state**2).sum(dim=-1, keepdim=True)
+
+        input_state = input_state / sum_values
+
         layer = QuantumLayer(
             input_size=0,
             circuit=circuit,
             n_photons=3,
             output_mapping_strategy=OutputMappingStrategy.NONE,
-            input_state=input_state_superposed,
+            input_state=input_state,
             trainable_parameters=["phi"],
             input_parameters=[],
             dtype=torch.float64,
+            no_bunching=True,
         )
+
+        input_state_superposed = {
+            layer.computation_process.simulation_graph.mapped_keys[k]: input_state[0, k]
+            for k in range(len(input_state[0]))
+        }
 
         output_superposed = layer()
 
         output_classical = benchmark(
             lambda: classical_method(layer, input_state_superposed)
         )
-        assert torch.allclose(output_superposed, output_classical, rtol=1e-3, atol=1e-7)
+
+        assert torch.allclose(
+            output_superposed[0], output_classical, rtol=3e-4, atol=1e-7
+        )

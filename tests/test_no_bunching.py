@@ -425,10 +425,23 @@ class TestNoBunchingFunctionality:
                         )
 
             # Test compute_with_keys with no_bunching
-            keys_no_bunching, distribution_no_bunching = (
+            keys_no_bunching, amplitudes_no_bunching = (
                 process_no_bunching.compute_with_keys(dummy_params)
             )
+            distribution_no_bunching = (
+                amplitudes_no_bunching.real**2 + amplitudes_no_bunching.imag**2
+            )
+            sum_probs = distribution_no_bunching.sum(dim=1, keepdim=True)
 
+            # Only normalize when sum > 0 to avoid division by zero
+            valid_entries = sum_probs > 0
+            if valid_entries.any():
+                distribution_no_bunching = torch.where(
+                    valid_entries,
+                    distribution_no_bunching
+                    / torch.where(valid_entries, sum_probs, torch.ones_like(sum_probs)),
+                    distribution_no_bunching,
+                )
             # Should have the same distribution size
             expected_size = calculate_no_bunching_size(n_modes, n_photons)
             assert distribution_no_bunching.shape[-1] == expected_size
@@ -438,10 +451,12 @@ class TestNoBunchingFunctionality:
             print("Correct distribution and keys size with no_bunching")
 
             # Test compute_with_keys on full Fock space
-            keys_full_fock_space, distribution_full_fock_space = (
+            keys_full_fock_space, amplitudes_full_fock_space = (
                 process_full_fock_space.compute_with_keys(dummy_params)
             )
-
+            distribution_full_fock_space = (
+                amplitudes_full_fock_space.real**2 + amplitudes_full_fock_space.imag**2
+            )
             # Should have the same distribution size
             expected_size = calculate_fock_space_size(n_modes, n_photons)
             assert distribution_full_fock_space.shape[-1] == expected_size
@@ -456,13 +471,14 @@ class TestNoBunchingFunctionality:
             new_distribution = [0] * len(keys_no_bunching)
 
             for key, proba in zip(
-                keys_full_fock_space, distribution_full_fock_space, strict=False
+                keys_full_fock_space, distribution_full_fock_space[0], strict=False
             ):
                 if any(key_elem > 1 for key_elem in key):
                     continue
                 else:
                     index = keys_no_bunching.index(key)
                     new_keys[index] = key
+
                     new_distribution[index] = proba
 
             new_distribution = torch.tensor(new_distribution) / torch.sum(

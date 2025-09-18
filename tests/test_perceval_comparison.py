@@ -110,7 +110,18 @@ class TestPercevalComparison:
                     unitary, input_state
                 )
             )
-            merlin_probs = merlin_distribution.numpy()
+            probabilities = merlin_distribution.real**2 + merlin_distribution.imag**2
+            sum_probs = probabilities.sum(dim=1, keepdim=True)
+            # Only normalize when sum > 0 to avoid division by zero
+            valid_entries = sum_probs > 0
+            if valid_entries.any():
+                probabilities = torch.where(
+                    valid_entries,
+                    probabilities
+                    / torch.where(valid_entries, sum_probs, torch.ones_like(sum_probs)),
+                    probabilities,
+                )
+            merlin_probs = probabilities.numpy()
 
         # Set parameter values to match MerLin's computation
         for param_tensor in merlin_params:
@@ -152,10 +163,10 @@ class TestPercevalComparison:
         diff = np.abs(merlin_probs - perceval_probs)
         max_diff = np.max(diff)
 
-        print(f"MerLin probabilities: {merlin_probs}")
-        print(f"Perceval probabilities: {perceval_probs}")
-        print(f"Maximum difference: {max_diff}")
-        print(f"Mean absolute difference: {np.mean(diff)}")
+        # print(f"MerLin probabilities: {merlin_probs}")
+        # print(f"Perceval probabilities: {perceval_probs}")
+        # print(f"Maximum difference: {max_diff}")
+        # print(f"Mean absolute difference: {np.mean(diff)}")
 
         # The distributions should be reasonably close
         assert max_diff < tolerance, (

@@ -29,6 +29,7 @@ The optimized implementation pre-builds the computation graph based on the input
 configuration, which can then be reused for multiple unitary evaluations.
 """
 
+import math
 import os
 from collections.abc import Callable
 
@@ -175,6 +176,7 @@ def layer_compute_backward(
         Next layer amplitudes [batch_size, next_size]
     """
     inverts = []
+    device = unitary.device
     computing_tensors = []
     for p in range(m):
         # Determine output size
@@ -185,12 +187,16 @@ def layer_compute_backward(
         u_elements = torch.diag_embed(unitary[:, modes, p])
 
         destinations_tensor = torch.zeros(
-            (1, size_destinations, modes.shape[0]), dtype=u_elements.dtype
+            (1, size_destinations, modes.shape[0]),
+            dtype=u_elements.dtype,
+            device=device,
         )
         destinations_tensor[:, destinations, torch.arange(destinations.shape[0])] = 1
 
         sources_tensor = torch.zeros(
-            (1, sources.shape[0], size_sources), dtype=u_elements.dtype
+            (1, sources.shape[0], size_sources),
+            dtype=u_elements.dtype,
+            device=device,
         )
         sources_tensor[:, torch.arange(sources.shape[0]), sources] = 1
 
@@ -445,10 +451,9 @@ class SLOSComputeGraph:
                 - Probability distribution tensor
         """
         if len(unitary.shape) == 2:
-            is_batched = False
             unitary = unitary.unsqueeze(0)  # Add batch dimension [1 x m x m]
         else:
-            is_batched = True
+            pass
 
         if any(n < 0 for n in input_state) or sum(input_state) == 0:
             raise ValueError("Photon numbers cannot be negative or all zeros")
@@ -502,37 +507,18 @@ class SLOSComputeGraph:
                 p,
             )
 
+        amplitudes *= torch.sqrt(self.norm_factor_output.to(amplitudes.device))
+        amplitudes /= math.sqrt(self.norm_factor_input)
         self.prev_amplitudes = amplitudes  # type: ignore[assignment]
-        # Calculate probabilities
-        # probabilities = (amplitudes.abs() ** 2).real
-        probabilities = amplitudes.real**2 + amplitudes.imag**2
-        probabilities *= self.norm_factor_output.to(probabilities.device)
-        probabilities /= self.norm_factor_input
 
         # Apply output mapping if needed
         if self.output_map_func is not None:
-            probabilities = self.mapping_function(probabilities)
             keys = self.mapped_keys
         else:
-            if self.no_bunching:
-                sum_probs = probabilities.sum(dim=1, keepdim=True)
-                # Only normalize when sum > 0 to avoid division by zero
-                valid_entries = sum_probs > 0
-                if valid_entries.any():
-                    probabilities = torch.where(
-                        valid_entries,
-                        probabilities
-                        / torch.where(
-                            valid_entries, sum_probs, torch.ones_like(sum_probs)
-                        ),
-                        probabilities,
-                    )
             keys = self.final_keys if self.keep_keys else None
         # Remove batch dimension if input was single unitary
-        if not is_batched:
-            probabilities = probabilities.squeeze(0)
 
-        return keys, probabilities
+        return keys, amplitudes
 
     def _prepare_pa_inc(self, unitary):
         self.ct_inverts = []
@@ -543,7 +529,7 @@ class SLOSComputeGraph:
                 layer_compute_backward(unitary, sources, destinations, modes, self.m)
             )
 
-    def to(self, dtype: torch.dtype, device: str | torch.device):
+    def to(self, device: str | torch.device):
         """
         Moves the converter to a specific device.
 
@@ -559,27 +545,18 @@ class SLOSComputeGraph:
             raise TypeError(
                 f"Expected a string or torch.device, but got {type(device).__name__}"
             )
-        if dtype not in (
-            torch.float32,
-            torch.float64,
-            torch.complex64,
-            torch.complex128,
-        ):
-            raise TypeError(
-                f"Unsupported dtype {dtype}. Supported dtypes are torch.float32, torch.float64, "
-                f"torch.complex64, and torch.complex128."
-            )
+
         if self.output_map_func is not None:
             self.target_indices.to(dtype=dtype, device=self.device)
         for idx, (sources, destinations, modes) in enumerate(
             self.vectorized_operations
         ):
             self.vectorized_operations[idx] = (
-                sources.to(dtype=dtype, device=self.device),
-                destinations.to(dtype=dtype, device=self.device),
-                modes.to(dtype=dtype, device=self.device),
+                sources.to(device=self.device),
+                destinations.to(device=self.device),
+                modes.to(device=self.device),
             )
-
+        self._create_torchscript_modules()
         return self
 
     def compute_pa_inc(
@@ -590,10 +567,9 @@ class SLOSComputeGraph:
         changed_unitary=False,
     ) -> tuple[list[tuple[int, ...]], torch.Tensor]:
         if len(unitary.shape) == 2:
-            is_batched = False
             unitary = unitary.unsqueeze(0)  # Add batch dimension [1 x m x m]
         else:
-            is_batched = True
+            pass
 
         if any(n < 0 for n in input_state) or sum(input_state) == 0:
             raise ValueError("Photon numbers cannot be negative or all zeros")
@@ -657,12 +633,21 @@ class SLOSComputeGraph:
                 amplitudes = layer_compute_vectorized(
                     unitary, amplitudes, sources, destinations, modes, p_pos
                 )
-
+        amplitudes *= torch.sqrt(self.norm_factor_output.to(amplitudes.device))
+        amplitudes /= math.sqrt(self.norm_factor_input)
         self.prev_amplitudes = amplitudes  # type: ignore[assignment]
         # Calculate probabilities
         # probabilities = (amplitudes.abs() ** 2).real
+
+        return amplitudes
+
+    def post_pa_inc(self, amplitudes, unitary):
+        if len(unitary.shape) == 2:
+            is_batched = False
+        else:
+            is_batched = True
         probabilities = amplitudes.real**2 + amplitudes.imag**2
-        probabilities *= self.norm_factor_output.to(device=self.device)
+        probabilities *= self.norm_factor_output.to(probabilities.device)
         probabilities /= self.norm_factor_input
 
         # Apply output mapping if needed
@@ -684,7 +669,6 @@ class SLOSComputeGraph:
                         probabilities,
                     )
             keys = self.final_keys if self.keep_keys else None
-
         # Remove batch dimension if input was single unitary
         if not is_batched:
             probabilities = probabilities.squeeze(0)
