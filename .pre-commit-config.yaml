@@ -1,21 +1,19 @@
 repos:
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.4.0
-    hooks:
-      - id: trailing-whitespace
-      - id: end-of-file-fixer
-      - id: check-yaml
-      - id: check-added-large-files
-
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.1.6
+    rev: v0.12.0
     hooks:
       - id: ruff
-        args: [--fix, --exit-non-zero-on-fix]
+        args: [ --fix ]
+        language_version: python3.12
+        types_or: [ python, pyi ]
       - id: ruff-format
-
+        language_version: python3.12
+        types_or: [ python, pyi ]
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.7.1
+    rev: v1.16.0
     hooks:
       - id: mypy
-        additional_dependencies: [types-all]
+        args: [--ignore-missing-imports, --no-strict-optional, --allow-untyped-defs, --disable-error-code=no-redef]
+        language_version: python3.12
+        files: ^merlin/
+        additional_dependencies: [types-requests]

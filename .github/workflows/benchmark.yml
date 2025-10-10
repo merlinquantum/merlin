@@ -1,0 +1,435 @@
+name: Continuous Benchmarking
+
+permissions:
+  contents: write
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup gh-pages branch
+      run: |
+        git config --global user.name 'github-action-benchmark'
+        git config --global user.email 'github@users.noreply.github.com'
+        
+        # Check if gh-pages branch exists remotely
+        if git ls-remote --exit-code --heads origin gh-pages; then
+          echo "gh-pages branch exists remotely, fetching it"
+          git fetch origin gh-pages:gh-pages
+        else
+          echo "gh-pages branch doesn't exist, creating orphan branch"
+          git checkout --orphan gh-pages
+          git rm -rf .
+          echo "# Benchmark Results" > README.md
+          git add README.md
+          git commit -m "Initial gh-pages commit"
+          git push origin gh-pages
+          git checkout main
+          git fetch origin gh-pages:gh-pages
+        fi
+
+  benchmark-slos-core:
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install torch --index-url https://download.pytorch.org/whl/cpu
+        pip install pytest pytest-benchmark numpy pandas psutil
+        pip install perceval-quandela==0.13.1
+        pip install -e .
+
+    - name: Set performance environment variables
+      run: |
+        echo "OMP_NUM_THREADS=1" >> $GITHUB_ENV
+        echo "MKL_NUM_THREADS=1" >> $GITHUB_ENV
+        echo "NUMEXPR_NUM_THREADS=1" >> $GITHUB_ENV
+        echo "OPENBLAS_NUM_THREADS=1" >> $GITHUB_ENV
+
+    - name: Run SLOS core benchmarks
+      run: |
+        pytest benchmarks/benchmark_slos_core.py --benchmark-json=slos-core-results.json -v --benchmark-only
+
+    - name: Store SLOS core benchmark results
+      uses: benchmark-action/github-action-benchmark@v1
+      with:
+        tool: 'pytest'
+        output-file-path: slos-core-results.json
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        auto-push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        benchmark-data-dir-path: 'dev/bench/slos-core'
+        fail-on-alert: true
+        alert-threshold: '120%'
+        comment-on-alert: true
+        summary-always: true
+
+  benchmark-no-bunching:
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install torch --index-url https://download.pytorch.org/whl/cpu
+        pip install pytest pytest-benchmark numpy pandas psutil
+        pip install perceval-quandela==0.13.1
+        pip install -e .
+
+    - name: Set performance environment variables
+      run: |
+        echo "OMP_NUM_THREADS=1" >> $GITHUB_ENV
+        echo "MKL_NUM_THREADS=1" >> $GITHUB_ENV
+        echo "NUMEXPR_NUM_THREADS=1" >> $GITHUB_ENV
+        echo "OPENBLAS_NUM_THREADS=1" >> $GITHUB_ENV
+
+    - name: Run no bunching benchmarks
+      run: |
+        pytest benchmarks/benchmark_no_bunching.py --benchmark-json=no-bunching-results.json -v --benchmark-only
+
+    - name: Store no bunching benchmark results
+      uses: benchmark-action/github-action-benchmark@v1
+      with:
+        tool: 'pytest'
+        output-file-path: no-bunching-results.json
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        auto-push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        benchmark-data-dir-path: 'dev/bench/no-bunching'
+        fail-on-alert: true
+        alert-threshold: '120%'
+        comment-on-alert: true
+        summary-always: true
+
+  benchmark-layer:
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install torch --index-url https://download.pytorch.org/whl/cpu
+        pip install pytest pytest-benchmark numpy pandas psutil
+        pip install perceval-quandela==0.13.1
+        pip install -e .
+
+    - name: Set performance environment variables
+      run: |
+        echo "OMP_NUM_THREADS=1" >> $GITHUB_ENV
+        echo "MKL_NUM_THREADS=1" >> $GITHUB_ENV
+        echo "NUMEXPR_NUM_THREADS=1" >> $GITHUB_ENV
+        echo "OPENBLAS_NUM_THREADS=1" >> $GITHUB_ENV
+
+    - name: Run layer benchmarks
+      run: |
+        pytest benchmarks/benchmark_layer.py --benchmark-json=layer-results.json -v --benchmark-only
+
+    - name: Store layer benchmark results
+      uses: benchmark-action/github-action-benchmark@v1
+      with:
+        tool: 'pytest'
+        output-file-path: layer-results.json
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        auto-push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        benchmark-data-dir-path: 'dev/bench/layer'
+        fail-on-alert: true
+        alert-threshold: '120%'
+        comment-on-alert: true
+        summary-always: true
+
+  benchmark-robustness:
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install torch --index-url https://download.pytorch.org/whl/cpu
+        pip install pytest pytest-benchmark numpy pandas psutil
+        pip install perceval-quandela==0.13.1
+        pip install -e .
+
+    - name: Set performance environment variables
+      run: |
+        echo "OMP_NUM_THREADS=1" >> $GITHUB_ENV
+        echo "MKL_NUM_THREADS=1" >> $GITHUB_ENV
+        echo "NUMEXPR_NUM_THREADS=1" >> $GITHUB_ENV
+        echo "OPENBLAS_NUM_THREADS=1" >> $GITHUB_ENV
+
+    - name: Run robustness benchmarks
+      run: |
+        pytest benchmarks/benchmark_robustness.py --benchmark-json=robustness-results.json -v --benchmark-only
+
+    - name: Store robustness benchmark results
+      uses: benchmark-action/github-action-benchmark@v1
+      with:
+        tool: 'pytest'
+        output-file-path: robustness-results.json
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        auto-push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        benchmark-data-dir-path: 'dev/bench/robustness'
+        fail-on-alert: true
+        alert-threshold: '120%'
+        comment-on-alert: true
+        summary-always: true
+
+  benchmark-unitary-conversion:
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install torch --index-url https://download.pytorch.org/whl/cpu
+        pip install pytest pytest-benchmark numpy pandas psutil
+        pip install perceval-quandela==0.13.1
+        pip install -e .
+
+    - name: Set performance environment variables
+      run: |
+        echo "OMP_NUM_THREADS=1" >> $GITHUB_ENV
+        echo "MKL_NUM_THREADS=1" >> $GITHUB_ENV
+        echo "NUMEXPR_NUM_THREADS=1" >> $GITHUB_ENV
+        echo "OPENBLAS_NUM_THREADS=1" >> $GITHUB_ENV
+
+    - name: Run unitary conversion benchmarks
+      run: |
+        pytest benchmarks/benchmark_unitary_conversion.py --benchmark-json=unitary-conversion-results.json -v --benchmark-only
+
+    - name: Store unitary conversion benchmark results
+      uses: benchmark-action/github-action-benchmark@v1
+      with:
+        tool: 'pytest'
+        output-file-path: unitary-conversion-results.json
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        auto-push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        benchmark-data-dir-path: 'dev/bench/unitary-conversion'
+        fail-on-alert: true
+        alert-threshold: '120%'
+        comment-on-alert: true
+        summary-always: true
+
+  create-index:
+    runs-on: ubuntu-latest
+    needs: [benchmark-slos-core, benchmark-no-bunching, benchmark-layer, benchmark-robustness, benchmark-unitary-conversion]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Create main benchmark index page
+      run: |
+        git fetch origin gh-pages:gh-pages
+        git checkout gh-pages
+        
+        cat > index.html << 'EOF'
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>MerLin Benchmark Results</title>
+            <style>
+                body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; margin: 40px; }
+                .header { text-align: center; margin-bottom: 40px; }
+                .benchmarks { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+                .benchmark-card { border: 1px solid #e1e4e8; border-radius: 8px; padding: 20px; }
+                .benchmark-card h3 { margin-top: 0; color: #0366d6; }
+                .benchmark-card a { text-decoration: none; color: #0366d6; }
+                .benchmark-card a:hover { text-decoration: underline; }
+                .benchmark-card p { color: #586069; margin: 10px 0; }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>🚀 MerLin Benchmark Results</h1>
+                <p>Performance tracking for MerLin quantum machine learning framework</p>
+            </div>
+            
+            <div class="benchmarks">
+                <div class="benchmark-card">
+                    <h3><a href="dev/bench/slos-core/">SLOS Core Functions</a></h3>
+                    <p>Performance benchmarks for core SLOS functions: build_graph, compute, and compute_pa_inc</p>
+                    <p><strong>Functions tested:</strong> build_slos_distribution_computegraph, SLOSComputeGraph.compute</p>
+                    <p><strong>Configurations:</strong> 4-10 modes, CPU, multiple precisions</p>
+                </div>
+                
+                <div class="benchmark-card">
+                    <h3><a href="dev/bench/no-bunching/">No Bunching Tests</a></h3>
+                    <p>Performance benchmarks for photon bunching prevention algorithms</p>
+                    <p><strong>Functions tested:</strong> No bunching computation, Fock space comparison</p>
+                    <p><strong>Configurations:</strong> 6 modes, 3 photons, both bunching modes</p>
+                </div>
+                
+                <div class="benchmark-card">
+                    <h3><a href="dev/bench/layer/">Quantum Layer Tests</a></h3>
+                    <p>Performance benchmarks for quantum layer operations and transformations</p>
+                    <p><strong>Functions tested:</strong> Forward pass, batched computation</p>
+                    <p><strong>Configurations:</strong> Various batch sizes, multiple circuit types</p>
+                </div>
+                
+                <div class="benchmark-card">
+                    <h3><a href="dev/bench/robustness/">Robustness Tests</a></h3>
+                    <p>Performance benchmarks for system robustness and stability testing</p>
+                    <p><strong>Functions tested:</strong> Large batches, extreme values, numerical stability</p>
+                    <p><strong>Configurations:</strong> Stress testing with edge cases</p>
+                </div>
+            </div>
+            
+            <footer style="text-align: center; margin-top: 60px; color: #586069;">
+                <p>Generated automatically by <a href="https://github.com/benchmark-action/github-action-benchmark">github-action-benchmark</a></p>
+            </footer>
+        </body>
+        </html>
+        EOF
+        
+        # Dynamically create index page for /dev/bench/ directory based on existing benchmark directories
+        mkdir -p dev/bench
+        
+        # Create dynamic navigation script
+        cat > generate_nav.py << 'EOF'
+        import os
+        import re
+        from pathlib import Path
+        
+        # Get all benchmark directories
+        bench_dirs = []
+        dev_bench_path = Path("dev/bench")
+        if dev_bench_path.exists():
+            for item in dev_bench_path.iterdir():
+                if item.is_dir() and item.name != "__pycache__":
+                    bench_dirs.append(item.name)
+        
+        bench_dirs.sort()
+        
+        # Generate navigation buttons
+        nav_buttons = ""
+        benchmark_cards = ""
+        
+        for bench_dir in bench_dirs:
+            # Convert directory name to display name
+            display_name = bench_dir.replace("-", " ").replace("_", " ").title()
+            
+            nav_buttons += f'                <a href="{bench_dir}/" class="nav-button">{display_name}</a>\n'
+            benchmark_cards += f'''                <div class="benchmark-card">
+                    <h3><a href="{bench_dir}/">{display_name}</a></h3>
+                    <p>Performance benchmarks for {display_name.lower()}</p>
+                </div>
+                
+        '''
+        
+        # Generate HTML
+        html_content = f'''<!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>MerLin Benchmark Results - All Benchmarks</title>
+            <style>
+                body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; margin: 40px; }}
+                .header {{ text-align: center; margin-bottom: 40px; }}
+                .navigation {{ text-align: center; margin-bottom: 30px; }}
+                .nav-button {{ 
+                    display: inline-block; 
+                    margin: 10px; 
+                    padding: 15px 30px; 
+                    background-color: #0366d6; 
+                    color: white; 
+                    text-decoration: none; 
+                    border-radius: 6px; 
+                    font-weight: bold;
+                    transition: background-color 0.2s;
+                }}
+                .nav-button:hover {{ background-color: #0256cc; color: white; text-decoration: none; }}
+                .benchmarks {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-top: 30px; }}
+                .benchmark-card {{ border: 1px solid #e1e4e8; border-radius: 8px; padding: 20px; }}
+                .benchmark-card h3 {{ margin-top: 0; color: #0366d6; }}
+                .benchmark-card a {{ text-decoration: none; color: #0366d6; }}
+                .benchmark-card a:hover {{ text-decoration: underline; }}
+                .benchmark-card p {{ color: #586069; margin: 10px 0; }}
+                .back-link {{ text-align: center; margin-bottom: 20px; }}
+                .back-link a {{ color: #0366d6; text-decoration: none; }}
+                .back-link a:hover {{ text-decoration: underline; }}
+            </style>
+        </head>
+        <body>
+            <div class="back-link">
+                <a href="../../">← Back to Main Page</a>
+            </div>
+            
+            <div class="header">
+                <h1>🚀 MerLin Benchmark Results</h1>
+                <p>Performance tracking for MerLin quantum machine learning framework</p>
+            </div>
+            
+            <div class="navigation">
+                <h2>Available Benchmarks</h2>
+        {nav_buttons}            </div>
+            
+            <div class="benchmarks">
+        {benchmark_cards}            </div>
+            
+            <footer style="text-align: center; margin-top: 60px; color: #586069;">
+                <p>Generated automatically by <a href="https://github.com/benchmark-action/github-action-benchmark">github-action-benchmark</a></p>
+                <p>Last updated: <span id="timestamp"></span></p>
+                <script>document.getElementById('timestamp').textContent = new Date().toLocaleString();</script>
+            </footer>
+        </body>
+        </html>'''
+        
+        # Write the HTML file
+        with open("dev/bench/index.html", "w") as f:
+            f.write(html_content)
+        
+        print(f"Generated navigation for {len(bench_dirs)} benchmark directories: {', '.join(bench_dirs)}")
+        EOF
+        
+        python generate_nav.py
+        rm generate_nav.py
+        
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add index.html dev/bench/index.html
+        git commit -m "Update main benchmark index page and dev/bench navigation" || echo "No changes to commit"
+        git push origin gh-pages
+
+

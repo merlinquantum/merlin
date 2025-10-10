@@ -13,7 +13,7 @@ Quantum Large Language Model Fine-Tuning
 
    **Published**: eprint arXiv,(2025)
 
-   **DOI**: `10.48550/arXiv.2504.08732 <10.48550/arXiv.2504.08732>`_
+   **DOI**: `arXiv:2504.08732v1 <https://arxiv.org/abs/2504.08732v1>`_
 
    **Reproduction Status**: 🚧 In Progress
 

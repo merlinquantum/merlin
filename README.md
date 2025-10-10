@@ -1,5 +1,8 @@
 # MerLin - Photonic Quantum Machine Learning Framework
 
+![Tests](https://img.shields.io/github/actions/workflow/status/merlinquantum/merlin/ci.yml?branch=main&style=flat-square&logo=github&label=tests)
+![Coverage](https://img.shields.io/github/actions/workflow/status/merlinquantum/merlin/coverage.yml?branch=main&style=flat-square&logo=github&label=coverage)
+
 MerLin brings quantum computing capabilities to AI practitioners through easy-to-use PyTorch integrations. Named after the legendary wizard, MerLin adds quantum wizardry to your AI toolkit with no quantum expertise required.
 
 **Built for AI/ML practitioners**: MerLin is designed to feel familiar to PyTorch users while unlocking the potential of quantum computing. Under the hood, it leverages photonic quantum computing - a cutting-edge approach using single-photons that's hardware-aware and prepares your models for real quantum processors.
@@ -26,17 +29,57 @@ Advanced users can leverage the underlying [Perceval](https://perceval.quandela.
 
 ## Installation
 
-``` bash
-   pip install merlinquantum
+Production installation:
+```bash
+pip install merlinquantum
 ```
 
-For development:
-
-``` bash
-   git clone https://github.com/merlinquantum/merlin.git
-   cd merlin
-   pip install -e ".[dev]"
+Development (includes tests, benchmarks, lint & mypy):
+```bash
+git clone https://github.com/merlinquantum/merlin.git
+cd merlin
+pip install -e '.[dev]'
 ```
+
+Examples environment (notebooks & plots):
+```bash
+pip install -e '.[examples]'
+```
+
+Build documentation locally:
+```bash
+pip install -e '.[docs]'
+cd docs
+make html  # or: make livehtml (if sphinx-autobuild added manually)
+```
+
+### Tests & Benchmarks
+
+Run the full test suite:
+```bash
+pytest -q
+```
+
+Run only benchmarks (pytest-benchmark):
+```bash
+pytest --benchmark-only
+```
+
+Compare two branches (example):
+```bash
+pytest tests/test_sampling.py --benchmark-save current
+# ... switch branch ...
+pytest tests/test_sampling.py --benchmark-compare current
+```
+
+Quick quality checks:
+```bash
+ruff check .
+ruff format --check .
+mypy merlin
+```
+
+Tip: run `pytest -k <keyword>` to target a subset.
 
 ## Hello Quantum World!
 
@@ -95,6 +138,39 @@ MIT License - see [LICENSE](https://github.com/merlinquantum/merlin/blob/main/LI
 
 - **Issues**: [GitHub Issues](https://github.com/merlinquantum/merlin/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/merlinquantum/merlin/discussions)
+
+## Test Coverage
+
+MerLin uses automated test coverage tracking to maintain code quality:
+
+**Coverage Reports:**
+- 🎯 **Target Coverage:** 80% (warning threshold)
+- 📊 **Reports Generated:** On every PR and commit
+- 🚫 **Non-blocking:** Coverage checks don't prevent merges
+- 📈 **Diff Coverage:** Shows coverage for changed files only
+
+**Running Coverage Locally:**
+```bash
+# Quick coverage check
+pytest tests/ --cov=merlin --cov-report=term | grep TOTAL
+
+# Detailed coverage with missing lines  
+pytest tests/ --cov=merlin --cov-report=term-missing
+
+# Generate HTML report
+pytest tests/ --cov=merlin --cov-report=html
+# Then open htmlcov/index.html in browser
+
+# Test specific module
+pytest tests/test_layer.py --cov=merlin.core --cov-report=term
+```
+
+**Coverage Configuration:**
+- Exclusions: Tests, migrations, virtual environments
+- Formats: Terminal, HTML, XML reports
+- Thresholds: 80% target (informational only)
+
+Coverage data is automatically collected and reported in PRs without blocking development workflow.
 
 ----
 

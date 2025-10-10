@@ -22,11 +22,47 @@
 
 """Sampling and autodiff utilities."""
 
+from typing import TYPE_CHECKING
+
 from .autodiff import AutoDiffProcess
-from .mappers import LexGroupingMapper, ModGroupingMapper, OutputMapper
 from .process import SamplingProcess
 from .strategies import OutputMappingStrategy
 
-__all__ = ["OutputMappingStrategy", "OutputMapper", "LexGroupingMapper", "ModGroupingMapper","SamplingProcess", "AutoDiffProcess"]
+if TYPE_CHECKING:
+    from ..torch_utils.torch_codes import (
+        LexGroupingMapper,
+        ModGroupingMapper,
+        OutputMapper,
+    )
 
 
+def __getattr__(name):
+    """Lazy import for backward compatibility"""
+    import warnings
+
+    if name in ("LexGroupingMapper", "ModGroupingMapper", "OutputMapper"):
+        warnings.warn(
+            f"Importing {name} from this location is deprecated. "
+            f"Use 'from merlin.torch_utils.torch_codes import {name}' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        from ..torch_utils.torch_codes import (  # noqa: F401
+            LexGroupingMapper,
+            ModGroupingMapper,
+            OutputMapper,
+        )
+
+        return locals()[name]
+
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+__all__ = [
+    "OutputMappingStrategy",
+    "SamplingProcess",
+    "AutoDiffProcess",
+    "LexGroupingMapper",  # noqa: F401, F822
+    "ModGroupingMapper",  # noqa: F401, F822
+    "OutputMapper",  # noqa: F401, F822
+]

@@ -34,7 +34,7 @@ class SamplingProcess:
     by applying different sampling strategies to probability distributions.
     """
 
-    def __init__(self, method: str = 'multinomial'):
+    def __init__(self, method: str = "multinomial"):
         """Initialize the sampling process with a specific method.
         Args:
             method: Sampling method to use ('multinomial', 'binomial', or 'gaussian')
@@ -44,14 +44,16 @@ class SamplingProcess:
 
         """
         # Validate method
-        self.valid_methods = ['multinomial', 'binomial', 'gaussian']
+        self.valid_methods = ["multinomial", "binomial", "gaussian"]
         if method not in self.valid_methods:
             raise ValueError(
                 f"Invalid sampling method: {method}. Valid options are: {self.valid_methods}"
             )
         self.method = method
 
-    def pcvl_sampler(self, distribution: torch.Tensor, shots: int, method: str=None) -> torch.Tensor:
+    def pcvl_sampler(
+        self, distribution: torch.Tensor, shots: int, method: str = None
+    ) -> torch.Tensor:
         """Apply sampling noise to a probability distribution.
 
         Args:
@@ -72,7 +74,7 @@ class SamplingProcess:
         if method is None:
             method = self.method
 
-        if method == 'multinomial':
+        if method == "multinomial":
             if distribution.dim() == 1:
                 sampled_counts = torch.multinomial(
                     distribution, num_samples=shots, replacement=True
@@ -94,10 +96,10 @@ class SamplingProcess:
                     noisy_dists.append(noisy_dist / shots)
                 return torch.stack(noisy_dists)
 
-        elif method == 'binomial':
+        elif method == "binomial":
             return torch.distributions.Binomial(shots, distribution).sample() / shots
 
-        elif method == 'gaussian':
+        elif method == "gaussian":
             std_dev = torch.sqrt(distribution * (1 - distribution) / shots)
             noise = torch.randn_like(distribution) * std_dev
             noisy_dist = distribution + noise

@@ -28,19 +28,25 @@ into PyTorch neural networks with automatic differentiation support.
 """
 
 # Core API - Most users will only need these
-from .core.ansatz import Ansatz, AnsatzFactory
+from .algorithms.kernels import FeatureMap, FidelityKernel
+from .algorithms.layer import QuantumLayer
+from .algorithms.loss import NKernelAlignment
+from .builder.ansatz import Ansatz, AnsatzFactory
 
 # Essential enums
 # Advanced components (for power users)
 from .core.generators import CircuitGenerator, CircuitType, StateGenerator, StatePattern
-from .core.layer import QuantumLayer
 from .core.photonicbackend import PhotonicBackend
 from .pcvl_pytorch import CircuitConverter, build_slos_distribution_computegraph
 from .sampling.autodiff import AutoDiffProcess
-from .sampling.mappers import LexGroupingMapper, ModGroupingMapper, OutputMapper
 from .sampling.process import SamplingProcess
 from .sampling.strategies import OutputMappingStrategy
-from .torch_utils.torch_codes import FeatureEncoder
+from .torch_utils.torch_codes import (
+    FeatureEncoder,
+    LexGroupingMapper,
+    ModGroupingMapper,
+    OutputMapper,
+)
 
 # Version and metadata
 __version__ = "0.1.0"
@@ -54,12 +60,10 @@ __all__ = [
     "PhotonicBackend",
     "Ansatz",
     "AnsatzFactory",
-
     # Configuration enums
     "CircuitType",
     "StatePattern",
     "OutputMappingStrategy",
-
     # Advanced components
     "CircuitGenerator",
     "StateGenerator",
@@ -69,7 +73,9 @@ __all__ = [
     "OutputMapper",
     "LexGroupingMapper",
     "ModGroupingMapper",
-
     "CircuitConverter",
-    "build_slos_distribution_computegraph"
+    "build_slos_distribution_computegraph",
+    "NKernelAlignment",
+    "FeatureMap",
+    "FidelityKernel",
 ]

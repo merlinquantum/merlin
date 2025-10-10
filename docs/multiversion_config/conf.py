@@ -33,9 +33,10 @@
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
 import os
-import sys
 import re
+import sys
 from pathlib import Path
+
 from git import Repo
 
 sys.path.insert(0, os.path.relpath("../"))
@@ -80,7 +81,9 @@ REPO_PATH = Path(__file__).parent.parent.parent.resolve()
 
 repo = Repo(REPO_PATH)
 tags = [tag.name for tag in repo.tags]
-versions = keep_latest_versions(tags, "v0.1")  # TODO: update the version if necessary (PML-29)
+versions = keep_latest_versions(
+    tags, "v0.1"
+)  # TODO: update the version if necessary (PML-29)
 versions_string = "".join([f"({one_version})|" for one_version in versions])[:-1]
 versions_regex = re.compile(f"^{versions_string}$")
 

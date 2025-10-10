@@ -1,0 +1,42 @@
+# Coverage configuration file
+# This file provides additional configuration for coverage reporting
+
+[run]
+source = merlin
+omit = 
+    */tests/*
+    */test_*
+    */__pycache__/*
+    */migrations/*
+    */venv/*
+    */.venv/*
+    setup.py
+
+[report]
+# Set to 0 to never fail builds based on coverage
+fail_under = 0
+
+# Show line numbers of missing coverage
+show_missing = True
+
+# Precision for coverage percentages
+precision = 2
+
+# Lines to exclude from coverage
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    if self.debug:
+    if settings.DEBUG
+    raise AssertionError
+    raise NotImplementedError
+    if 0:
+    if __name__ == "__main__":
+    class .*\bProtocol\):
+    @(abc\.)?abstractmethod
+
+[html]
+directory = htmlcov
+
+[xml]
+output = coverage.xml

@@ -94,8 +94,9 @@ def get_data(num_instances=1500, num_features=10, num_classes=3, random_seed=42)
                 X[start_idx:end_idx, j] = base * phase
 
         # Add distance-dependent noise to all features
-        X[start_idx:end_idx] += np.random.normal(0, point_noise,
-                                                 (samples_per_class, num_features))
+        X[start_idx:end_idx] += np.random.normal(
+            0, point_noise, (samples_per_class, num_features)
+        )
         y[start_idx:end_idx] = i
 
     # Shuffle the data to avoid order class bias
@@ -113,23 +114,23 @@ def get_data(num_instances=1500, num_features=10, num_classes=3, random_seed=42)
                 "name": "spiral_base_x",
                 "description": "First coordinate of base spiral pattern",
                 "type": "numeric",
-                "value_range": (0,3),
-                "unit": None
+                "value_range": (0, 3),
+                "unit": None,
             },
             {
                 "name": "spiral_base_y",
                 "description": "Second coordinate of base spiral pattern",
                 "type": "numeric",
-                "value_range": (0,3),
-                "unit": None
+                "value_range": (0, 3),
+                "unit": None,
             },
             {
                 "name": "nonlinear_features",
                 "description": "Additional dimensions created through nonlinear combinations using sine and cosine functions",
                 "type": "numeric",
                 "value_range": None,
-                "unit": None
-            }
+                "unit": None,
+            },
         ],
         "num_instances": num_instances,
         "num_features": num_features,
@@ -140,7 +141,7 @@ def get_data(num_instances=1500, num_features=10, num_classes=3, random_seed=42)
         "license": None,
         "citation": "Cite: Computational Advantage in Hybrid Quantum Neural Networks: Myth or Reality? (arXiv:2412.04991)",
         "creators": ["Muhammad Kashif", "Alberto Marchisio", "Muhammad Shafique"],
-        "year": 2024
+        "year": 2024,
     }
 
     return X, y, DatasetMetadata.from_dict(_metadata)
@@ -160,11 +161,7 @@ if __name__ == "__main__":
 
     for idx, n_classes in enumerate(n_classes_list):
         # Generate dataset
-        X, y, md = get_data(
-                     num_instances=1500,
-                     num_features=20,
-                     num_classes=n_classes
-        )
+        X, y, md = get_data(num_instances=1500, num_features=20, num_classes=n_classes)
         print(md)
 
         # Split into train/val
@@ -173,25 +170,35 @@ if __name__ == "__main__":
         )
 
         # Create color maps for train and validation sets
-        train_colors = plt.cm.rainbow(np.linspace(0, 1, n_classes))
+        train_colors = plt.cm.rainbow(np.linspace(0, 1, n_classes))  # type: ignore[attr-defined]
         # Create slightly darker colors for validation set
-        val_colors = plt.cm.rainbow(np.linspace(0, 1, n_classes)) * 0.7
+        val_colors = plt.cm.rainbow(np.linspace(0, 1, n_classes)) * 0.7  # type: ignore[attr-defined]
 
         # Plot
         for i in range(n_classes):
             mask_train = y_train == i
-            axes[idx].scatter(X_train[mask_train, 0], X_train[mask_train, 1],
-                              c=[train_colors[i]], marker='o',
-                              label=f'Train Class {i}', alpha=0.6)
+            axes[idx].scatter(
+                X_train[mask_train, 0],
+                X_train[mask_train, 1],
+                c=[train_colors[i]],
+                marker="o",
+                label=f"Train Class {i}",
+                alpha=0.6,
+            )
 
             mask_val = y_val == i
-            axes[idx].scatter(X_val[mask_val, 0], X_val[mask_val, 1],
-                              c=[val_colors[i]], marker='x',
-                              label=f'Val Class {i}', alpha=0.8)
+            axes[idx].scatter(
+                X_val[mask_val, 0],
+                X_val[mask_val, 1],
+                c=[val_colors[i]],
+                marker="x",
+                label=f"Val Class {i}",
+                alpha=0.8,
+            )
 
-        axes[idx].set_xlabel('Feature 1')
-        axes[idx].set_ylabel('Feature 2')
-        axes[idx].set_title(f'Spiral Dataset: {n_classes} Classes')
+        axes[idx].set_xlabel("Feature 1")
+        axes[idx].set_ylabel("Feature 2")
+        axes[idx].set_title(f"Spiral Dataset: {n_classes} Classes")
         # Only show legend for first plot to avoid clutter
         if idx == 0:
             axes[idx].legend()

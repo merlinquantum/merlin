@@ -108,6 +108,13 @@ For more control over the quantum architecture while still using pre-built circu
 Creating Quantum Layers with Factories
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+.. note::
+
+   ``Ansatz`` helpers now live in :mod:`merlin.builder.ansatz` (formerly
+   ``merlin.core.ansatz``). The top-level ``merlin`` namespace continues to
+   re-export :class:`~merlin.builder.ansatz.Ansatz` and
+   :class:`~merlin.builder.ansatz.AnsatzFactory` for convenience.
+
 .. code-block:: python
 
     from merlin import PhotonicBackend, CircuitType, StatePattern, AnsatzFactory, QuantumLayer
@@ -406,4 +413,3 @@ Train your hybrid model with standard PyTorch workflows:
 
             print(f"Epoch {epoch}: Loss={loss:.4f}, Test Loss={test_loss:.4f}, Test Acc={test_acc:.4f}")
             model.train()
-

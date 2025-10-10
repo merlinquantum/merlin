@@ -1,0 +1,161 @@
+name: Coverage Report
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      pages: write
+      id-token: write
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.11"
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
+    
+    - name: Run tests with coverage
+      run: |
+        pytest tests/ --cov=merlin --cov-report=xml --cov-report=json --cov-report=html --cov-report=term-missing | tee coverage_output.txt
+    
+    - name: Parse coverage report
+      run: |
+        # Extract coverage percentage from pytest-cov output
+        # The output from pytest is already saved in coverage_output.txt
+        
+        # Extract coverage percentage from output
+        COVERAGE=$(grep "TOTAL" coverage_output.txt | awk '{print $4}' | sed 's/%//')
+        echo "COVERAGE_PERCENT=$COVERAGE" >> $GITHUB_ENV
+        
+        # Save coverage for comment
+        echo "Overall coverage: $COVERAGE%" > coverage_summary.txt
+        
+        # Check if coverage meets 80% threshold
+        if (( $(echo "$COVERAGE >= 80" | bc -l) )); then
+          echo "STATUS=✅ Meeting target" >> $GITHUB_ENV
+          echo "EMOJI=✅" >> $GITHUB_ENV
+        elif (( $(echo "$COVERAGE >= 60" | bc -l) )); then
+          echo "STATUS=⚠️ Below target" >> $GITHUB_ENV
+          echo "EMOJI=⚠️" >> $GITHUB_ENV
+        else
+          echo "STATUS=❌ Well below target" >> $GITHUB_ENV
+          echo "EMOJI=❌" >> $GITHUB_ENV
+        fi
+    
+    - name: Generate coverage summary for display
+      run: |
+        echo "## ${EMOJI} Coverage Summary" > coverage_summary.md
+        echo "**Overall Coverage:** ${COVERAGE_PERCENT}%" >> coverage_summary.md
+        echo "**Status:** ${STATUS}" >> coverage_summary.md
+        if [ "$DIFF_COVERAGE_PERCENT" != "N/A" ]; then
+          echo "**Changes Coverage:** ${DIFF_COVERAGE_PERCENT}%" >> coverage_summary.md
+        fi
+        echo "---" >> coverage_summary.md
+        echo "*Target: 80% (informational only) | Generated using pytest-cov*" >> coverage_summary.md
+        
+        # Display in job output
+        echo "=== COVERAGE REPORT ==="
+        cat coverage_summary.md
+        echo "======================="
+    
+    - name: Upload coverage HTML report
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-html-report
+        path: htmlcov/
+    
+    - name: Setup Pages
+      uses: actions/configure-pages@v4
+      if: github.ref == 'refs/heads/main'
+      
+    - name: Upload to GitHub Pages
+      uses: actions/upload-pages-artifact@v4
+      if: github.ref == 'refs/heads/main'
+      with:
+        path: htmlcov
+        
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v4
+      if: github.ref == 'refs/heads/main'
+    
+    - name: Comment PR with coverage  
+      uses: actions/github-script@v6
+      if: github.event.pull_request.head.repo.full_name == github.repository
+      continue-on-error: true
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const fs = require('fs');
+          
+          const coverage = process.env.COVERAGE_PERCENT || '0';
+          const status = process.env.STATUS || '❌ Unknown';
+          const emoji = process.env.EMOJI || '❌';
+          const diffCoverage = process.env.DIFF_COVERAGE_PERCENT || 'N/A';
+          
+          let diffSection = '';
+          if (diffCoverage !== 'N/A') {
+            const diffEmoji = parseFloat(diffCoverage) >= 80 ? '✅' : parseFloat(diffCoverage) >= 60 ? '⚠️' : '❌';
+            diffSection = `
+          ### Changes Coverage ${diffEmoji}
+          - **Modified Files Coverage:** ${diffCoverage}%
+          - **Status:** ${parseFloat(diffCoverage) >= 80 ? 'Good coverage on changes' : 'Consider adding tests for new code'}`;
+          }
+          
+          const comment = `## ${emoji} Coverage Report
+          
+          **Overall Coverage:** ${coverage}%
+          ${diffSection}
+          
+          ### Coverage Status
+          - **Target:** 80% (warning threshold)
+          - **Current:** ${coverage}%
+          - **Status:** ${status}
+          
+          ---
+          *Coverage reports are informational and do not block PRs.*
+          *Generated using pytest-cov*`;
+          
+          // Find existing coverage comment
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+          });
+          
+          const existingComment = comments.find(comment => 
+            comment.body.includes('Coverage Report') && comment.user.login === 'github-actions[bot]'
+          );
+          
+          if (existingComment) {
+            // Update existing comment
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: existingComment.id,
+              body: comment
+            });
+          } else {
+            // Create new comment
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: comment
+            });
+          }

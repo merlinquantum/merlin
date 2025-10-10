@@ -26,7 +26,7 @@ Automatic differentiation handling for sampling.
 
 import warnings
 
-from .process import SamplingProcess
+from ..sampling.process import SamplingProcess
 
 
 class AutoDiffProcess:
@@ -35,15 +35,16 @@ class AutoDiffProcess:
     def __init__(self, sampling_method: str = "multinomial"):
         self.sampling_noise = SamplingProcess(method=sampling_method)
 
-    def autodiff_backend(self, needs_gradient: bool, apply_sampling: bool,
-                         shots: int) -> tuple[bool, int]:
+    def autodiff_backend(
+        self, needs_gradient: bool, apply_sampling: bool, shots: int
+    ) -> tuple[bool, int]:
         """Determine sampling configuration based on gradient requirements."""
         if needs_gradient and (apply_sampling or shots > 0):
             warnings.warn(
                 "Sampling was requested but is disabled because gradients are being computed. "
                 "Sampling during gradient computation would lead to incorrect gradients.",
                 category=UserWarning,
-                stacklevel=1
+                stacklevel=1,
             )
             return False, 0
         return apply_sampling, shots

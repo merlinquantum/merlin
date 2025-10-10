@@ -12,9 +12,8 @@ Submodules
 .. toctree::
    :maxdepth: 4
 
-   merlin.core.ansatz
    merlin.core.base
    merlin.core.generators
-   merlin.core.layer
    merlin.core.photonicbackend
    merlin.core.process
+   merlin.core.components

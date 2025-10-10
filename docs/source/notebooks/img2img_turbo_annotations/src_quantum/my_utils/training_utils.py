@@ -1,20 +1,20 @@
-import os
-import random
 import argparse
 import json
+import os
+import random
+from glob import glob
+
+import h5py
+import numpy as np
+import pandas as pd
 import torch
+import torch.nn.functional as Fu
+import torchvision.transforms.functional as F
+from datasets import load_dataset
 from PIL import Image
 from torchvision import transforms
-import torchvision.transforms.functional as F
-import torch.nn.functional as Fu
-
-from glob import glob
-from datasets import load_dataset
-import h5py
-from transformers import AutoTokenizer
-import pandas as pd
-import numpy as np
 from tqdm import tqdm
+
 
 def parse_args_paired_training(input_args=None):
     """
@@ -23,7 +23,7 @@ def parse_args_paired_training(input_args=None):
 
     Returns:
     argparse.Namespace: The parsed command-line arguments.
-   """
+    """
     parser = argparse.ArgumentParser()
     # args for the loss function
     parser.add_argument("--gan_disc_type", default="vagan_clip")
@@ -41,64 +41,173 @@ def parse_args_paired_training(input_args=None):
     # validation eval args
     parser.add_argument("--eval_freq", default=100, type=int)
     parser.add_argument("--track_val_fid", default=False, action="store_true")
-    parser.add_argument("--num_samples_eval", type=int, default=100, help="Number of samples to use for all evaluation")
+    parser.add_argument(
+        "--num_samples_eval",
+        type=int,
+        default=100,
+        help="Number of samples to use for all evaluation",
+    )
 
-    parser.add_argument("--viz_freq", type=int, default=100, help="Frequency of visualizing the outputs.")
-    parser.add_argument("--tracker_project_name", type=str, default="train_pix2pix_turbo", help="The name of the wandb project to log to.")
+    parser.add_argument(
+        "--viz_freq",
+        type=int,
+        default=100,
+        help="Frequency of visualizing the outputs.",
+    )
+    parser.add_argument(
+        "--tracker_project_name",
+        type=str,
+        default="train_pix2pix_turbo",
+        help="The name of the wandb project to log to.",
+    )
 
     # details about the model architecture
     parser.add_argument("--pretrained_model_name_or_path")
-    parser.add_argument("--revision", type=str, default=None,)
-    parser.add_argument("--variant", type=str, default=None,)
+    parser.add_argument(
+        "--revision",
+        type=str,
+        default=None,
+    )
+    parser.add_argument(
+        "--variant",
+        type=str,
+        default=None,
+    )
     parser.add_argument("--tokenizer_name", type=str, default=None)
     parser.add_argument("--lora_rank_unet", default=8, type=int)
     parser.add_argument("--lora_rank_vae", default=4, type=int)
 
     # training details
-    parser.add_argument("--output_dir", default = None)
-    parser.add_argument("--cache_dir", default=None,)
-    parser.add_argument("--seed", type=int, default=None, help="A seed for reproducible training.")
-    parser.add_argument("--resolution", type=int, default=512,)
-    parser.add_argument("--train_batch_size", type=int, default=4, help="Batch size (per device) for the training dataloader.")
+    parser.add_argument("--output_dir", default=None)
+    parser.add_argument(
+        "--cache_dir",
+        default=None,
+    )
+    parser.add_argument(
+        "--seed", type=int, default=None, help="A seed for reproducible training."
+    )
+    parser.add_argument(
+        "--resolution",
+        type=int,
+        default=512,
+    )
+    parser.add_argument(
+        "--train_batch_size",
+        type=int,
+        default=4,
+        help="Batch size (per device) for the training dataloader.",
+    )
     parser.add_argument("--num_training_epochs", type=int, default=10)
-    parser.add_argument("--max_train_steps", type=int, default=10_000,)
-    parser.add_argument("--checkpointing_steps", type=int, default=500,)
-    parser.add_argument("--gradient_accumulation_steps", type=int, default=1, help="Number of updates steps to accumulate before performing a backward/update pass.",)
-    parser.add_argument("--gradient_checkpointing", action="store_true",)
+    parser.add_argument(
+        "--max_train_steps",
+        type=int,
+        default=10_000,
+    )
+    parser.add_argument(
+        "--checkpointing_steps",
+        type=int,
+        default=500,
+    )
+    parser.add_argument(
+        "--gradient_accumulation_steps",
+        type=int,
+        default=1,
+        help="Number of updates steps to accumulate before performing a backward/update pass.",
+    )
+    parser.add_argument(
+        "--gradient_checkpointing",
+        action="store_true",
+    )
     parser.add_argument("--learning_rate", type=float, default=5e-6)
-    parser.add_argument("--lr_scheduler", type=str, default="constant",
+    parser.add_argument(
+        "--lr_scheduler",
+        type=str,
+        default="constant",
         help=(
             'The scheduler type to use. Choose between ["linear", "cosine", "cosine_with_restarts", "polynomial",'
             ' "constant", "constant_with_warmup"]'
         ),
     )
-    parser.add_argument("--lr_warmup_steps", type=int, default=500, help="Number of steps for the warmup in the lr scheduler.")
-    parser.add_argument("--lr_num_cycles", type=int, default=1,
+    parser.add_argument(
+        "--lr_warmup_steps",
+        type=int,
+        default=500,
+        help="Number of steps for the warmup in the lr scheduler.",
+    )
+    parser.add_argument(
+        "--lr_num_cycles",
+        type=int,
+        default=1,
         help="Number of hard resets of the lr in cosine_with_restarts scheduler.",
     )
-    parser.add_argument("--lr_power", type=float, default=1.0, help="Power factor of the polynomial scheduler.")
+    parser.add_argument(
+        "--lr_power",
+        type=float,
+        default=1.0,
+        help="Power factor of the polynomial scheduler.",
+    )
 
-    parser.add_argument("--dataloader_num_workers", type=int, default=0,)
-    parser.add_argument("--adam_beta1", type=float, default=0.9, help="The beta1 parameter for the Adam optimizer.")
-    parser.add_argument("--adam_beta2", type=float, default=0.999, help="The beta2 parameter for the Adam optimizer.")
-    parser.add_argument("--adam_weight_decay", type=float, default=1e-2, help="Weight decay to use.")
-    parser.add_argument("--adam_epsilon", type=float, default=1e-08, help="Epsilon value for the Adam optimizer")
-    parser.add_argument("--max_grad_norm", default=1.0, type=float, help="Max gradient norm.")
-    parser.add_argument("--allow_tf32", action="store_true",
+    parser.add_argument(
+        "--dataloader_num_workers",
+        type=int,
+        default=0,
+    )
+    parser.add_argument(
+        "--adam_beta1",
+        type=float,
+        default=0.9,
+        help="The beta1 parameter for the Adam optimizer.",
+    )
+    parser.add_argument(
+        "--adam_beta2",
+        type=float,
+        default=0.999,
+        help="The beta2 parameter for the Adam optimizer.",
+    )
+    parser.add_argument(
+        "--adam_weight_decay", type=float, default=1e-2, help="Weight decay to use."
+    )
+    parser.add_argument(
+        "--adam_epsilon",
+        type=float,
+        default=1e-08,
+        help="Epsilon value for the Adam optimizer",
+    )
+    parser.add_argument(
+        "--max_grad_norm", default=1.0, type=float, help="Max gradient norm."
+    )
+    parser.add_argument(
+        "--allow_tf32",
+        action="store_true",
         help=(
             "Whether or not to allow TF32 on Ampere GPUs. Can be used to speed up training. For more information, see"
             " https://pytorch.org/docs/stable/notes/cuda.html#tensorfloat-32-tf32-on-ampere-devices"
         ),
     )
-    parser.add_argument("--report_to", type=str, default="wandb",
+    parser.add_argument(
+        "--report_to",
+        type=str,
+        default="wandb",
         help=(
             'The integration to report the results and logs to. Supported platforms are `"tensorboard"`'
             ' (default), `"wandb"` and `"comet_ml"`. Use `"all"` to report to all integrations.'
         ),
     )
-    parser.add_argument("--mixed_precision", type=str, default=None, choices=["no", "fp16", "bf16"],)
-    parser.add_argument("--enable_xformers_memory_efficient_attention", action="store_true", help="Whether or not to use xformers.")
-    parser.add_argument("--set_grads_to_none", action="store_true",)
+    parser.add_argument(
+        "--mixed_precision",
+        type=str,
+        default=None,
+        choices=["no", "fp16", "bf16"],
+    )
+    parser.add_argument(
+        "--enable_xformers_memory_efficient_attention",
+        action="store_true",
+        help="Whether or not to use xformers.",
+    )
+    parser.add_argument(
+        "--set_grads_to_none",
+        action="store_true",
+    )
 
     if input_args is not None:
         args = parser.parse_args(input_args)
@@ -115,12 +224,16 @@ def parse_args_unpaired_training():
 
     Returns:
     argparse.Namespace: The parsed command-line arguments.
-   """
+    """
 
-    parser = argparse.ArgumentParser(description="Simple example of a ControlNet training script.")
+    parser = argparse.ArgumentParser(
+        description="Simple example of a ControlNet training script."
+    )
 
     # fixed random seed
-    parser.add_argument("--seed", type=int, default=42, help="A seed for reproducible training.")
+    parser.add_argument(
+        "--seed", type=int, default=42, help="A seed for reproducible training."
+    )
 
     # args for the loss function
     parser.add_argument("--gan_disc_type", default="vagan_clip")
@@ -136,12 +249,19 @@ def parse_args_unpaired_training():
     parser.add_argument("--train_img_prep", required=True)
     parser.add_argument("--val_img_prep", required=True)
     parser.add_argument("--dataloader_num_workers", type=int, default=0)
-    parser.add_argument("--train_batch_size", type=int, default=4, help="Batch size (per device) for the training dataloader.")
+    parser.add_argument(
+        "--train_batch_size",
+        type=int,
+        default=4,
+        help="Batch size (per device) for the training dataloader.",
+    )
     parser.add_argument("--max_train_epochs", type=int, default=100)
     parser.add_argument("--max_train_steps", type=int, default=None)
 
     # args for the model
-    parser.add_argument("--pretrained_model_name_or_path", default="stabilityai/sd-turbo")
+    parser.add_argument(
+        "--pretrained_model_name_or_path", default="stabilityai/sd-turbo"
+    )
     parser.add_argument("--revision", default=None, type=str)
     parser.add_argument("--variant", default=None, type=str)
     parser.add_argument("--lora_rank_unet", default=128, type=int)
@@ -149,52 +269,136 @@ def parse_args_unpaired_training():
 
     # args for validation and logging
     parser.add_argument("--viz_freq", type=int, default=20)
-    parser.add_argument("--output_dir", type=str, default = 'a' )#, required=True)
-    parser.add_argument("--validation_steps", type=int, default=500,)
-    parser.add_argument("--validation_num_images", type=int, default=-1, help="Number of images to use for validation. -1 to use all images.")
+    parser.add_argument("--output_dir", type=str, default="a")  # , required=True)
+    parser.add_argument(
+        "--validation_steps",
+        type=int,
+        default=500,
+    )
+    parser.add_argument(
+        "--validation_num_images",
+        type=int,
+        default=-1,
+        help="Number of images to use for validation. -1 to use all images.",
+    )
     parser.add_argument("--checkpointing_steps", type=int, default=1000)
 
     # args for the optimization options
-    parser.add_argument("--learning_rate", type=float, default=5e-6,)
-    parser.add_argument("--adam_beta1", type=float, default=0.9, help="The beta1 parameter for the Adam optimizer.")
-    parser.add_argument("--adam_beta2", type=float, default=0.999, help="The beta2 parameter for the Adam optimizer.")
-    parser.add_argument("--adam_weight_decay", type=float, default=1e-2, help="Weight decay to use.")
-    parser.add_argument("--adam_epsilon", type=float, default=1e-08, help="Epsilon value for the Adam optimizer")
-    parser.add_argument("--max_grad_norm", default=10.0, type=float, help="Max gradient norm.")
-    parser.add_argument("--lr_scheduler", type=str, default="constant", help=(
-        'The scheduler type to use. Choose between ["linear", "cosine", "cosine_with_restarts", "polynomial",'
-        ' "constant", "constant_with_warmup"]'
+    parser.add_argument(
+        "--learning_rate",
+        type=float,
+        default=5e-6,
+    )
+    parser.add_argument(
+        "--adam_beta1",
+        type=float,
+        default=0.9,
+        help="The beta1 parameter for the Adam optimizer.",
+    )
+    parser.add_argument(
+        "--adam_beta2",
+        type=float,
+        default=0.999,
+        help="The beta2 parameter for the Adam optimizer.",
+    )
+    parser.add_argument(
+        "--adam_weight_decay", type=float, default=1e-2, help="Weight decay to use."
+    )
+    parser.add_argument(
+        "--adam_epsilon",
+        type=float,
+        default=1e-08,
+        help="Epsilon value for the Adam optimizer",
+    )
+    parser.add_argument(
+        "--max_grad_norm", default=10.0, type=float, help="Max gradient norm."
+    )
+    parser.add_argument(
+        "--lr_scheduler",
+        type=str,
+        default="constant",
+        help=(
+            'The scheduler type to use. Choose between ["linear", "cosine", "cosine_with_restarts", "polynomial",'
+            ' "constant", "constant_with_warmup"]'
         ),
     )
-    parser.add_argument("--lr_warmup_steps", type=int, default=500, help="Number of steps for the warmup in the lr scheduler.")
-    parser.add_argument("--lr_num_cycles", type=int, default=1, help="Number of hard resets of the lr in cosine_with_restarts scheduler.",)
-    parser.add_argument("--lr_power", type=float, default=1.0, help="Power factor of the polynomial scheduler.")
+    parser.add_argument(
+        "--lr_warmup_steps",
+        type=int,
+        default=500,
+        help="Number of steps for the warmup in the lr scheduler.",
+    )
+    parser.add_argument(
+        "--lr_num_cycles",
+        type=int,
+        default=1,
+        help="Number of hard resets of the lr in cosine_with_restarts scheduler.",
+    )
+    parser.add_argument(
+        "--lr_power",
+        type=float,
+        default=1.0,
+        help="Power factor of the polynomial scheduler.",
+    )
     parser.add_argument("--gradient_accumulation_steps", type=int, default=1)
 
     # memory saving options
-    parser.add_argument("--allow_tf32", action="store_true",
+    parser.add_argument(
+        "--allow_tf32",
+        action="store_true",
         help=(
             "Whether or not to allow TF32 on Ampere GPUs. Can be used to speed up training. For more information, see"
             " https://pytorch.org/docs/stable/notes/cuda.html#tensorfloat-32-tf32-on-ampere-devices"
         ),
     )
-    parser.add_argument("--gradient_checkpointing", action="store_true",
-        help="Whether or not to use gradient checkpointing to save memory at the expense of slower backward pass.")
-    parser.add_argument("--enable_xformers_memory_efficient_attention", action="store_true", help="Whether or not to use xformers.")
-
+    parser.add_argument(
+        "--gradient_checkpointing",
+        action="store_true",
+        help="Whether or not to use gradient checkpointing to save memory at the expense of slower backward pass.",
+    )
+    parser.add_argument(
+        "--enable_xformers_memory_efficient_attention",
+        action="store_true",
+        help="Whether or not to use xformers.",
+    )
 
     # dynamic conditional quantum embeddings with the VAE frozen
-    parser.add_argument("--quantum_dynamic",type=bool, default = False,
-                        help="Define if quantum embeddings of the fake image embeddings are computed. Set quantum_training to True")
-    parser.add_argument("--cl_comp", type=bool, default=False,
-                        help="Define if we use an initialized classical model for experiment comparison")
-    parser.add_argument("--quantum_start_path", type=str,
-                        default="/training-models/all_outputs/exp-84/checkpoints/model_251.pkl",
-                        help="Path to pretrained VAE encoder")
-    parser.add_argument("--quantum_dims", type=tuple, default=(4, 16, 16), help="Dimensions of the quantum encoder")
-    parser.add_argument("--quantum_processes", type=int, default=2,
-                        help="Number of threads to use for the Boson Sampler")
-    parser.add_argument("--training_images", type = float, default = 1., help="Part of the training images to be used")
+    parser.add_argument(
+        "--quantum_dynamic",
+        type=bool,
+        default=False,
+        help="Define if quantum embeddings of the fake image embeddings are computed. Set quantum_training to True",
+    )
+    parser.add_argument(
+        "--cl_comp",
+        type=bool,
+        default=False,
+        help="Define if we use an initialized classical model for experiment comparison",
+    )
+    parser.add_argument(
+        "--quantum_start_path",
+        type=str,
+        default="/training-models/all_outputs/exp-84/checkpoints/model_251.pkl",
+        help="Path to pretrained VAE encoder",
+    )
+    parser.add_argument(
+        "--quantum_dims",
+        type=tuple,
+        default=(4, 16, 16),
+        help="Dimensions of the quantum encoder",
+    )
+    parser.add_argument(
+        "--quantum_processes",
+        type=int,
+        default=2,
+        help="Number of threads to use for the Boson Sampler",
+    )
+    parser.add_argument(
+        "--training_images",
+        type=float,
+        default=1.0,
+        help="Part of the training images to be used",
+    )
     args = parser.parse_args()
     return args
 
@@ -232,7 +436,7 @@ def build_transform(image_prep):
         T = transforms.Compose([
             transforms.Resize((128, 128), interpolation=Image.LANCZOS)
         ])
-    
+
     elif image_prep in ["resize_64", "resize_64x64"]:
         T = transforms.Compose([
             transforms.Resize((64, 64), interpolation=Image.LANCZOS)
@@ -258,13 +462,14 @@ def load_small_dataset(dataset_name, output_dir):
 
     text_a = "Driving in the night"
     file_path = os.path.join(output_dir, "fixed_prompt_a.txt")
-    with open(file_path, 'w') as file:
+    with open(file_path, "w") as file:
         file.write(text_a)
     text_b = "Driving in the day"
     file_path = os.path.join(output_dir, "fixed_prompt_b.txt")
-    with open(file_path, 'w') as file:
+    with open(file_path, "w") as file:
         file.write(text_b)
     return "Dataset Loaded"
+
 
 class PairedDataset(torch.utils.data.Dataset):
     def __init__(self, dataset_folder, split, image_prep, tokenizer):
@@ -293,7 +498,7 @@ class PairedDataset(torch.utils.data.Dataset):
             self.input_folder = os.path.join(dataset_folder, "test_A")
             self.output_folder = os.path.join(dataset_folder, "test_B")
             captions = os.path.join(dataset_folder, "test_prompts.json")
-        with open(captions, "r") as f:
+        with open(captions) as f:
             self.captions = json.load(f)
         self.img_names = list(self.captions.keys())
         self.T = build_transform(image_prep)
@@ -308,11 +513,11 @@ class PairedDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         """
-        Retrieves a dataset item given its index. Each item consists of an input image, 
-        its corresponding output image, the captions associated with the input image, 
+        Retrieves a dataset item given its index. Each item consists of an input image,
+        its corresponding output image, the captions associated with the input image,
         and the tokenized form of this caption.
 
-        This method performs the necessary preprocessing on both the input and output images, 
+        This method performs the necessary preprocessing on both the input and output images,
         including scaling and normalization, as well as tokenizing the caption using a provided tokenizer.
 
         Parameters:
@@ -320,17 +525,17 @@ class PairedDataset(torch.utils.data.Dataset):
 
         Returns:
         dict: A dictionary containing the following key-value pairs:
-            - "output_pixel_values": a tensor of the preprocessed output image with pixel values 
+            - "output_pixel_values": a tensor of the preprocessed output image with pixel values
             scaled to [-1, 1].
-            - "conditioning_pixel_values": a tensor of the preprocessed input image with pixel values 
+            - "conditioning_pixel_values": a tensor of the preprocessed input image with pixel values
             scaled to [0, 1].
             - "caption": the text caption.
             - "input_ids": a tensor of the tokenized caption.
 
         Note:
-        The actual preprocessing steps (scaling and normalization) for images are defined externally 
-        and passed to this class through the `image_prep` parameter during initialization. The 
-        tokenization process relies on the `tokenizer` also provided at initialization, which 
+        The actual preprocessing steps (scaling and normalization) for images are defined externally
+        and passed to this class through the `image_prep` parameter during initialization. The
+        tokenization process relies on the `tokenizer` also provided at initialization, which
         should be compatible with the models intended to be used with this dataset.
         """
         img_name = self.img_names[idx]
@@ -347,8 +552,11 @@ class PairedDataset(torch.utils.data.Dataset):
         output_t = F.normalize(output_t, mean=[0.5], std=[0.5])
 
         input_ids = self.tokenizer(
-            caption, max_length=self.tokenizer.model_max_length,
-            padding="max_length", truncation=True, return_tensors="pt"
+            caption,
+            max_length=self.tokenizer.model_max_length,
+            padding="max_length",
+            truncation=True,
+            return_tensors="pt",
         ).input_ids
 
         return {
@@ -360,7 +568,7 @@ class PairedDataset(torch.utils.data.Dataset):
 
 
 class UnpairedDataset(torch.utils.data.Dataset):
-    def __init__(self, dataset_folder, split, image_prep, tokenizer, part = 1):
+    def __init__(self, dataset_folder, split, image_prep, tokenizer, part=1):
         """
         A dataset class for loading unpaired data samples from two distinct domains (source and target),
         typically used in unsupervised learning tasks like image-to-image translation.
@@ -384,18 +592,24 @@ class UnpairedDataset(torch.utils.data.Dataset):
             self.source_folder = os.path.join(dataset_folder, "test_a")
             self.target_folder = os.path.join(dataset_folder, "test_b")
         self.tokenizer = tokenizer
-        with open(os.path.join(dataset_folder, "fixed_prompt_a.txt"), "r") as f:
+        with open(os.path.join(dataset_folder, "fixed_prompt_a.txt")) as f:
             self.fixed_caption_src = f.read().strip()
             self.input_ids_src = self.tokenizer(
-                self.fixed_caption_src, max_length=self.tokenizer.model_max_length,
-                padding="max_length", truncation=True, return_tensors="pt"
+                self.fixed_caption_src,
+                max_length=self.tokenizer.model_max_length,
+                padding="max_length",
+                truncation=True,
+                return_tensors="pt",
             ).input_ids
 
-        with open(os.path.join(dataset_folder, "fixed_prompt_b.txt"), "r") as f:
+        with open(os.path.join(dataset_folder, "fixed_prompt_b.txt")) as f:
             self.fixed_caption_tgt = f.read().strip()
             self.input_ids_tgt = self.tokenizer(
-                self.fixed_caption_tgt, max_length=self.tokenizer.model_max_length,
-                padding="max_length", truncation=True, return_tensors="pt"
+                self.fixed_caption_tgt,
+                max_length=self.tokenizer.model_max_length,
+                padding="max_length",
+                truncation=True,
+                return_tensors="pt",
             ).input_ids
         # find all images in the source and target folders with all IMG extensions
         self.l_imgs_src = []
@@ -412,17 +626,17 @@ class UnpairedDataset(torch.utils.data.Dataset):
         Returns:
         int: The total number of items in the dataset to be used (part).
         """
-        return int((len(self.l_imgs_src) + len(self.l_imgs_tgt))*self.part)
+        return int((len(self.l_imgs_src) + len(self.l_imgs_tgt)) * self.part)
 
     def __getitem__(self, index):
         """
-        Fetches a pair of unaligned images from the source and target domains along with their 
+        Fetches a pair of unaligned images from the source and target domains along with their
         corresponding tokenized captions.
 
         For the source domain, if the requested index is within the range of available images,
         the specific image at that index is chosen. If the index exceeds the number of source
         images, a random source image is selected. For the target domain,
-        an image is always randomly selected, irrespective of the index, to maintain the 
+        an image is always randomly selected, irrespective of the index, to maintain the
         unpaired nature of the dataset.
 
         Both images are preprocessed according to the specified image transformation `T`, and normalized.
@@ -459,14 +673,14 @@ class UnpairedDataset(torch.utils.data.Dataset):
             "caption_tgt": self.fixed_caption_tgt,
             "input_ids_src": self.input_ids_src,
             "input_ids_tgt": self.input_ids_tgt,
-            "path_src":img_path_src,
-            "path_tgt":img_path_tgt,
+            "path_src": img_path_src,
+            "path_tgt": img_path_tgt,
         }
 
 
 def read_embeddings_from_h5(path):
-    h5_A = os.path.join(path,"train_A.h5")
-    h5_B = os.path.join(path,"train_B.h5")
+    h5_A = os.path.join(path, "train_A.h5")
+    h5_B = os.path.join(path, "train_B.h5")
 
     # get list of quantum embeddings from training A
     with h5py.File(h5_A, "r") as f:
@@ -479,28 +693,32 @@ def read_embeddings_from_h5(path):
         print(f"Number of quantum embeddings for B = {len(q_embs_B)}")
     return q_embs_A, q_embs_B
 
-def write_embeddings_to_csv(embsA,embsB, output_dir):
-    embs_A,embs_B = embsA.copy(),embsB.copy()
+
+def write_embeddings_to_csv(embsA, embsB, output_dir):
+    embs_A, embs_B = embsA.copy(), embsB.copy()
     # complete by nan uf not of same size
-    max_len = max(len(embs_A),len(embs_B))
-    if len(embs_A)<len(embs_B):
-        embs_A += [np.nan]*(max_len-len(embs_A))
-    elif len(embs_A)>=len(embs_B):
-        embs_B += [np.nan]*(max_len-len(embs_B))
-    
+    max_len = max(len(embs_A), len(embs_B))
+    if len(embs_A) < len(embs_B):
+        embs_A += [np.nan] * (max_len - len(embs_A))
+    elif len(embs_A) >= len(embs_B):
+        embs_B += [np.nan] * (max_len - len(embs_B))
+
     df = pd.DataFrame({"q_embs_A": embs_A, "q_embs_B": embs_B})
-    df.to_csv(os.path.join(output_dir,"q_embs_used.csv"),index = False)
+    df.to_csv(os.path.join(output_dir, "q_embs_used.csv"), index=False)
     print("-- embeddings saved to csv --")
 
+
 def read_from_emb16(tensor_path):
-    with open(tensor_path, 'rb') as f:
+    with open(tensor_path, "rb") as f:
         q_emb = f.read()
-    q_emb = np.frombuffer(q_emb, dtype=np.float32).reshape(3,16,16)
+    q_emb = np.frombuffer(q_emb, dtype=np.float32).reshape(3, 16, 16)
     return torch.tensor(q_emb)
+
 
 def read_from_emb32(tensor_path):
     tensor = torch.load(tensor_path)
     return tensor
+
 
 def image_fail(list_f, fold, path):
     img_name = os.path.basename(path)
@@ -509,8 +727,21 @@ def image_fail(list_f, fold, path):
         fail = True
     return fail
 
+
 class UnpairedDataset_Quantum(torch.utils.data.Dataset):
-    def __init__(self, dataset_folder, split, image_prep, tokenizer, q_emb_path, output_dir, annotations_path, annotations_on_image = False, q_fail = True, partial = False):
+    def __init__(
+        self,
+        dataset_folder,
+        split,
+        image_prep,
+        tokenizer,
+        q_emb_path,
+        output_dir,
+        annotations_path,
+        annotations_on_image=False,
+        q_fail=True,
+        partial=False,
+    ):
         """
         A dataset class for loading unpaired data samples from two distinct domains (source and target),
         typically used in unsupervised learning tasks like image-to-image translation.
@@ -537,18 +768,24 @@ class UnpairedDataset_Quantum(torch.utils.data.Dataset):
             self.source_folder = os.path.join(dataset_folder, "test_A")
             self.target_folder = os.path.join(dataset_folder, "test_B")
         self.tokenizer = tokenizer
-        with open(os.path.join(dataset_folder, "fixed_prompt_a.txt"), "r") as f:
+        with open(os.path.join(dataset_folder, "fixed_prompt_a.txt")) as f:
             self.fixed_caption_src = f.read().strip()
             self.input_ids_src = self.tokenizer(
-                self.fixed_caption_src, max_length=self.tokenizer.model_max_length,
-                padding="max_length", truncation=True, return_tensors="pt"
+                self.fixed_caption_src,
+                max_length=self.tokenizer.model_max_length,
+                padding="max_length",
+                truncation=True,
+                return_tensors="pt",
             ).input_ids
 
-        with open(os.path.join(dataset_folder, "fixed_prompt_b.txt"), "r") as f:
+        with open(os.path.join(dataset_folder, "fixed_prompt_b.txt")) as f:
             self.fixed_caption_tgt = f.read().strip()
             self.input_ids_tgt = self.tokenizer(
-                self.fixed_caption_tgt, max_length=self.tokenizer.model_max_length,
-                padding="max_length", truncation=True, return_tensors="pt"
+                self.fixed_caption_tgt,
+                max_length=self.tokenizer.model_max_length,
+                padding="max_length",
+                truncation=True,
+                return_tensors="pt",
             ).input_ids
         # find all images in the source and target folders with all IMG extensions
         self.l_imgs_src = []
@@ -563,16 +800,16 @@ class UnpairedDataset_Quantum(torch.utils.data.Dataset):
             self.q_emb_path = q_emb_path
             self.q_embs_A, self.q_embs_B = read_embeddings_from_h5(self.q_emb_path)
             # write to csv the images used for this training
-            write_embeddings_to_csv(self.q_embs_A,self.q_embs_B,output_dir)
+            write_embeddings_to_csv(self.q_embs_A, self.q_embs_B, output_dir)
         self.annotations_on_images = annotations_on_image
         self.annotations_path = annotations_path
         self.q_fail = q_fail
         if self.q_fail:
-            df = pd.read_csv("/mnt/bmw-challenge-volume/home/jupyter-pemeriau/q_embs/fails_empty.csv")
+            df = pd.read_csv(
+                "/mnt/bmw-challenge-volume/home/jupyter-pemeriau/q_embs/fails_empty.csv"
+            )
             self.list_empty = df.values.tolist()
         self.partial = partial
-        
-        
 
     def __len__(self):
         """
@@ -580,22 +817,22 @@ class UnpairedDataset_Quantum(torch.utils.data.Dataset):
         int: The total number of items in the dataset.
         """
         if self.annotations_on_images:
-            l = len(self.l_imgs_src) + len(self.l_imgs_tgt)
+            n_items = len(self.l_imgs_src) + len(self.l_imgs_tgt)
         else:
-            l = len(self.q_embs_A) + len(self.q_embs_B)
+            n_items = len(self.q_embs_A) + len(self.q_embs_B)
         if self.partial:
-            l = int(0.25*l)
-        return l
+            n_items = int(0.25 * n_items)
+        return n_items
 
     def __getitem__(self, index):
         """
-        Fetches a pair of unaligned images from the source and target domains along with their 
+        Fetches a pair of unaligned images from the source and target domains along with their
         corresponding tokenized captions.
 
         For the source domain, if the requested index is within the range of available images,
         the specific image at that index is chosen. If the index exceeds the number of source
         images, a random source image is selected. For the target domain,
-        an image is always randomly selected, irrespective of the index, to maintain the 
+        an image is always randomly selected, irrespective of the index, to maintain the
         unpaired nature of the dataset.
 
         Both images are preprocessed according to the specified image transformation `T`, and normalized.
@@ -623,20 +860,20 @@ class UnpairedDataset_Quantum(torch.utils.data.Dataset):
                 src_name = random.choice(self.q_embs_A)
 
             tgt_name = random.choice(self.q_embs_B)
-            #print(f"src_name = {src_name} and tgt_name = {tgt_name}")
+            # print(f"src_name = {src_name} and tgt_name = {tgt_name}")
             # get images path
-            img_path_src = os.path.join(self.source_folder,src_name)
+            img_path_src = os.path.join(self.source_folder, src_name)
             img_path_tgt = os.path.join(self.target_folder, tgt_name)
 
-            # get quantum inputs 
-            with h5py.File(os.path.join(self.q_emb_path,"train_A.h5"),"r") as f:
+            # get quantum inputs
+            with h5py.File(os.path.join(self.q_emb_path, "train_A.h5"), "r") as f:
                 if src_name in f:
                     qt_t_src = f[src_name]
                     qt_t_src = torch.tensor(qt_t_src)
                 else:
                     print(f"{src_name} not found in q_embs_A")
-            
-            with h5py.File(os.path.join(self.q_emb_path,"train_B.h5"),"r") as f:
+
+            with h5py.File(os.path.join(self.q_emb_path, "train_B.h5"), "r") as f:
                 if tgt_name in f:
                     qt_t_tgt = f[tgt_name]
                     qt_t_tgt = torch.tensor(qt_t_tgt)
@@ -652,44 +889,70 @@ class UnpairedDataset_Quantum(torch.utils.data.Dataset):
                     img_path_src = random.choice(self.l_imgs_src)
                 img_path_tgt = random.choice(self.l_imgs_tgt)
 
-
             # handles corrupted emb32 training annotations
             if self.q_fail:
                 if index < len(self.l_imgs_src):
                     img_path_src = self.l_imgs_src[index]
-                    while image_fail(self.list_empty, 'trainA', os.path.basename(img_path_src)):
+                    while image_fail(
+                        self.list_empty, "trainA", os.path.basename(img_path_src)
+                    ):
                         img_path_src = random.choice(self.l_imgs_src)
                 else:
                     img_path_src = random.choice(self.l_imgs_src)
-                    while image_fail(self.list_empty, 'trainA', os.path.basename(img_path_src)):
+                    while image_fail(
+                        self.list_empty, "trainA", os.path.basename(img_path_src)
+                    ):
                         img_path_src = random.choice(self.l_imgs_src)
-                print(f"Choose {img_path_src} empty? {image_fail(self.list_empty, 'trainA', os.path.basename(img_path_src))}")
+                print(
+                    f"Choose {img_path_src} empty? {image_fail(self.list_empty, 'trainA', os.path.basename(img_path_src))}"
+                )
                 img_path_tgt = random.choice(self.l_imgs_tgt)
-                while image_fail(self.list_empty, 'trainB', os.path.basename(img_path_tgt)):
+                while image_fail(
+                    self.list_empty, "trainB", os.path.basename(img_path_tgt)
+                ):
                     img_path_tgt = random.choice(self.l_imgs_tgt)
-                print(f"Choose {img_path_tgt} empty? {image_fail(self.list_empty, 'trainB', os.path.basename(img_path_tgt))}")
+                print(
+                    f"Choose {img_path_tgt} empty? {image_fail(self.list_empty, 'trainB', os.path.basename(img_path_tgt))}"
+                )
             # find quantum annotations using their name
-            q_train_A = os.path.join(self.annotations_path,"A","trainA")
-            q_train_B = os.path.join(self.annotations_path,"B","trainB")
+            q_train_A = os.path.join(self.annotations_path, "A", "trainA")
+            q_train_B = os.path.join(self.annotations_path, "B", "trainB")
 
             if not self.q_fail:
-                qt_t_src_path = os.path.join(q_train_A,f"{os.path.basename(img_path_src[:-4])}.emb16")
-                qt_t_tgt_path = os.path.join(q_train_B,f"{os.path.basename(img_path_tgt[:-4])}.emb16")
+                qt_t_src_path = os.path.join(
+                    q_train_A, f"{os.path.basename(img_path_src[:-4])}.emb16"
+                )
+                qt_t_tgt_path = os.path.join(
+                    q_train_B, f"{os.path.basename(img_path_tgt[:-4])}.emb16"
+                )
                 qt_t_src = read_from_emb16(qt_t_src_path)
                 qt_t_tgt = read_from_emb16(qt_t_tgt_path)
             else:
-                qt_t_src_path = os.path.join(q_train_A,f"{os.path.basename(img_path_src[:-4])}.emb32")
-                qt_t_tgt_path = os.path.join(q_train_B,f"{os.path.basename(img_path_tgt[:-4])}.emb32")
+                qt_t_src_path = os.path.join(
+                    q_train_A, f"{os.path.basename(img_path_src[:-4])}.emb32"
+                )
+                qt_t_tgt_path = os.path.join(
+                    q_train_B, f"{os.path.basename(img_path_tgt[:-4])}.emb32"
+                )
                 qt_t_src = read_from_emb32(qt_t_src_path)
                 qt_t_tgt = read_from_emb32(qt_t_tgt_path)
 
             # interpolate to 128
-            qt_t_src = Fu.interpolate(qt_t_src.unsqueeze(0), size=(128, 128), mode='bilinear', align_corners=False)
-            qt_t_tgt = Fu.interpolate(qt_t_tgt.unsqueeze(0), size=(128, 128), mode='bilinear', align_corners=False)
+            qt_t_src = Fu.interpolate(
+                qt_t_src.unsqueeze(0),
+                size=(128, 128),
+                mode="bilinear",
+                align_corners=False,
+            )
+            qt_t_tgt = Fu.interpolate(
+                qt_t_tgt.unsqueeze(0),
+                size=(128, 128),
+                mode="bilinear",
+                align_corners=False,
+            )
             qt_t_src = qt_t_src.squeeze(0)
             qt_t_tgt = qt_t_tgt.squeeze(0)
-                    
-                    
+
         # convert to PIL Image
         img_pil_src = Image.open(img_path_src).convert("RGB")
         img_pil_tgt = Image.open(img_path_tgt).convert("RGB")
@@ -702,10 +965,10 @@ class UnpairedDataset_Quantum(torch.utils.data.Dataset):
         if self.annotations_on_images:
             # concatenate the images with their quantum annotations
             img_t_src = torch.cat((img_t_src, qt_t_src), dim=0)
-            img_t_tgt = torch.cat((img_t_tgt,qt_t_tgt), dim=0)
+            img_t_tgt = torch.cat((img_t_tgt, qt_t_tgt), dim=0)
 
-            assert img_t_src.shape == (6,128,128)
-            assert img_t_tgt.shape == (6,128,128)
+            assert img_t_src.shape == (6, 128, 128)
+            assert img_t_tgt.shape == (6, 128, 128)
 
         return {
             "pixel_values_src": img_t_src,
@@ -718,9 +981,10 @@ class UnpairedDataset_Quantum(torch.utils.data.Dataset):
             "input_ids_tgt": self.input_ids_tgt,
         }
 
+
 def get_next_id(filename="id_store.txt"):
     try:
-        with open(filename, "r") as f:
+        with open(filename) as f:
             last_id = int(f.read().strip())
     except (FileNotFoundError, ValueError):
         last_id = 0
@@ -732,9 +996,10 @@ def get_next_id(filename="id_store.txt"):
 
     return next_id
 
+
 # tokenizer = AutoTokenizer.from_pretrained("stabilityai/sd-turbo", subfolder="tokenizer", revision=None, use_fast=False,)
-# dataset_train = UnpairedDataset_Quantum(dataset_folder="../data/dataset_full_scale/", image_prep="resize_128", split="train", tokenizer=tokenizer, 
-#                                 q_emb_path = "/home/jupyter-pemeriau/q_embs/emb_128_dims_16_16_ckpt1001", 
+# dataset_train = UnpairedDataset_Quantum(dataset_folder="../data/dataset_full_scale/", image_prep="resize_128", split="train", tokenizer=tokenizer,
+#                                 q_emb_path = "/home/jupyter-pemeriau/q_embs/emb_128_dims_16_16_ckpt1001",
 #                                 output_dir = "/home/jupyter-pemeriau/q_embs/emb_128_dims_16_16_ckpt1001" )
 
 # for k in range(len(dataset_train)):

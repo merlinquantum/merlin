@@ -37,6 +37,7 @@ class Normalization:
         text += f"- Applied per feature: {self.per_feature}"
         return text
 
+
 @dataclass
 class FeatureNormalization:
     original_unit: str | None = None
@@ -52,6 +53,7 @@ class FeatureNormalization:
         if self.offset is not None:
             parts.append(f"offset: {self.offset:.3f}")
         return f"[{', '.join(parts)}]" if parts else ""
+
 
 @dataclass
 class Feature:
@@ -71,8 +73,14 @@ class Feature:
             text += f" [range: {self.value_range[0]} to {self.value_range[1]}]"
         if self.stats:
             # Separate original and normalized stats
-            orig_stats = {k: v for k, v in self.stats.items() if not k.startswith('normalized_')}
-            norm_stats = {k.replace('normalized_', ''): v for k, v in self.stats.items() if k.startswith('normalized_')}
+            orig_stats = {
+                k: v for k, v in self.stats.items() if not k.startswith("normalized_")
+            }
+            norm_stats = {
+                k.replace("normalized_", ""): v
+                for k, v in self.stats.items()
+                if k.startswith("normalized_")
+            }
 
             if orig_stats:
                 orig_stats_str = ", ".join(f"{k}: {v}" for k, v in orig_stats.items())
@@ -106,46 +114,54 @@ class DatasetMetadata:
     feature_relationships: str | None = None
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> 'DatasetMetadata':
+    def from_dict(cls, data: dict[str, Any]) -> "DatasetMetadata":
         # Extract features from various formats
         features = []
-        if 'features' in data:
-            for feat_dict in data['features']:
+        if "features" in data:
+            for feat_dict in data["features"]:
                 if isinstance(feat_dict, dict):
-                    if 'description' in feat_dict:
+                    if "description" in feat_dict:
                         # Single feature case
                         norm_info = None
-                        if 'normalization' in feat_dict:
-                            norm_info = FeatureNormalization(**feat_dict['normalization'])
+                        if "normalization" in feat_dict:
+                            norm_info = FeatureNormalization(
+                                **feat_dict["normalization"]
+                            )
 
-                        features.append(Feature(
-                            name=feat_dict['name'],
-                            description=feat_dict['description'],
-                            type=feat_dict.get('type', 'unknown'),
-                            value_range=feat_dict.get('value_range'),
-                            unit=feat_dict.get('unit'),
-                            stats=feat_dict.get('stats'),
-                            normalization=norm_info
-                        ))
+                        features.append(
+                            Feature(
+                                name=feat_dict["name"],
+                                description=feat_dict["description"],
+                                type=feat_dict.get("type", "unknown"),
+                                value_range=feat_dict.get("value_range"),
+                                unit=feat_dict.get("unit"),
+                                stats=feat_dict.get("stats"),
+                                normalization=norm_info,
+                            )
+                        )
                     else:
                         # Nested features case
                         for fname, fdata in feat_dict.items():
                             norm_info = None
-                            if 'normalization' in fdata:
-                                norm_info = FeatureNormalization(**fdata['normalization'])
+                            if "normalization" in fdata:
+                                norm_info = FeatureNormalization(
+                                    **fdata["normalization"]
+                                )
 
-                            features.append(Feature(
-                                name=fname,
-                                description=fdata.get('description', ''),
-                                type=fdata.get('type', 'unknown'),
-                                value_range=fdata.get('value_range'),
-                                unit=fdata.get('unit'),
-                                stats=fdata.get('stats'),
-                                normalization=norm_info
-                            ))
+                            features.append(
+                                Feature(
+                                    name=fname,
+                                    description=fdata.get("description", ""),
+                                    type=fdata.get("type", "unknown"),
+                                    value_range=fdata.get("value_range"),
+                                    unit=fdata.get("unit"),
+                                    stats=fdata.get("stats"),
+                                    normalization=norm_info,
+                                )
+                            )
 
-        if 'num_features' in data:
-            num_features = data['num_features']
+        if "num_features" in data:
+            num_features = data["num_features"]
         elif len(features):
             num_features = len(features)
         else:
@@ -153,35 +169,37 @@ class DatasetMetadata:
 
         # Get normalization info if present
         normalization = None
-        if 'normalization' in data:
-            normalization = Normalization(**data['normalization'])
+        if "normalization" in data:
+            normalization = Normalization(**data["normalization"])
 
         # Get number of instances
-        num_instances = data.get('num_instances', 0)
+        num_instances = data.get("num_instances", 0)
         if not num_instances:
-            if 'dataset_characteristics' in data:
-                num_instances = data['dataset_characteristics'].get('num_instances', 0)
-            elif 'splits' in data:
-                num_instances = sum(split.get('num_examples', 0) for split in data['splits'].values())
+            if "dataset_characteristics" in data:
+                num_instances = data["dataset_characteristics"].get("num_instances", 0)
+            elif "splits" in data:
+                num_instances = sum(
+                    split.get("num_examples", 0) for split in data["splits"].values()
+                )
 
         return cls(
-            name=data['name'],
-            subset = data.get('subset'),
-            description=data.get('description', data.get('abstract', '')).strip(),
+            name=data["name"],
+            subset=data.get("subset") or "",
+            description=data.get("description", data.get("abstract", "")).strip(),
             features=features,
             num_instances=num_instances,
             num_features=num_features,
-            task_type=data.get('task', []),
-            num_classes=data.get('num_classes'),
-            characteristics=data.get('characteristics', []),
-            homepage=data.get('homepage'),
-            license=data.get('license'),
-            citation=data.get('citation'),
-            creators=data.get('creators', []),
-            year=data.get('year_of_dataset_creation',
-                          data.get('year',
-                                   datetime.now().year)),
-            normalization=normalization
+            task_type=data.get("task", []),
+            num_classes=data.get("num_classes"),
+            characteristics=data.get("characteristics", []),
+            homepage=data.get("homepage"),
+            license=data.get("license"),
+            citation=data.get("citation"),
+            creators=data.get("creators", []),
+            year=data.get(
+                "year_of_dataset_creation", data.get("year", datetime.now().year)
+            ),
+            normalization=normalization,
         )
 
     def __str__(self) -> str:
@@ -251,8 +269,10 @@ class DatasetMetadata:
                     "normalization": {
                         "original_unit": f.normalization.original_unit,
                         "scale_factor": f.normalization.scale_factor,
-                        "offset": f.normalization.offset
-                    } if f.normalization else None
+                        "offset": f.normalization.offset,
+                    }
+                    if f.normalization
+                    else None,
                 }
                 for f in self.features
             ],
@@ -269,21 +289,19 @@ class DatasetMetadata:
             "normalization": {
                 "method": self.normalization.method,
                 "range": self.normalization.range,
-                "per_feature": self.normalization.per_feature
-            } if self.normalization else None
+                "per_feature": self.normalization.per_feature,
+            }
+            if self.normalization
+            else None,
         }
 
 
-__all__ = [
-    "DatasetMetadata",
-    "Feature",
-    "FeatureNormalization",
-    "Normalization"
-]
+__all__ = ["DatasetMetadata", "Feature", "FeatureNormalization", "Normalization"]
 
 # Example usage:
 if __name__ == "__main__":
     from merlin.datasets import iris
+
     # Example of converting one of the datasets
     _, _, iris_data = iris.get_data_train()
     print(iris_data)

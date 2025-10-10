@@ -1,6 +1,6 @@
+import cv2
 import numpy as np
 from PIL import Image
-import cv2
 
 
 def canny_from_pil(image, low_threshold=100, high_threshold=200):

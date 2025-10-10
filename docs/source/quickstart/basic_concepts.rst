@@ -13,9 +13,9 @@ Merlin bridges the gap between physical quantum circuits and high-level machine 
 
 1. **Physical Quantum Circuits**: The actual photonic hardware (or simulation thereof)
 2. **Photonic Backend**: Mathematical models of quantum circuits with configurable components
-3. **Ansatz**: Logical circuit templates that define shape of quantum circuits to be implemented on the backend
+3. **Ansatz** (:mod:`merlin.builder.ansatz`): Logical circuit templates that define shape of quantum circuits to be implemented on the backend
 4. **Encoding**: Strategies for mapping classical features to quantum parameters
-5. **Output Mapping**: Methods for converting quantum measurements to classical outputs
+5. **Output Mapping**: Methods for converting quantum states to classical outputs
 6. **QuantumLayer**: High-level PyTorch interface that combines all these concepts
 
 Let's explore each level in detail.
@@ -51,8 +51,13 @@ Key responsibilities:
 
 
 
-3. Ansatz: Logical Circuit Templates
-====================================
+3. Ansatz (:mod:`merlin.builder.ansatz`): Logical Circuit Templates
+==================================================================
+
+.. note::
+
+   The ansatz abstractions moved from ``merlin.core.ansatz`` to
+   :mod:`merlin.builder.ansatz` to align with the builder utilities.
 
 An **Ansatz** is a logical template that defines the structure of your quantum circuit, specifying:
 

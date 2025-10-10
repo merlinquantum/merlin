@@ -49,7 +49,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.realpath("../../"))
 
 
-merlinMetadata = metadata('merlinquantum')
+merlin_metadata = metadata("merlinquantum")
 
 REPO_PATH = Path(__file__).parent.parent.parent.resolve()
 
@@ -58,11 +58,11 @@ if not os.path.exists(build_directory):
     os.makedirs(build_directory)
 
 # -- Project information -----------------------------------------------------
-author = merlinMetadata['Author'].capitalize()
-project = merlinMetadata['Name']
+author = merlin_metadata["Author"].capitalize()
+project = merlin_metadata["Name"]
 copyright = f"{datetime.now().year}, {author}"
 
-release = merlinMetadata['Version']
+release = merlin_metadata["Version"]
 
 # -- General configuration ---------------------------------------------------
 
@@ -80,20 +80,20 @@ extensions = [
     "sphinx_multiversion",
 ]
 
-suppress_warnings = ['autosectionlabel.*']
+suppress_warnings = ["autosectionlabel.*"]
 bibtex_bibfiles = ["references.bib"]
 bibtex_reference_style = "author_year"
 
 # Autodoc configuration
 autodoc_default_options = {
-    'members': True,
-    'undoc-members': True,
-    'show-inheritance': True,
-    'imported-members': False,  # Don't document imported members to avoid duplicates
+    "members": True,
+    "undoc-members": True,
+    "show-inheritance": True,
+    "imported-members": False,  # Don't document imported members to avoid duplicates
 }
 
 # Suppress duplicate object warnings for re-exported classes
-suppress_warnings.extend(['autodoc.import_object'])
+suppress_warnings.extend(["autodoc.import_object"])
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]
