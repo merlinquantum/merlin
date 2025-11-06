@@ -104,7 +104,7 @@ Usage example
 
    # 3.1 Feed the experiment into a QuantumLayer with an input Fock state
    layer = ML.QuantumLayer(
-       input_size=1,
+       input_size=0,
        experiment=experiment,
        input_state=[1, 1, 1],
        input_parameters=["px"],

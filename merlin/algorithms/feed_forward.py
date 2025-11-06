@@ -443,7 +443,7 @@ class FeedForwardBlock(torch.nn.Module):
             raise RuntimeError(
                 f"Invalid mode index in {modes}: only {num_modes} modes available."
             )
-        modes = [m for m in modes if m < num_modes]
+
         combos = list(product([0, 1], repeat=len(modes)))
         out = {}
         for combo in combos:

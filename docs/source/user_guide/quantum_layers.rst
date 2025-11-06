@@ -133,7 +133,7 @@ There are several ways to build a circuit with Perceval. One of them is to use a
 
 2. Include your circuit in a perceval.Experiment (optional).
 
-This step is optional, as a QuantumLayer can be initialized without an experiment. However, doing it allows you to integrate a noise model and detectors into the QuantumLayer. For more information on those, see :doc:`../quantum_expert_area/experiment_support`.
+This step is optional, as a QuantumLayer can be initialized without an experiment. However, doing it allows you to integrate a noise model and detectors into the QuantumLayer. For more information on those, see :doc:`../quantum_expert_area/index`.
 
 .. code-block:: python
 
