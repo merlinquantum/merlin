@@ -383,9 +383,16 @@ class FeedForwardBlock(torch.nn.Module):
                     )
 
                 # Set input quantum state for the layer
-                layer.computation_process.input_state = remaining_amplitudes[
-                    :, match_idx
-                ]
+                if self.state_injection:
+                    mask = torch.zeros(remaining_amplitudes.shape[1], dtype=torch.bool)
+                    mask[match_idx] = True
+                    amplitudes_for_layer = remaining_amplitudes.clone()
+                    amplitudes_for_layer[:, ~mask] = 0
+                    layer.computation_process.input_state = amplitudes_for_layer
+                else:
+                    layer.computation_process.input_state = remaining_amplitudes[
+                        :, match_idx
+                    ]
                 start, end = self.input_segments[current_key]
 
                 # Execute layer with or without classical input
@@ -429,6 +436,14 @@ class FeedForwardBlock(torch.nn.Module):
             dict[tuple[int], torch.Tensor]: Mapping from outcome tuple → indices.
         """
         t = torch.tensor(keys)
+
+        # Catch indexing error for when state_injection=False
+        num_modes = t.shape[1]
+        if any(m >= num_modes for m in modes):
+            raise RuntimeError(
+                f"Invalid mode index in {modes}: only {num_modes} modes available."
+            )
+        modes = [m for m in modes if m < num_modes]
         combos = list(product([0, 1], repeat=len(modes)))
         out = {}
         for combo in combos:
