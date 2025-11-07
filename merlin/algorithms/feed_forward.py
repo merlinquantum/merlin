@@ -536,6 +536,12 @@ class FeedForwardBlock(torch.nn.Module):
             k (int): Feed-forward layer depth index.
             layers (list[QuantumLayer]): List of replacement layers.
         """
+        warnings.warn(
+            "FeedForwardBlock is experimental and replacing its quantum layers with custom ones is not recommended.",
+            category=UserWarning,  # you can also define a custom warning type
+            stacklevel=2,
+        )
+
         len_layers = self.size_ff_layer(k)
         assert len(layers) == len_layers, f"layers should be of length {len_layers}"
         for i, t in enumerate(product([0, 1], repeat=k)):
@@ -760,6 +766,11 @@ class PoolingFeedForward(torch.nn.Module):
                 exclude_indices.append(i)
 
         return indices, exclude_indices
+
+    @property
+    def output_keys(self):
+        """Return output keys of the PoolingFeedForward"""
+        return self.keys_out
 
 
 if __name__ == "__main__":
