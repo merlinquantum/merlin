@@ -185,7 +185,7 @@ class FeedForwardBlock(torch.nn.Module):
 
         if not self.state_injection and self.depth > 1:
             warnings.warn(
-                "FeedForwardBlock is experimental and its usage with state_injection=False and depth>1 is not recommended.",
+                "FeedForwardBlock is experimental and its usage with state_injection=False and depth>1 may cause errors. Please report any issue",
                 category=UserWarning,  # you can also define a custom warning type
                 stacklevel=2,
             )
@@ -537,7 +537,7 @@ class FeedForwardBlock(torch.nn.Module):
             layers (list[QuantumLayer]): List of replacement layers.
         """
         warnings.warn(
-            "FeedForwardBlock is experimental and replacing its quantum layers with custom ones is not recommended.",
+            "FeedForwardBlock is experimental and replacing its quantum layers with custom ones may cause errors. Please report any issue.",
             category=UserWarning,  # you can also define a custom warning type
             stacklevel=2,
         )
