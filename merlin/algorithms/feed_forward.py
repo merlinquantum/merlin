@@ -1,3 +1,4 @@
+import warnings
 from itertools import product
 
 import perceval as pcvl
@@ -98,6 +99,8 @@ def define_layer_with_input(M, N, input_size, circuit_type=None):
 
 class FeedForwardBlock(torch.nn.Module):
     """
+    Experimental: This function is under development and its behavior or API may change in future releases.
+
     Feed-forward quantum neural network for photonic computation.
 
     This class models a **conditional feed-forward architecture** used in
@@ -179,6 +182,13 @@ class FeedForwardBlock(torch.nn.Module):
         self.layers = {}
         self.input_segments = {}
         self._output_keys = None
+
+        if not self.state_injection and self.depth > 1:
+            warnings.warn(
+                "FeedForwardBlock is experimental and its usage with state_injection=False and depth>1 is not recommended.",
+                category=UserWarning,  # you can also define a custom warning type
+                stacklevel=2,
+            )
 
         if layers is None:
             self.define_layers(circuit_type)
@@ -574,6 +584,8 @@ class FeedForwardBlock(torch.nn.Module):
 
 class PoolingFeedForward(torch.nn.Module):
     """
+    Experimental: This function is under development and its behavior or API may change in future releases.
+
     A quantum-inspired pooling module that aggregates amplitude information
     from an input quantum state representation into a lower-dimensional output space.
 
