@@ -43,4 +43,5 @@ __all__ = [
     "BeamSplitter",
     "EntanglingBlock",
     "Circuit",
+    "StateVector",
 ]

@@ -15,5 +15,6 @@ Submodules
    merlin.core.base
    merlin.core.generators
    merlin.core.photonicbackend
+   merlin.core.state_vector
    merlin.core.process
    merlin.core.components
