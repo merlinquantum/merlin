@@ -6,6 +6,9 @@ NOTE: this repo is a public repository, therefore, do NOT paste Jira URLs. Use t
 The Jira–GitHub integration will link PRs/commits automatically when the key is present.
 -->
 
+<!-- Add the Jira issue key in the title -->
+<!-- e.g., PML-126 Updating PR template -->
+
 ## Summary
 <!-- What does this PR do? A clear, concise description. -->
 
