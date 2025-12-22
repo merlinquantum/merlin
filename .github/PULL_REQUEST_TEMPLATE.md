@@ -1,10 +1,22 @@
 <!--
 Thank you for contributing to MerLin!
 Please fill out the sections below to help us review your PR efficiently.
+
+NOTE: this repo is a public repository, therefore, do NOT paste Jira URLs. Use the Jira issue key only (e.g., PML-126).
+The Jira–GitHub integration will link PRs/commits automatically when the key is present.
 -->
+
+<!-- Add the Jira issue key in the title -->
+<!-- e.g., PML-126 Updating PR template -->
 
 ## Summary
 <!-- What does this PR do? A clear, concise description. -->
+
+## Related Jira ticket (required)
+<!-- Use the Jira issue key ONLY (no URL), e.g.:
+Related Jira: PML-126
+-->
+Related Jira:
 
 ## Context / Related Issues
 <!-- Why do you do this PR ? Is it linked to a previous PR ? A clear, concise description. -->
@@ -45,6 +57,8 @@ Block of code
 - [ ] Docstrings updated
 
 ## Checklist
+- [ ] PR title includes Jira issue key (e.g., PML-126)
+- [ ] "Related Jira ticket" section includes the Jira issue key (no URL)
 - [ ] Code formatted (ruff format)
 - [ ] Lint passes (ruff)
 - [ ] Static typing passes (mypy) if applicable
@@ -54,7 +68,7 @@ Block of code
 - [ ] Test coverage not decreased significantly
 - [ ] Docs build locally if affected (sphinx)
 - [ ] Dependencies updated (if needed) and pinned appropriately
-- [ ] I have added a clear PR title and description
+- [ ] PR description explains what changed and how to validate it
 
 <!-- Helpful local commands – run from repo root:
 
