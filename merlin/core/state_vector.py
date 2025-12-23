@@ -175,6 +175,27 @@ class StateVector:
 
     Keeps ``n_modes`` / ``n_photons`` and combinadics basis ordering alongside the
     underlying PyTorch tensor (dense or sparse).
+
+    Parameters
+    ----------
+    tensor:
+        Dense or sparse amplitude tensor; leading dimensions (if any) are treated
+        as batch axes.
+    n_modes:
+        Number of modes in the Fock space.
+    n_photons:
+        Total photon number represented by the state.
+    _normalized:
+        Internal flag tracking whether the stored tensor is normalized.
+
+    Notes
+    -----
+    This is a thin wrapper over a ``torch.Tensor``: only ``shape``, ``device``,
+    ``dtype``, and ``requires_grad`` are delegated automatically, and tensor-like
+    helpers ``to``, ``clone``, ``detach``, and ``requires_grad_`` are provided to
+    mirror common tensor workflows while preserving metadata. Layout-changing
+    operations (e.g., ``reshape``/``view``) are intentionally not exposed; perform
+    those on ``tensor`` explicitly if needed and rebuild via ``from_tensor``.
     """
 
     tensor: torch.Tensor
@@ -186,6 +207,13 @@ class StateVector:
         if name in ("n_modes", "n_photons") and name in self.__dict__:
             raise AttributeError("n_modes and n_photons are immutable once set")
         super().__setattr__(name, value)
+
+    def __getattr__(self, name: str):
+        allowed = {"shape", "device", "dtype", "requires_grad"}
+        tensor = self.__dict__.get("tensor")
+        if tensor is not None and name in allowed and hasattr(tensor, name):
+            return getattr(tensor, name)
+        raise AttributeError(f"{type(self).__name__!s} has no attribute {name!s}")
 
     @property
     def is_normalized(self) -> bool:
@@ -213,6 +241,36 @@ class StateVector:
     def basis_size(self) -> int:
         """Return the number of basis states for ``(n_modes, n_photons)``."""
         return _basis_size(self.n_modes, self.n_photons)
+
+    def to(self, *args, **kwargs) -> StateVector:
+        """Return a new ``StateVector`` with the tensor moved/cast via ``torch.Tensor.to``."""
+        new_tensor = self.tensor.to(*args, **kwargs)
+        return StateVector(
+            new_tensor, self.n_modes, self.n_photons, _normalized=self._normalized
+        )
+
+    def clone(self) -> StateVector:
+        """Return a cloned ``StateVector`` with identical metadata and normalization flag."""
+        return StateVector(
+            self.tensor.clone(),
+            self.n_modes,
+            self.n_photons,
+            _normalized=self._normalized,
+        )
+
+    def detach(self) -> StateVector:
+        """Return a detached ``StateVector`` sharing data without gradients."""
+        return StateVector(
+            self.tensor.detach(),
+            self.n_modes,
+            self.n_photons,
+            _normalized=self._normalized,
+        )
+
+    def requires_grad_(self, requires_grad: bool = True) -> StateVector:
+        """Set ``requires_grad`` on the underlying tensor and return self."""
+        self.tensor.requires_grad_(requires_grad)
+        return self
 
     def memory_bytes(self) -> int:
         """Approximate memory footprint (bytes) of the underlying tensor data."""

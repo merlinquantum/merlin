@@ -289,3 +289,44 @@ def test_getitem_sparse_batch_gathers_per_batch():
     amp_state1 = sv[[0, 1]]
     assert torch.allclose(amp_state0, torch.tensor([1.0 + 0j, 0.0 + 0j]))
     assert torch.allclose(amp_state1, torch.tensor([0.0 + 0j, 1.0 + 0j]))
+
+
+def test_state_vector_to_preserves_metadata_and_norm_flag():
+    sv = 2 * StateVector.from_basic_state([1, 0], sparse=False)
+    assert not sv.is_normalized
+    converted = sv.to(dtype=torch.complex128)
+    assert converted is not sv
+    assert converted.n_modes == sv.n_modes
+    assert converted.n_photons == sv.n_photons
+    assert converted.tensor.dtype == torch.complex128
+    assert not converted.is_normalized
+    # original dtype unchanged
+    assert sv.tensor.dtype == torch.complex64
+
+
+def test_state_vector_view_and_reshape_not_supported():
+    sv = StateVector.from_basic_state([1, 0], sparse=False)
+    with pytest.raises(AttributeError):
+        _ = sv.view
+    with pytest.raises(AttributeError):
+        _ = sv.reshape
+
+
+def test_state_vector_delegated_attrs_and_clone_detach_requires_grad():
+    sv = StateVector.from_basic_state([1, 0], sparse=False)
+    assert sv.shape == (2,)
+    assert sv.device == sv.tensor.device
+    assert sv.dtype == sv.tensor.dtype
+    assert sv.requires_grad is False
+
+    cloned = sv.clone()
+    assert cloned is not sv
+    assert torch.allclose(cloned.tensor, sv.tensor)
+    assert cloned.n_modes == sv.n_modes and cloned.n_photons == sv.n_photons
+
+    detached = sv.detach()
+    assert detached.tensor.requires_grad is False
+    assert detached.n_modes == sv.n_modes and detached.n_photons == sv.n_photons
+
+    sv.requires_grad_(True)
+    assert sv.tensor.requires_grad is True
