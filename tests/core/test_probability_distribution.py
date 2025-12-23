@@ -158,3 +158,50 @@ def test_getitem_returns_probability():
     assert torch.isclose(pd[pcvl.BasicState([0, 1])], torch.tensor(0.9))
     with pytest.raises(KeyError):
         _ = pd[[2, 0]]
+
+
+def test_probability_distribution_to_propagates_metadata_and_lp():
+    pd = ProbabilityDistribution.from_tensor(torch.tensor([0.5, 0.5]), n_modes=2, n_photons=1)
+    pd.logical_performance = torch.tensor(0.25, dtype=torch.float32)
+    converted = pd.to(dtype=torch.float64)
+    assert converted is not pd
+    assert converted.n_modes == pd.n_modes
+    assert converted.n_photons == pd.n_photons
+    assert converted.tensor.dtype == torch.float64
+    assert converted.logical_performance is not None
+    assert converted.logical_performance.dtype == torch.float64
+
+
+def test_probability_distribution_view_and_reshape_not_supported():
+    pd = ProbabilityDistribution.from_tensor(torch.tensor([0.5, 0.5]), n_modes=2, n_photons=1)
+    with pytest.raises(AttributeError):
+        _ = pd.view
+    with pytest.raises(AttributeError):
+        _ = pd.reshape
+
+
+def test_probability_distribution_delegated_attrs_and_clone_detach_requires_grad():
+    tensor = torch.tensor([0.5, 0.5], dtype=torch.float32)
+    pd = ProbabilityDistribution.from_tensor(tensor, n_modes=2, n_photons=1)
+    pd.logical_performance = torch.tensor(0.2, dtype=torch.float32)
+
+    assert pd.shape == (2,)
+    assert pd.device == pd.tensor.device
+    assert pd.dtype == pd.tensor.dtype
+    assert pd.requires_grad is False
+
+    cloned = pd.clone()
+    assert cloned is not pd
+    assert torch.allclose(cloned.tensor, pd.tensor)
+    assert cloned.logical_performance is not None
+    assert torch.allclose(cloned.logical_performance, pd.logical_performance)
+
+    detached = pd.detach()
+    assert detached.tensor.requires_grad is False
+    if detached.logical_performance is not None:
+        assert detached.logical_performance.requires_grad is False
+
+    pd.requires_grad_(True)
+    assert pd.tensor.requires_grad is True
+    if pd.logical_performance is not None:
+        assert pd.logical_performance.requires_grad is True

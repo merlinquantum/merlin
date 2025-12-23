@@ -124,6 +124,12 @@ class ProbabilityDistribution:
     -----
     Instances are normalized on construction; arithmetic-style temporary
     unnormalized states are not supported (unlike ``StateVector``).
+    Only ``shape``, ``device``, ``dtype``, and ``requires_grad`` are delegated to
+    the underlying ``torch.Tensor``; tensor-like helpers ``to``, ``clone``,
+    ``detach``, and ``requires_grad_`` mirror tensor semantics while keeping
+    metadata and logical performance aligned. Layout-changing tensor operations
+    should be done on ``tensor`` directly, then wrapped again via ``from_tensor``
+    to maintain a consistent basis.
     """
 
     tensor: torch.Tensor
@@ -142,6 +148,13 @@ class ProbabilityDistribution:
             raise AttributeError("n_modes and n_photons are immutable once set")
         super().__setattr__(name, value)
 
+    def __getattr__(self, name: str):
+        allowed = {"shape", "device", "dtype", "requires_grad"}
+        tensor = self.__dict__.get("tensor")
+        if tensor is not None and name in allowed and hasattr(tensor, name):
+            return getattr(tensor, name)
+        raise AttributeError(f"{type(self).__name__!s} has no attribute {name!s}")
+
     @property
     def basis(self) -> Basis:
         return (
@@ -153,6 +166,56 @@ class ProbabilityDistribution:
     @property
     def basis_size(self) -> int:
         return len(self.basis)
+
+    def to(self, *args, **kwargs) -> ProbabilityDistribution:
+        """Return a new ``ProbabilityDistribution`` with tensor (and logical_performance) moved/cast via ``torch.Tensor.to``."""
+        new_tensor = self.tensor.to(*args, **kwargs)
+        new_lp = None
+        if self.logical_performance is not None:
+            new_lp = self.logical_performance.to(*args, **kwargs)
+        return ProbabilityDistribution(
+            new_tensor,
+            self.n_modes,
+            self.n_photons,
+            computation_space=self.computation_space,
+            logical_performance=new_lp,
+            _custom_basis=self._custom_basis,
+        )
+
+    def clone(self) -> ProbabilityDistribution:
+        """Return a cloned ``ProbabilityDistribution`` with metadata and logical performance copied."""
+        new_lp = None
+        if self.logical_performance is not None:
+            new_lp = self.logical_performance.clone()
+        return ProbabilityDistribution(
+            self.tensor.clone(),
+            self.n_modes,
+            self.n_photons,
+            computation_space=self.computation_space,
+            logical_performance=new_lp,
+            _custom_basis=self._custom_basis,
+        )
+
+    def detach(self) -> ProbabilityDistribution:
+        """Return a detached ``ProbabilityDistribution`` sharing data without gradients."""
+        new_lp = None
+        if self.logical_performance is not None:
+            new_lp = self.logical_performance.detach()
+        return ProbabilityDistribution(
+            self.tensor.detach(),
+            self.n_modes,
+            self.n_photons,
+            computation_space=self.computation_space,
+            logical_performance=new_lp,
+            _custom_basis=self._custom_basis,
+        )
+
+    def requires_grad_(self, requires_grad: bool = True) -> ProbabilityDistribution:
+        """Set ``requires_grad`` on underlying tensors and return self."""
+        self.tensor.requires_grad_(requires_grad)
+        if self.logical_performance is not None:
+            self.logical_performance.requires_grad_(requires_grad)
+        return self
 
     @property
     def is_sparse(self) -> bool:
