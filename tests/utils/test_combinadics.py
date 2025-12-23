@@ -24,6 +24,29 @@ def _collect_states(combo: Combinadics):
     return states_iter
 
 
+def test_getitem_roundtrip_both_directions():
+    combo = Combinadics("unbunched", n=2, m=4)
+    states = list(combo.iter_states())
+    for idx, state in enumerate(states):
+        assert combo[idx] == state
+        assert combo[state] == idx
+        assert combo[list(state)] == idx
+
+    with pytest.raises(TypeError):
+        combo["0101"]
+
+    bs = pcvl.BasicState("|1,0,0,1>")
+    expected_idx = states.index(tuple(bs))
+    assert combo[bs] == expected_idx
+
+
+def test_len_and_index_match_compute_space_size():
+    combo = Combinadics("fock", n=3, m=4)
+    assert len(combo) == combo.compute_space_size()
+    for idx, state in enumerate(combo):
+        assert combo.index(state) == idx
+
+
 def test_dual_rail_enumeration_desc_lex_and_size():
     n, m = 4, 8
     combo = Combinadics("dual_rail", n=n, m=m)

@@ -40,6 +40,10 @@ Filtering and performance
    assert (filtered.logical_performance > 0).all()
    assert torch.isclose(filtered.to_dense().sum(), torch.tensor(1.0))
 
+Filters accept computation-space aliases (``fock``, ``unbunched``, ``dual_rail``),
+predicates, explicit allowed-state iterables, or a tuple ``(space, predicate)`` to
+combine a space constraint with a custom predicate in one call.
+
 The ``logical_performance`` attribute is filled by ``filter`` to record the kept
 mass per batch (kept / total) and remains ``None`` on distributions that have not
 been filtered yet.

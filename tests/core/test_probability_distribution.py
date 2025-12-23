@@ -42,7 +42,7 @@ def test_filter_with_allowed_list_sparse():
     allowed = [(2, 0), (0, 2)]
     filtered = pd.filter(allowed)
     dense = filtered.to_dense()
-    assert torch.allclose(dense, torch.tensor([0.14285715, 0.0, 0.85714287]), atol=1e-6)
+    assert torch.allclose(dense, torch.tensor([0.14285715, 0.85714287]), atol=1e-6)
     assert torch.allclose(filtered.logical_performance, torch.tensor(0.7))
 
 
@@ -86,6 +86,22 @@ def test_filter_dual_rail_invalid_geometry_raises():
     pd = ProbabilityDistribution.from_tensor(probs, n_modes=3, n_photons=1)
     with pytest.raises(ValueError):
         _ = pd.filter(ComputationSpace.DUAL_RAIL)
+
+
+def test_filter_combined_space_and_predicate():
+    # start with uniform mass over Fock(4 modes, 2 photons); 10 states total
+    probe = ProbabilityDistribution.from_tensor(torch.ones(10), n_modes=4, n_photons=2)
+
+    def first_pair_occupied(state: tuple[int, ...]) -> bool:
+        return state[0] == 1  # dual-rail states with photon in first rail of pair 0
+
+    filtered = probe.filter((ComputationSpace.DUAL_RAIL, first_pair_occupied))
+    # dual_rail keeps 4 states; predicate keeps 2 of them
+    assert filtered.computation_space is ComputationSpace.DUAL_RAIL
+    assert filtered.basis_size == 2
+    # perf: 2 kept out of 10 original mass
+    assert torch.isclose(filtered.logical_performance, torch.tensor(0.2))
+    assert torch.isclose(filtered.to_dense().sum(), torch.tensor(1.0))
 
 
 def test_filter_predicate_sparse_rejects_all():
