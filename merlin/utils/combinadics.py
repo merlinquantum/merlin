@@ -131,9 +131,61 @@ class Combinadics:
             return self._unrank_unbunched(index)
         return self._unrank_dualrail(index)
 
-    def __getitem__(self, index: int) -> TupleInt:
-        """Shortcut for :meth:`index_to_fock`."""
-        return self.index_to_fock(index)
+    def __getitem__(self, key: object) -> int | TupleInt:
+        """Symmetric lookup: index -> state or state -> index.
+
+        Parameters
+        ----------
+        key : int | Iterable[int] | object
+            Integer rank to decode, iterable photon counts to encode, or any
+            object that can be coerced to a sequence via ``list(key)`` (e.g.,
+            Perceval ``BasicState``).
+
+        Returns
+        -------
+        Tuple[int, ...] | int
+            Fock state when ``key`` is an integer; rank when ``key`` is a state.
+
+        Raises
+        ------
+        TypeError
+            If ``key`` is neither an integer nor an iterable of integers.
+        ValueError
+            If the provided state violates scheme constraints.
+        """
+
+        if isinstance(key, int):
+            return self.index_to_fock(key)
+        if isinstance(key, Iterable) and not isinstance(key, (str, bytes)):
+            return self.fock_to_index(key)
+        try:
+            as_list = list(key)
+        except TypeError as exc:  # not iterable
+            raise TypeError(
+                "Combinadics key must be an int or iterable of ints"
+            ) from exc
+        return self.fock_to_index(as_list)
+
+    def index(self, state: Iterable[int]) -> int:
+        """Return the rank for a given state (``tuple.index`` compatible).
+
+        Parameters
+        ----------
+        state : Iterable[int]
+            Photon counts per mode.
+
+        Returns
+        -------
+        int
+            Rank of the provided state.
+
+        Raises
+        ------
+        ValueError
+            If the state violates the configured scheme.
+        """
+
+        return self.fock_to_index(state)
 
     def compute_space_size(self) -> int:
         """Return the number of admissible Fock states for this configuration.
@@ -148,6 +200,16 @@ class Combinadics:
         if self.scheme == "unbunched":
             return math.comb(self.m, self.n)
         return 1 << (self.m // 2)
+
+    def __len__(self) -> int:
+        """Alias for :meth:`compute_space_size` to mirror sequence semantics."""
+
+        return self.compute_space_size()
+
+    def __iter__(self) -> Iterator[TupleInt]:
+        """Yield states in descending lexicographic order (iterator protocol)."""
+
+        return self.iter_states()
 
     def iter_states(self) -> Iterator[TupleInt]:
         """Yield admissible states in descending lexicographic order.

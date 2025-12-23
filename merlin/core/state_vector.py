@@ -42,13 +42,12 @@ import torch
 from ..utils.combinadics import Combinadics
 from ..utils.dtypes import complex_dtype_for
 
-Basis = tuple[tuple[int, ...], ...]
+Basis = Combinadics
 
 
 @cache
 def _basis_for(n_modes: int, n_photons: int) -> Basis:
-    comb = Combinadics("fock", n_photons, n_modes)
-    return tuple(comb.iter_states())
+    return Combinadics("fock", n_photons, n_modes)
 
 
 @cache
@@ -202,7 +201,7 @@ class StateVector:
 
     @property
     def basis(self) -> Basis:
-        """Enumerated Fock basis for ``(n_modes, n_photons)`` using combinadics ordering."""
+        """Lazy combinadics basis for ``(n_modes, n_photons)`` in Fock ordering."""
         return _basis_for(self.n_modes, self.n_photons)
 
     @property
