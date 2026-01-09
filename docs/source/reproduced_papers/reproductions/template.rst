@@ -58,21 +58,21 @@ Implementation Details
 
 .. code-block:: python
 
-   import merlin as ml
+  import merlin as ml
+  import perceval as pcvl
 
-   # Example code showing key implementation
-   circuit = ml.Circuit(
-       type=ml.CircuitType.[TYPE],
-       modes=[number],
-       layers=[number]
-   )
+     # Example code showing key implementation using the CircuitBuilder
+     builder = ml.CircuitBuilder(n_modes=[number])
+     builder.add_entangling_layer(trainable=True, name="phi_")
+     builder.add_angle_encoding(name="pl")
+     circuit = builder.to_pcvl_circuit(pcvl)
 
-   # Additional setup code
-   model = ml.[ModelType](
+     # Additional setup code
+     model = ml.[ModelType](
        circuit=circuit,
        parameter1=value1,
        parameter2=value2
-   )
+     )
 
 Experimental Results
 ====================

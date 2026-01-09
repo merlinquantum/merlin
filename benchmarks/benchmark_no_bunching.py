@@ -33,9 +33,9 @@ from typing import Any
 
 import pytest
 import torch
+import perceval as pcvl
 
 import merlin as ML
-from merlin.core.generators import CircuitGenerator, StateGenerator
 from merlin.core.process import ComputationProcessFactory
 
 
@@ -90,6 +90,13 @@ DEVICE_CONFIGS = ["cpu"]
 benchmark_runner = NoBunchingBenchmarkRunner()
 
 
+def _make_benchmark_circuit(n_modes: int) -> pcvl.Circuit:
+    builder = ML.CircuitBuilder(n_modes)
+    builder.add_entangling_layer(trainable=True, name="phi_")
+    builder.add_angle_encoding(name="pl")
+    return builder.to_pcvl_circuit(pcvl)
+
+
 @pytest.mark.parametrize("config", BENCHMARK_CONFIGS)
 @pytest.mark.parametrize("device", DEVICE_CONFIGS)
 def test_no_bunching_computation_benchmark(benchmark, config: dict, device: str):
@@ -98,12 +105,8 @@ def test_no_bunching_computation_benchmark(benchmark, config: dict, device: str)
     n_photons = config["n_photons"]
 
     # Create circuit and state
-    circuit, _ = CircuitGenerator.generate_circuit(
-        ML.CircuitType.PARALLEL_COLUMNS, n_modes, 3
-    )
-    input_state = StateGenerator.generate_state(
-        n_modes, n_photons, ML.StatePattern.SEQUENTIAL
-    )
+    circuit = _make_benchmark_circuit(n_modes)
+    input_state = ML.generate_state(n_modes, n_photons, ML.StatePattern.SEQUENTIAL)
 
     # Create computation process with no_bunching=True
     process = ComputationProcessFactory.create(
@@ -142,12 +145,8 @@ def test_fock_space_comparison_benchmark(benchmark, config: dict, device: str):
     n_photons = config["n_photons"]
 
     # Create circuit and state
-    circuit, _ = CircuitGenerator.generate_circuit(
-        ML.CircuitType.PARALLEL_COLUMNS, n_modes, 2
-    )
-    input_state = StateGenerator.generate_state(
-        n_modes, n_photons, ML.StatePattern.SEQUENTIAL
-    )
+    circuit = _make_benchmark_circuit(n_modes)
+    input_state = ML.generate_state(n_modes, n_photons, ML.StatePattern.SEQUENTIAL)
 
     def compute_both_modes():
         # No bunching process
@@ -208,11 +207,8 @@ def test_compute_with_keys_benchmark(benchmark, config: dict, device: str):
     """Benchmark compute_with_keys functionality with no bunching."""
     n_modes = config["n_modes"]
     n_photons = config["n_photons"]
-
-    circuit, _ = CircuitGenerator.generate_circuit(ML.CircuitType.SERIES, n_modes, 2)
-    input_state = StateGenerator.generate_state(
-        n_modes, n_photons, ML.StatePattern.PERIODIC
-    )
+    circuit = _make_benchmark_circuit(n_modes)
+    input_state = ML.generate_state(n_modes, n_photons, ML.StatePattern.PERIODIC)
 
     # Process with no_bunching
     process_no_bunching = ComputationProcessFactory.create(
@@ -254,12 +250,8 @@ class TestNoBunchingPerformanceRegression:
         n_modes = 8
         n_photons = 3
 
-        circuit, _ = CircuitGenerator.generate_circuit(
-            ML.CircuitType.PARALLEL_COLUMNS, n_modes, 2
-        )
-        input_state = StateGenerator.generate_state(
-            n_modes, n_photons, ML.StatePattern.SEQUENTIAL
-        )
+        circuit = _make_benchmark_circuit(n_modes)
+        input_state = ML.generate_state(n_modes, n_photons, ML.StatePattern.SEQUENTIAL)
 
         process = ComputationProcessFactory.create(
             circuit=circuit,
@@ -325,12 +317,8 @@ if __name__ == "__main__":
     n_modes = 6
     n_photons = 3
 
-    circuit, _ = CircuitGenerator.generate_circuit(
-        ML.CircuitType.PARALLEL_COLUMNS, n_modes, 2
-    )
-    input_state = StateGenerator.generate_state(
-        n_modes, n_photons, ML.StatePattern.SEQUENTIAL
-    )
+    circuit = _make_benchmark_circuit(n_modes)
+    input_state = ML.generate_state(n_modes, n_photons, ML.StatePattern.SEQUENTIAL)
 
     process = ComputationProcessFactory.create(
         circuit=circuit,

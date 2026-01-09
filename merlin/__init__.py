@@ -45,9 +45,9 @@ from .builder.circuit_builder import CircuitBuilder
 # Essential enums
 # Advanced components (for power users)
 from .core.computation_space import ComputationSpace
-from .core.generators import CircuitGenerator, CircuitType, StateGenerator, StatePattern
 from .core.merlin_processor import MerlinProcessor
 from .core.process import ComputationProcess
+from .core.state import StatePattern, generate_state
 from .measurement import (
     Amplitudes,
     DetectorTransform,
@@ -62,7 +62,6 @@ from .measurement.strategies import MeasurementStrategy
 from .pcvl_pytorch import CircuitConverter, build_slos_distribution_computegraph
 from .utils.combinadics import Combinadics
 from .utils.grouping import LexGrouping, ModGrouping
-from .utils.torch_codes import FeatureEncoder
 
 # Version and metadata
 __version__ = "0.2.3"
@@ -80,10 +79,8 @@ __all__ = [
     "Combinadics",
     # Advanced components
     "ComputationProcess",
-    "CircuitGenerator",
-    "CircuitType",
-    "StateGenerator",
     "StatePattern",
+    "generate_state",
     "OutputMapper",
     "Probabilities",
     "DetectorTransform",
@@ -107,5 +104,4 @@ __all__ = [
     "CircuitBuilder",
     "AutoDiffProcess",
     "SamplingProcess",
-    "FeatureEncoder",
 ]

@@ -40,8 +40,8 @@ from ..builder.circuit_builder import (
     CircuitBuilder,
 )
 from ..core.computation_space import ComputationSpace
-from ..core.generators import StateGenerator, StatePattern
 from ..core.process import ComputationProcessFactory
+from ..core.state import StatePattern, generate_state
 from ..measurement import OutputMapper
 from ..measurement.autodiff import AutoDiffProcess
 from ..measurement.detectors import DetectorTransform, resolve_detectors
@@ -428,7 +428,7 @@ class QuantumLayer(MerlinModule):
             if self.computation_space is ComputationSpace.DUAL_RAIL:
                 self.input_state = [1, 0] * n_photons
             elif not self.amplitude_encoding:
-                self.input_state = StateGenerator.generate_state(
+                self.input_state = generate_state(
                     circuit.m, n_photons, StatePattern.SPACED
                 )
             else:

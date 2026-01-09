@@ -27,17 +27,21 @@ Tests for no_bunching functionality in quantum computation.
 import math
 
 import torch
+import perceval as pcvl
 
 from merlin.algorithms.layer import QuantumLayer
+from merlin.builder.circuit_builder import CircuitBuilder
 from merlin.core.computation_space import ComputationSpace
-from merlin.core.generators import (
-    CircuitGenerator,
-    CircuitType,
-    StateGenerator,
-    StatePattern,
-)
 from merlin.core.process import ComputationProcessFactory
+from merlin.core.state import StatePattern, generate_state
 from merlin.measurement.strategies import MeasurementStrategy
+
+
+def _make_test_circuit(n_modes: int) -> pcvl.Circuit:
+    builder = CircuitBuilder(n_modes)
+    builder.add_entangling_layer(trainable=True, name="phi_")
+    builder.add_angle_encoding(modes=list(range(min(n_modes, 3))), name="pl")
+    return builder.to_pcvl_circuit(pcvl)
 
 
 def calculate_fock_space_size(n_modes: int, n_photons: int) -> int:
@@ -90,12 +94,8 @@ class TestNoBunchingFunctionality:
         n_photons = 2
 
         # Create circuit and state
-        circuit, _ = CircuitGenerator.generate_circuit(
-            CircuitType.PARALLEL_COLUMNS, n_modes, 2
-        )
-        input_state = StateGenerator.generate_state(
-            n_modes, n_photons, StatePattern.SEQUENTIAL
-        )
+        circuit = _make_test_circuit(n_modes)
+        input_state = generate_state(n_modes, n_photons, StatePattern.SEQUENTIAL)
 
         # Create computation process with no_bunching=False
         process = ComputationProcessFactory.create(
@@ -133,12 +133,8 @@ class TestNoBunchingFunctionality:
         n_photons = 2
 
         # Create circuit and state
-        circuit, _ = CircuitGenerator.generate_circuit(
-            CircuitType.PARALLEL_COLUMNS, n_modes, 2
-        )
-        input_state = StateGenerator.generate_state(
-            n_modes, n_photons, StatePattern.SEQUENTIAL
-        )
+        circuit = _make_test_circuit(n_modes)
+        input_state = generate_state(n_modes, n_photons, StatePattern.SEQUENTIAL)
 
         # Create computation process with no_bunching=True
         process = ComputationProcessFactory.create(
@@ -178,12 +174,8 @@ class TestNoBunchingFunctionality:
 
         # Test both cases
         for no_bunching in [False, True]:
-            circuit, _ = CircuitGenerator.generate_circuit(
-                CircuitType.SERIES, n_modes, 2
-            )
-            input_state = StateGenerator.generate_state(
-                n_modes, n_photons, StatePattern.PERIODIC
-            )
+            circuit = _make_test_circuit(n_modes)
+            input_state = generate_state(n_modes, n_photons, StatePattern.PERIODIC)
             q_layer = QuantumLayer(
                 input_size=3,
                 circuit=circuit,
@@ -220,12 +212,8 @@ class TestNoBunchingFunctionality:
         for n_photons in [1, 2, 3]:
             print(f"\nTesting {n_photons} photons in {n_modes} modes:")
 
-            circuit, _ = CircuitGenerator.generate_circuit(
-                CircuitType.PARALLEL, n_modes, 2
-            )
-            input_state = StateGenerator.generate_state(
-                n_modes, n_photons, StatePattern.SPACED
-            )
+            circuit = _make_test_circuit(n_modes)
+            input_state = generate_state(n_modes, n_photons, StatePattern.SPACED)
 
             # Test with no_bunching=True
             process_no_bunching = ComputationProcessFactory.create(
@@ -280,7 +268,7 @@ class TestNoBunchingFunctionality:
         n_modes = 3
         n_photons = 4  # More photons than modes
 
-        circuit, _ = CircuitGenerator.generate_circuit(CircuitType.SERIES, n_modes, 2)
+        circuit = _make_test_circuit(n_modes)
         input_state = [1, 1, 1, 1][:n_modes] + [0] * max(0, n_modes - 4)
 
         # This should work but result in empty or minimal space
@@ -321,12 +309,8 @@ class TestNoBunchingFunctionality:
         n_modes = 5
         n_photons = 1
 
-        circuit, _ = CircuitGenerator.generate_circuit(
-            CircuitType.PARALLEL_COLUMNS, n_modes, 2
-        )
-        input_state = StateGenerator.generate_state(
-            n_modes, n_photons, StatePattern.SEQUENTIAL
-        )
+        circuit = _make_test_circuit(n_modes)
+        input_state = generate_state(n_modes, n_photons, StatePattern.SEQUENTIAL)
 
         for no_bunching in [False, True]:
             process = ComputationProcessFactory.create(
@@ -378,12 +362,8 @@ class TestNoBunchingFunctionality:
             print(
                 f"\nTesting compute_with_keys {n_photons} photons in {n_modes} modes:"
             )
-            circuit, _ = CircuitGenerator.generate_circuit(
-                CircuitType.SERIES, n_modes, 2
-            )
-            input_state = StateGenerator.generate_state(
-                n_modes, n_photons, StatePattern.PERIODIC
-            )
+            circuit = _make_test_circuit(n_modes)
+            input_state = generate_state(n_modes, n_photons, StatePattern.PERIODIC)
 
             # Process with no_bunching
             process_no_bunching = ComputationProcessFactory.create(
