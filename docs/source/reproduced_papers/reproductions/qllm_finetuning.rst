@@ -58,18 +58,18 @@ For a first analysis, we use a Generic Interferometer:
 
    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-      # Create a simple quantum layer using the CircuitBuilder
-      builder = ML.CircuitBuilder(n_modes=modes)
-      builder.add_entangling_layer(trainable=True, name="phi_")
-      builder.add_angle_encoding(name="pl")
-      circuit = builder.to_pcvl_circuit(pcvl)
+   # Create a simple quantum layer using the CircuitBuilder
+   builder = ML.CircuitBuilder(n_modes=modes)
+   builder.add_entangling_layer(trainable=True, name="phi_")
+   builder.add_angle_encoding(name="pl")
+   circuit = builder.to_pcvl_circuit(pcvl)
 
-      experiment = ML.PhotonicBackend(
-         circuit=circuit,
-         input_state=ML.generate_state(
-            modes, sum(input_state) if input_state else modes // 2, ML.StatePattern.PERIODIC
-         ),
-      )
+   experiment = ML.PhotonicBackend(
+       circuit=circuit,
+       input_state=ML.generate_state(
+           modes, sum(input_state) if input_state else modes // 2, ML.StatePattern.PERIODIC
+       ),
+   )
 
 Experimental Results
 ====================
