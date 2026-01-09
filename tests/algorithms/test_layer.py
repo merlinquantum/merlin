@@ -491,7 +491,6 @@ class TestQuantumLayer:
         with pytest.raises(ValueError):
             ML.QuantumLayer(
                 input_size=2,
-                output_size=5,
                 n_photons=5,  # more photons than modes
                 builder=builder,
                 measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,

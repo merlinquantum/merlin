@@ -142,10 +142,10 @@ class TestQuantumLayerMeasurementStrategy:
         builder.add_angle_encoding(modes=[0, 1], name="input")
         builder.add_entangling_layer(trainable=True, name="U2")
 
-        with pytest.raises(ValueError):
+        with pytest.raises(TypeError):
             layer = ML.QuantumLayer(
                 input_size=2,
-                output_size=20,
+                output_size=5, # cannot specify output_size
                 n_photons=1,
                 builder=builder,
                 measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,

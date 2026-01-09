@@ -16,19 +16,28 @@ def test_no_bunching_deprecation_in_init():
     assert layer.computation_space is ComputationSpace.UNBUNCHED
 
 
-def test_simple_no_bunching_converts_to_unbunched_and_no_warning():
-    """QuantumLayer.simple should accept no_bunching and convert it to computation_space without warning."""
-    # Capture warnings and ensure no DeprecationWarning is emitted by simple()
+def test_simple_no_bunching_deprecation_and_conversion():
+    """QuantumLayer.simple should warn on no_bunching and convert to computation_space."""
+    with pytest.warns(DeprecationWarning):
+        # Use n_params matching the entangling budget to avoid unrelated RuntimeWarning.
+        model = QuantumLayer.simple(input_size=1, n_params=90, no_bunching=True)
+
+    qlayer = model.quantum_layer
+    assert qlayer.computation_space == ComputationSpace.UNBUNCHED
+
+
+def test_simple_accepts_computation_space_without_warning():
     with warnings.catch_warnings(record=True) as rec:
         warnings.simplefilter("always")
-        model = QuantumLayer.simple(input_size=1, n_params=10, no_bunching=True)
+        model = QuantumLayer.simple(
+            input_size=1,
+            n_params=10,
+            computation_space=ComputationSpace.FOCK,
+        )
 
-    # Ensure no DeprecationWarning in the captured warnings
     assert not any(
         isinstance(w.message, DeprecationWarning) or w.category is DeprecationWarning
         for w in rec
     )
 
-    # The returned model wraps the actual QuantumLayer under attribute `quantum_layer`
-    qlayer = model.quantum_layer
-    assert qlayer.computation_space == ComputationSpace.UNBUNCHED
+    assert model.quantum_layer.computation_space == ComputationSpace.FOCK

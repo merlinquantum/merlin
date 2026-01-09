@@ -22,18 +22,12 @@
 
 from __future__ import annotations
 
-import warnings
-from collections.abc import Mapping
 from contextlib import contextmanager
-from typing import Any, ClassVar
 
 import torch.nn as nn
 
 
 class MerlinModule(nn.Module):
-    # Allow both tuple[str, bool] and str for backwards compatibility.
-    # Mapping[...] here lets subclasses override with a plain dict[...] safely.
-    _deprecated_params: ClassVar[Mapping[str, tuple[str, bool] | str]] = {}
     """Generic MerLin module with shared utility functions
 
     Merlin remote execution policy:
@@ -75,52 +69,7 @@ class MerlinModule(nn.Module):
         """Return True if this layer should be offloaded under current policy."""
         return self.supports_offload() and not self.force_local
 
-    @classmethod
-    def _validate_kwargs(cls, method_name: str, kwargs: dict[str, Any]) -> None:
-        if not kwargs:
-            return
-
-        deprecated_raise: list[str] = []
-        deprecated_warn: list[str] = []
-        unknown: list[str] = []
-
-        for key in sorted(kwargs):
-            full_name = f"{method_name}.{key}"
-            if full_name in cls._deprecated_params:
-                # support old-style str values for backwards compatibility
-                val = cls._deprecated_params[full_name]
-                if isinstance(val, tuple):
-                    message, raise_error = val
-                else:
-                    message, raise_error = (str(val), True)
-
-                if raise_error:
-                    deprecated_raise.append(
-                        f"Parameter '{key}' is deprecated. {message}"
-                    )
-                else:
-                    deprecated_warn.append(
-                        f"Parameter '{key}' is deprecated. {message}"
-                    )
-            else:
-                unknown.append(key)
-
-        # Emit non-fatal deprecation warnings
-        if deprecated_warn:
-            warnings.warn(" ".join(deprecated_warn), DeprecationWarning, stacklevel=2)
-
-        # Raise for deprecated parameters that are marked fatal
-        if deprecated_raise:
-            raise ValueError(" ".join(deprecated_raise))
-
-        if unknown:
-            unknown_list = ", ".join(unknown)
-            raise ValueError(
-                f"Unexpected keyword argument(s): {unknown_list}. "
-                f"Check the {cls} signature for supported parameters."
-            )
-
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
 
         # execution policy: when True, always simulate locally (do not offload)

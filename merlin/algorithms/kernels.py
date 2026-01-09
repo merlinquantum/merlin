@@ -451,7 +451,7 @@ class KernelCircuitBuilder:
     with various configurations, inspired by the core.layer architecture.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._input_size: int | None = None
         self._n_modes: int | None = None
         self._n_photons: int | None = None
