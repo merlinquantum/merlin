@@ -34,7 +34,9 @@ class StatePattern(Enum):
     PERIODIC = "periodic"
 
 
-def generate_state(n_modes: int, n_photons: int, state_pattern: StatePattern):
+def generate_state(
+    n_modes: int, n_photons: int, state_pattern: StatePattern
+) -> list[int]:
     """Generate an input occupation list for the requested pattern."""
     if n_photons < 0 or n_photons > n_modes:
         raise ValueError(f"Cannot place {n_photons} photons into {n_modes} modes.")
@@ -46,12 +48,10 @@ def generate_state(n_modes: int, n_photons: int, state_pattern: StatePattern):
     if state_pattern in (StatePattern.PERIODIC, StatePattern.DEFAULT):
         return _generate_periodic_state(n_modes, n_photons)
 
-    # Fallback to periodic with a warning printed for visibility.
-    print(f"Warning: Unknown state pattern '{state_pattern}'. Using PERIODIC.")
-    return _generate_periodic_state(n_modes, n_photons)
+    raise ValueError(f"Unknown state pattern: {state_pattern}")
 
 
-def _generate_spaced_state(n_modes: int, n_photons: int):
+def _generate_spaced_state(n_modes: int, n_photons: int) -> list[int]:
     if n_photons == 0:
         return [0] * n_modes
     if n_photons == 1:
@@ -66,7 +66,7 @@ def _generate_spaced_state(n_modes: int, n_photons: int):
     return occ
 
 
-def _generate_periodic_state(n_modes: int, n_photons: int):
+def _generate_periodic_state(n_modes: int, n_photons: int) -> list[int]:
     bits = [1 if i % 2 == 0 else 0 for i in range(min(n_photons * 2, n_modes))]
     count = sum(bits)
     i = 0
@@ -81,7 +81,7 @@ def _generate_periodic_state(n_modes: int, n_photons: int):
     return bits + padding
 
 
-def _generate_sequential_state(n_modes: int, n_photons: int):
+def _generate_sequential_state(n_modes: int, n_photons: int) -> list[int]:
     return [1 if i < n_photons else 0 for i in range(n_modes)]
 
 
