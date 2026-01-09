@@ -12,11 +12,9 @@ The Jira–GitHub integration will link PRs/commits automatically when the key i
 ## Summary
 <!-- What does this PR do? A clear, concise description. -->
 
-## Related Jira ticket (required)
-<!-- Use the Jira issue key ONLY (no URL), e.g.:
-Related Jira: PML-126
--->
-Related Jira:
+## Related Issue
+   <!-- For internal contributors: Use Jira key (e.g., Related Jira: PML-126)
+        For external contributors: Link to GitHub issue if applicable -->
 
 ## Context / Related Issues
 <!-- Why do you do this PR ? Is it linked to a previous PR ? A clear, concise description. -->
