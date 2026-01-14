@@ -27,7 +27,13 @@ import torch
 
 import merlin as ML
 from merlin.core.computation_space import ComputationSpace
-from merlin.measurement.strategies import MeasurementStrategy
+from merlin.measurement.strategies import (
+    AmplitudesStrategy,
+    MeasurementStrategy,
+    ModeExpectationsStrategy,
+    ProbabilitiesStrategy,
+    resolve_measurement_strategy,
+)
 
 
 class TestQuantumLayerMeasurementStrategy:
@@ -341,6 +347,118 @@ class TestQuantumLayerMeasurementStrategy:
         # Ensure that it is normalized
         assert torch.allclose(
             torch.sum(output.abs() ** 2, dim=-1), torch.ones(output.shape[0]), atol=1e-6
+        )
+
+
+def test_resolve_measurement_strategy():
+    assert isinstance(
+        resolve_measurement_strategy(MeasurementStrategy.PROBABILITIES),
+        ProbabilitiesStrategy,
+    )
+    assert isinstance(
+        resolve_measurement_strategy(MeasurementStrategy.MODE_EXPECTATIONS),
+        ModeExpectationsStrategy,
+    )
+    assert isinstance(
+        resolve_measurement_strategy(MeasurementStrategy.AMPLITUDES),
+        AmplitudesStrategy,
+    )
+
+
+def test_probabilities_strategy_applies_transforms_and_sampling():
+    strategy = ProbabilitiesStrategy()
+    distribution = torch.tensor([1.0])
+    amplitudes = torch.tensor([0.5])
+
+    def apply_photon_loss(dist: torch.Tensor) -> torch.Tensor:
+        return dist * 2.0
+
+    def apply_detectors(dist: torch.Tensor) -> torch.Tensor:
+        return dist + 1.0
+
+    def sample_fn(dist: torch.Tensor, shots: int) -> torch.Tensor:
+        assert torch.allclose(dist, torch.tensor([3.0]))
+        assert shots == 5
+        return dist * 0 + shots
+
+    result = strategy.process(
+        distribution=distribution,
+        amplitudes=amplitudes,
+        apply_sampling=True,
+        effective_shots=5,
+        sample_fn=sample_fn,
+        apply_photon_loss=apply_photon_loss,
+        apply_detectors=apply_detectors,
+    )
+
+    assert torch.allclose(result, torch.tensor([5.0]))
+
+
+def test_mode_expectations_strategy_skips_sampling_when_disabled():
+    strategy = ModeExpectationsStrategy()
+    distribution = torch.tensor([2.0])
+    amplitudes = torch.tensor([0.25])
+    sample_called = False
+
+    def apply_photon_loss(dist: torch.Tensor) -> torch.Tensor:
+        return dist * 3.0
+
+    def apply_detectors(dist: torch.Tensor) -> torch.Tensor:
+        return dist - 1.0
+
+    def sample_fn(dist: torch.Tensor, shots: int) -> torch.Tensor:
+        nonlocal sample_called
+        sample_called = True
+        return dist
+
+    result = strategy.process(
+        distribution=distribution,
+        amplitudes=amplitudes,
+        apply_sampling=False,
+        effective_shots=10,
+        sample_fn=sample_fn,
+        apply_photon_loss=apply_photon_loss,
+        apply_detectors=apply_detectors,
+    )
+
+    assert sample_called is False
+    assert torch.allclose(result, torch.tensor([5.0]))
+
+
+def test_amplitudes_strategy_returns_amplitudes_and_blocks_sampling():
+    strategy = AmplitudesStrategy()
+    distribution = torch.tensor([1.0])
+    amplitudes = torch.tensor([0.75])
+
+    def apply_photon_loss(dist: torch.Tensor) -> torch.Tensor:
+        raise AssertionError("Photon loss transform should not be called.")
+
+    def apply_detectors(dist: torch.Tensor) -> torch.Tensor:
+        raise AssertionError("Detector transform should not be called.")
+
+    def sample_fn(dist: torch.Tensor, shots: int) -> torch.Tensor:
+        raise AssertionError("Sampling should not be called.")
+
+    result = strategy.process(
+        distribution=distribution,
+        amplitudes=amplitudes,
+        apply_sampling=False,
+        effective_shots=0,
+        sample_fn=sample_fn,
+        apply_photon_loss=apply_photon_loss,
+        apply_detectors=apply_detectors,
+    )
+    assert torch.allclose(result, amplitudes)
+
+    with pytest.raises(RuntimeError):
+        strategy.process(
+            distribution=distribution,
+            amplitudes=amplitudes,
+            apply_sampling=True,
+            effective_shots=1,
+            sample_fn=sample_fn,
+            apply_photon_loss=apply_photon_loss,
+            apply_detectors=apply_detectors,
         )
 
         # QuantumLayer's output_size is accessible and equal to the number of possible Fock states

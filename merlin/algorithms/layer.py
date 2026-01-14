@@ -772,26 +772,16 @@ class QuantumLayer(MerlinModule):
                     ),
                     amplitudes,
                 )
-        if self.measurement_strategy in (
-            MeasurementStrategy.PROBABILITIES,
-            MeasurementStrategy.MODE_EXPECTATIONS,
-        ):
-            distribution = self._apply_photon_loss_transform(distribution)
-            distribution = self._apply_detector_transform(distribution)
-
-            # Apply sampling if requested
-            if apply_sampling and effective_shots > 0:
-                results = adp.sampling_noise.pcvl_sampler(distribution, effective_shots)
-            else:
-                results = distribution
-
-        # For MeasurementStrategy.AMPLITUDES, bypass detectors and sampling
-        else:
-            if apply_sampling:
-                raise RuntimeError(
-                    "Sampling cannot be applied when measurement_strategy=MeasurementStrategy.AMPLITUDES."
-                )
-            results = amplitudes
+        strategy = resolve_measurement_strategy(self.measurement_strategy)
+        results = strategy.process(
+            distribution=distribution,
+            amplitudes=amplitudes,
+            apply_sampling=apply_sampling,
+            effective_shots=effective_shots,
+            sample_fn=adp.sampling_noise.pcvl_sampler,
+            apply_photon_loss=self._apply_photon_loss_transform,
+            apply_detectors=self._apply_detector_transform,
+        )
 
         # Apply measurement mapping (returns tensor of shape [B, output_size])
         return self.measurement_mapping(results)
@@ -944,9 +934,11 @@ class QuantumLayer(MerlinModule):
             "output_size": self.output_size,
             "input_state": getattr(self, "input_state", None),
             "n_modes": exported_circuit.m,
-            "n_photons": sum(getattr(self, "input_state", []) or [])
-            if hasattr(self, "input_state")
-            else None,
+            "n_photons": (
+                sum(getattr(self, "input_state", []) or [])
+                if hasattr(self, "input_state")
+                else None
+            ),
             "trainable_parameters": list(self.trainable_parameters),
             "input_parameters": list(self.input_parameters),
             "noise_model": self.noise_model,

@@ -23,6 +23,9 @@
 """Measurement strategy definitions for quantum-to-classical conversion."""
 
 from enum import Enum
+from typing import Callable
+
+import torch
 
 
 class MeasurementStrategy(Enum):
@@ -31,3 +34,96 @@ class MeasurementStrategy(Enum):
     PROBABILITIES = "probabilities"
     MODE_EXPECTATIONS = "mode_expectations"
     AMPLITUDES = "amplitudes"
+
+
+class BaseMeasurementStrategy:
+    """Base interface for measurement post-processing strategies."""
+
+    def supports_sampling(self) -> bool:
+        """Return whether the strategy can apply sampling to distributions."""
+        return False
+
+    def process(
+        self,
+        *,
+        distribution: torch.Tensor,
+        amplitudes: torch.Tensor,
+        apply_sampling: bool,
+        effective_shots: int,
+        sample_fn: Callable[[torch.Tensor, int], torch.Tensor],
+        apply_photon_loss: Callable[[torch.Tensor], torch.Tensor],
+        apply_detectors: Callable[[torch.Tensor], torch.Tensor],
+    ) -> torch.Tensor:
+        """Return the processed result for the selected measurement strategy."""
+        raise NotImplementedError
+
+
+class DistributionStrategy(BaseMeasurementStrategy):
+    """Shared logic for distribution-based strategies."""
+
+    def supports_sampling(self) -> bool:
+        return True
+
+    def process(
+        self,
+        *,
+        distribution: torch.Tensor,
+        amplitudes: torch.Tensor,
+        apply_sampling: bool,
+        effective_shots: int,
+        sample_fn: Callable[[torch.Tensor, int], torch.Tensor],
+        apply_photon_loss: Callable[[torch.Tensor], torch.Tensor],
+        apply_detectors: Callable[[torch.Tensor], torch.Tensor],
+    ) -> torch.Tensor:
+        # Distribution strategies apply detector/noise transforms before sampling.
+        distribution = apply_photon_loss(distribution)
+        distribution = apply_detectors(distribution)
+
+        if apply_sampling and effective_shots > 0:
+            return sample_fn(distribution, effective_shots)
+        return distribution
+
+
+class ProbabilitiesStrategy(DistributionStrategy):
+    """Return output probabilities (optionally sampled)."""
+    pass
+
+
+class ModeExpectationsStrategy(DistributionStrategy):
+    """Return per-mode expectations (optionally sampled)."""
+    pass
+
+
+class AmplitudesStrategy(BaseMeasurementStrategy):
+    """Return raw amplitudes (sampling is not supported)."""
+
+    def process(
+        self,
+        *,
+        distribution: torch.Tensor,
+        amplitudes: torch.Tensor,
+        apply_sampling: bool,
+        effective_shots: int,
+        sample_fn: Callable[[torch.Tensor, int], torch.Tensor],
+        apply_photon_loss: Callable[[torch.Tensor], torch.Tensor],
+        apply_detectors: Callable[[torch.Tensor], torch.Tensor],
+    ) -> torch.Tensor:
+        # Amplitudes bypass detectors, photon loss, and sampling.
+        if apply_sampling:
+            raise RuntimeError(
+                "Sampling cannot be applied when measurement_strategy=MeasurementStrategy.AMPLITUDES."
+            )
+        return amplitudes
+
+
+def resolve_measurement_strategy(
+    measurement_strategy: MeasurementStrategy,
+) -> BaseMeasurementStrategy:
+    """Return the concrete strategy implementation for the enum value."""
+    if measurement_strategy == MeasurementStrategy.PROBABILITIES:
+        return ProbabilitiesStrategy()
+    if measurement_strategy == MeasurementStrategy.MODE_EXPECTATIONS:
+        return ModeExpectationsStrategy()
+    if measurement_strategy == MeasurementStrategy.AMPLITUDES:
+        return AmplitudesStrategy()
+    raise TypeError(f"Unknown measurement_strategy: {measurement_strategy}")
