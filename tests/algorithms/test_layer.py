@@ -342,6 +342,81 @@ class TestQuantumLayer:
         assert batch_dim == 2
         assert len(params) >= 2
 
+    def test_amplitude_encoding_rejects_classical_input_parameters(self):
+        """Amplitude encoding should not allow classical input parameters."""
+        # TODO: to remove when dual encoding will be implemented (>0.4.x)
+        circuit = pcvl.Circuit(2)
+        with pytest.raises(
+            ValueError,
+            match="Amplitude encoding cannot be combined with classical input parameters.",
+        ):
+            ML.QuantumLayer(
+                circuit=circuit,
+                n_photons=1,
+                amplitude_encoding=True,
+                input_parameters=["px"],
+                trainable_parameters=[],
+                measurement_strategy=ML.MeasurementStrategy.AMPLITUDES,
+            )
+
+    def test_amplitude_encoding_requires_amplitude_input(self):
+        """Amplitude encoding should require an amplitude tensor at call time."""
+        circuit = pcvl.Circuit(2)
+        layer = ML.QuantumLayer(
+            circuit=circuit,
+            n_photons=1,
+            amplitude_encoding=True,
+            measurement_strategy=ML.MeasurementStrategy.AMPLITUDES,
+            trainable_parameters=[],
+            input_parameters=[],
+        )
+
+        with pytest.raises(ValueError, match="expects an amplitude tensor input"):
+            layer()
+
+    def test_multiple_classical_inputs_forward(self):
+        """Classical encoding should accept one tensor per input prefix."""
+        builder = ML.CircuitBuilder(n_modes=4)
+        builder.add_entangling_layer(trainable=True, name="U1")
+        builder.add_angle_encoding(modes=[0, 1], name="input_a")
+        builder.add_angle_encoding(modes=[2, 3], name="input_b")
+
+        layer = ML.QuantumLayer(
+            input_size=4,
+            input_state=[1, 0, 1, 0],
+            builder=builder,
+            measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+        )
+
+        input_a = torch.rand(2, 2)
+        input_b = torch.rand(2, 2)
+        output = layer(input_a, input_b)
+        assert output.shape == (2, layer.output_size)
+
+        prefixes = list(layer.computation_process.input_parameters)
+        assert prefixes == ["input_a", "input_b"]
+        params = layer.prepare_parameters([input_a, input_b])
+        encoded_a = layer._prepare_input_encoding(input_a, prefixes[0])
+        encoded_b = layer._prepare_input_encoding(input_b, prefixes[1])
+        assert torch.allclose(params[-2], encoded_a)
+        assert torch.allclose(params[-1], encoded_b)
+
+    def test_builder_infers_input_size_for_backward_compat(self):
+        """Builder-based layers should infer input_size when omitted."""
+        builder = ML.CircuitBuilder(n_modes=3)
+        builder.add_angle_encoding(modes=[0, 1], name="input")
+        builder.add_entangling_layer(trainable=True, name="U1")
+
+        layer = ML.QuantumLayer(
+            builder=builder,
+            input_state=[1, 0, 0],
+            measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+        )
+
+        assert layer.input_size == 2
+        output = layer(torch.rand(1, 2))
+        assert output.shape == (1, layer.output_size)
+
     def test_forward_pass_single(self):
         """Test forward pass with single input."""
         builder = ML.CircuitBuilder(n_modes=4)
