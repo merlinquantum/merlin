@@ -288,15 +288,16 @@ class TestQuantumLayer:
             trainable_parameters=[],
             input_parameters=[],
         )
-        #TODO: will need to be updated to StateVector when implemented
+        # TODO: will need to be updated to StateVector when implemented
         original_state = torch.tensor([0.0])
         layer.computation_process.input_state = original_state
 
         amplitude = torch.rand(len(layer.output_keys))
         remaining_input = torch.rand(2)
-        amplitude_out, remaining, saved_state = layer._prepare_amplitude_input(
-            [amplitude, remaining_input]
-        )
+        amplitude_out, remaining, saved_state = layer._prepare_amplitude_input([
+            amplitude,
+            remaining_input,
+        ])
 
         assert saved_state is original_state
         assert remaining[0] is remaining_input
@@ -317,9 +318,7 @@ class TestQuantumLayer:
         )
 
         with pytest.raises(ValueError, match="Inconsistent batch dimensions"):
-            layer._prepare_classical_parameters(
-                [torch.rand(2, 2), torch.rand(3, 2)]
-            )
+            layer._prepare_classical_parameters([torch.rand(2, 2), torch.rand(3, 2)])
 
     def test_prepare_classical_parameters_reports_batch_dim(self):
         """Classical parameter helper should report batch size when consistent."""
@@ -335,9 +334,10 @@ class TestQuantumLayer:
             measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
         )
 
-        params, batch_dim = layer._prepare_classical_parameters(
-            [torch.rand(2, 2), torch.rand(2, 2)]
-        )
+        params, batch_dim = layer._prepare_classical_parameters([
+            torch.rand(2, 2),
+            torch.rand(2, 2),
+        ])
 
         assert batch_dim == 2
         assert len(params) >= 2

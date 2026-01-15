@@ -306,7 +306,8 @@ class TestFidelityKernel:
         )
 
         feature_forward = (
-            feature_map.compute_unitary(torch.as_tensor(X1, dtype=feature_map.dtype))
+            feature_map
+            .compute_unitary(torch.as_tensor(X1, dtype=feature_map.dtype))
             .detach()
             .cpu()
             .numpy()
@@ -321,7 +322,8 @@ class TestFidelityKernel:
         )
 
         feature_backward = (
-            feature_map.compute_unitary(torch.as_tensor(X2, dtype=feature_map.dtype))
+            feature_map
+            .compute_unitary(torch.as_tensor(X2, dtype=feature_map.dtype))
             .detach()
             .cpu()
             .numpy()
@@ -613,7 +615,8 @@ class TestKernelCircuitBuilder:
         device = torch.device("cpu")
         builder = KernelCircuitBuilder()
         feature_map = (
-            builder.input_size(2)
+            builder
+            .input_size(2)
             .n_modes(4)
             .device(device)
             .dtype(torch.float64)
@@ -634,7 +637,8 @@ class TestKernelCircuitBuilder:
         assert not feature_map.is_trainable
 
         feature_map = (
-            builder.input_size(2)
+            builder
+            .input_size(2)
             .n_modes(4)
             .trainable(True, prefix="phi_")
             .build_feature_map()
@@ -659,7 +663,8 @@ class TestKernelCircuitBuilder:
         builder = KernelCircuitBuilder()
         custom_state = [2, 0, 0, 0]
         kernel = (
-            builder.input_size(2)
+            builder
+            .input_size(2)
             .n_modes(4)
             .build_fidelity_kernel(input_state=custom_state)
         )
@@ -670,7 +675,8 @@ class TestKernelCircuitBuilder:
         """Test building FidelityKernel with sampling configuration."""
         builder = KernelCircuitBuilder()
         kernel = (
-            builder.input_size(2)
+            builder
+            .input_size(2)
             .n_modes(4)
             .build_fidelity_kernel(
                 shots=1000, sampling_method="multinomial", no_bunching=True
@@ -693,7 +699,8 @@ class TestKernelCircuitBuilder:
     def test_builder_angle_encoding_configuration(self):
         builder = KernelCircuitBuilder()
         feature_map = (
-            builder.input_size(3)
+            builder
+            .input_size(3)
             .n_modes(4)
             .angle_encoding(scale=0.5)
             .build_feature_map()
@@ -807,7 +814,8 @@ class TestKernelConstructionConsistency:
         # Builder API
         builder_api = KernelCircuitBuilder()
         k_builder = (
-            builder_api.input_size(2)
+            builder_api
+            .input_size(2)
             .n_modes(4)
             .trainable(False)
             .build_fidelity_kernel()
@@ -930,10 +938,12 @@ def create_quantum_circuit(m, size=400):
 
     wl = pcvl.GenericInterferometer(
         m,
-        lambda i: pcvl.BS()
-        // pcvl.PS(pcvl.P(f"phase_1_{i}"))
-        // pcvl.BS()
-        // pcvl.PS(pcvl.P(f"phase_2_{i}")),
+        lambda i: (
+            pcvl.BS()
+            // pcvl.PS(pcvl.P(f"phase_1_{i}"))
+            // pcvl.BS()
+            // pcvl.PS(pcvl.P(f"phase_2_{i}"))
+        ),
         shape=pcvl.InterferometerShape.RECTANGLE,
     )
 
@@ -948,10 +958,12 @@ def create_quantum_circuit(m, size=400):
 
     wr = pcvl.GenericInterferometer(
         m,
-        lambda i: pcvl.BS()
-        // pcvl.PS(pcvl.P(f"phase_3_{i}"))
-        // pcvl.BS()
-        // pcvl.PS(pcvl.P(f"phase_4_{i}")),
+        lambda i: (
+            pcvl.BS()
+            // pcvl.PS(pcvl.P(f"phase_3_{i}"))
+            // pcvl.BS()
+            // pcvl.PS(pcvl.P(f"phase_4_{i}"))
+        ),
         shape=pcvl.InterferometerShape.RECTANGLE,
     )
 
@@ -1244,7 +1256,8 @@ def test_iris_with_supported_constructors():
         try:
             builder = KernelCircuitBuilder()
             kernel_builder = (
-                builder.input_size(4)
+                builder
+                .input_size(4)
                 .n_modes(4)
                 .trainable(trainable_flag)
                 .build_fidelity_kernel()

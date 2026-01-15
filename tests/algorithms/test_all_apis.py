@@ -114,10 +114,12 @@ def test_manual_pcvl_circuit_pipeline_on_iris(iris_batch):
 
     wl = pcvl.GenericInterferometer(
         4,
-        lambda i: pcvl.BS()
-        // pcvl.PS(pcvl.P(f"theta_li{i}"))
-        // pcvl.BS()
-        // pcvl.PS(pcvl.P(f"theta_lo{i}")),
+        lambda i: (
+            pcvl.BS()
+            // pcvl.PS(pcvl.P(f"theta_li{i}"))
+            // pcvl.BS()
+            // pcvl.PS(pcvl.P(f"theta_lo{i}"))
+        ),
         shape=pcvl.InterferometerShape.RECTANGLE,
     )
     circuit = pcvl.Circuit(4)
@@ -127,10 +129,12 @@ def test_manual_pcvl_circuit_pipeline_on_iris(iris_batch):
 
     wr = pcvl.GenericInterferometer(
         4,
-        lambda i: pcvl.BS()
-        // pcvl.PS(pcvl.P(f"theta_ri{i}"))
-        // pcvl.BS()
-        // pcvl.PS(pcvl.P(f"theta_ro{i}")),
+        lambda i: (
+            pcvl.BS()
+            // pcvl.PS(pcvl.P(f"theta_ri{i}"))
+            // pcvl.BS()
+            // pcvl.PS(pcvl.P(f"theta_ro{i}"))
+        ),
         shape=pcvl.InterferometerShape.RECTANGLE,
     )
 

@@ -21,13 +21,14 @@
 # SOFTWARE.
 
 
+from typing import Any
+
 import perceval as pcvl
 import pytest
 import torch
 
 import merlin as ML
 from merlin.core.computation_space import ComputationSpace
-from typing import Any
 from merlin.measurement.strategies import (
     AmplitudesStrategy,
     MeasurementStrategy,
@@ -152,7 +153,7 @@ class TestQuantumLayerMeasurementStrategy:
         with pytest.raises(TypeError):
             layer = ML.QuantumLayer(
                 input_size=2,
-                output_size=5, # cannot specify output_size
+                output_size=5,  # cannot specify output_size
                 n_photons=1,
                 builder=builder,
                 measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
@@ -350,6 +351,48 @@ class TestQuantumLayerMeasurementStrategy:
             torch.sum(output.abs() ** 2, dim=-1), torch.ones(output.shape[0]), atol=1e-6
         )
 
+        # QuantumLayer's output_size is accessible and equal to the number of possible Fock states
+        layer = ML.QuantumLayer(
+            input_size=2,
+            n_photons=1,
+            builder=builder,
+            measurement_strategy=ML.MeasurementStrategy.AMPLITUDES,
+        )
+        x = torch.rand(2, 2, requires_grad=True)
+        output = layer(x)
+        assert output.shape[-1] == layer.output_size
+        assert torch.allclose(
+            torch.sum(output.abs() ** 2, dim=-1), torch.ones(output.shape[0]), atol=1e-6
+        )
+
+        # Works with full QuantumLayer API
+        circuit = pcvl.Circuit(3)
+        circuit.add(0, pcvl.BS(pcvl.P("px_0")))
+        circuit.add(1, pcvl.BS(pcvl.P("px_1")))
+        input_state = [1, 1, 0]
+        layer = ML.QuantumLayer(
+            input_size=2,
+            circuit=circuit,
+            input_state=input_state,
+            trainable_parameters=[],
+            input_parameters=["px"],
+            measurement_strategy=MeasurementStrategy.AMPLITUDES,
+        )
+        x = torch.rand(2, 2, requires_grad=True)
+        output = layer(x)
+        assert output.shape[-1] == layer.output_size
+
+        # Backprop compatibility
+        probs = output.abs().pow(2)
+        targets = torch.ones_like(probs)
+        loss = torch.sum(targets - probs)
+        loss.backward()
+        assert x.grad is not None
+
+        assert torch.allclose(
+            torch.sum(output.abs() ** 2, dim=-1), torch.ones(output.shape[0]), atol=1e-6
+        )
+
 
 def test_resolve_measurement_strategy():
     assert isinstance(
@@ -460,48 +503,6 @@ def test_amplitudes_strategy_returns_amplitudes_and_blocks_sampling():
             sample_fn=sample_fn,
             apply_photon_loss=apply_photon_loss,
             apply_detectors=apply_detectors,
-        )
-
-        # QuantumLayer's output_size is accessible and equal to the number of possible Fock states
-        layer = ML.QuantumLayer(
-            input_size=2,
-            n_photons=1,
-            builder=builder,
-            measurement_strategy=ML.MeasurementStrategy.AMPLITUDES,
-        )
-        x = torch.rand(2, 2, requires_grad=True)
-        output = layer(x)
-        assert output.shape[-1] == layer.output_size
-        assert torch.allclose(
-            torch.sum(output.abs() ** 2, dim=-1), torch.ones(output.shape[0]), atol=1e-6
-        )
-
-        # Works with full QuantumLayer API
-        circuit = pcvl.Circuit(3)
-        circuit.add(0, pcvl.BS(pcvl.P("px_0")))
-        circuit.add(1, pcvl.BS(pcvl.P("px_1")))
-        input_state = [1, 1, 0]
-        layer = ML.QuantumLayer(
-            input_size=2,
-            circuit=circuit,
-            input_state=input_state,
-            trainable_parameters=[],
-            input_parameters=["px"],
-            measurement_strategy=MeasurementStrategy.AMPLITUDES,
-        )
-        x = torch.rand(2, 2, requires_grad=True)
-        output = layer(x)
-        assert output.shape[-1] == layer.output_size
-
-        # Backprop compatibility
-        probs = output.abs().pow(2)
-        targets = torch.ones_like(probs)
-        loss = torch.sum(targets - probs)
-        loss.backward()
-        assert x.grad is not None
-
-        assert torch.allclose(
-            torch.sum(output.abs() ** 2, dim=-1), torch.ones(output.shape[0]), atol=1e-6
         )
 
 

@@ -22,8 +22,8 @@
 
 """Measurement strategy definitions for quantum-to-classical conversion."""
 
+from collections.abc import Callable
 from enum import Enum
-from typing import Callable
 
 import torch
 
@@ -86,11 +86,13 @@ class DistributionStrategy(BaseMeasurementStrategy):
 
 class ProbabilitiesStrategy(DistributionStrategy):
     """Return output probabilities (optionally sampled)."""
+
     pass
 
 
 class ModeExpectationsStrategy(DistributionStrategy):
     """Return per-mode expectations (optionally sampled)."""
+
     pass
 
 

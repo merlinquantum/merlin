@@ -619,10 +619,12 @@ def test_ebs_wrt_quantumlayer(
     # define circuit
     circuit = pcvl.GenericInterferometer(
         m,
-        lambda i: pcvl.BS()
-        // pcvl.PS(phi=np.pi / 4 * i)
-        // pcvl.BS()
-        // pcvl.PS(phi=np.pi / 8 * i),
+        lambda i: (
+            pcvl.BS()
+            // pcvl.PS(phi=np.pi / 4 * i)
+            // pcvl.BS()
+            // pcvl.PS(phi=np.pi / 8 * i)
+        ),
         shape=pcvl.InterferometerShape.RECTANGLE,
     )
     n_photons = m // 2
