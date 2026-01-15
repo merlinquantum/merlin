@@ -277,6 +277,71 @@ class TestQuantumLayer:
         assert output.shape == (10, 3)
         assert torch.all(output >= -1e6)  # More reasonable bounds for quantum outputs
 
+    def test_prepare_amplitude_input_updates_state_and_splits_inputs(self):
+        """Amplitude input helper should update state and return remaining inputs."""
+        circuit = pcvl.Circuit(2)
+        layer = ML.QuantumLayer(
+            circuit=circuit,
+            n_photons=1,
+            amplitude_encoding=True,
+            measurement_strategy=ML.MeasurementStrategy.AMPLITUDES,
+            trainable_parameters=[],
+            input_parameters=[],
+        )
+        #TODO: will need to be updated to StateVector when implemented
+        original_state = torch.tensor([0.0])
+        layer.computation_process.input_state = original_state
+
+        amplitude = torch.rand(len(layer.output_keys))
+        remaining_input = torch.rand(2)
+        amplitude_out, remaining, saved_state = layer._prepare_amplitude_input(
+            [amplitude, remaining_input]
+        )
+
+        assert saved_state is original_state
+        assert remaining[0] is remaining_input
+        assert torch.allclose(amplitude_out, amplitude)
+        assert torch.allclose(layer.computation_process.input_state, amplitude_out)
+
+    def test_prepare_classical_parameters_detects_batch_mismatch(self):
+        """Classical parameter helper should reject mismatched batch sizes."""
+        builder = ML.CircuitBuilder(n_modes=4)
+        builder.add_angle_encoding(modes=[0, 1], name="input_a")
+        builder.add_angle_encoding(modes=[2, 3], name="input_b")
+
+        layer = ML.QuantumLayer(
+            input_size=4,
+            input_state=[1, 0, 1, 0],
+            builder=builder,
+            measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+        )
+
+        with pytest.raises(ValueError, match="Inconsistent batch dimensions"):
+            layer._prepare_classical_parameters(
+                [torch.rand(2, 2), torch.rand(3, 2)]
+            )
+
+    def test_prepare_classical_parameters_reports_batch_dim(self):
+        """Classical parameter helper should report batch size when consistent."""
+        builder = ML.CircuitBuilder(n_modes=4)
+        builder.add_entangling_layer(trainable=True, name="U1")
+        builder.add_angle_encoding(modes=[0, 1], name="input_a")
+        builder.add_angle_encoding(modes=[2, 3], name="input_b")
+
+        layer = ML.QuantumLayer(
+            input_size=4,
+            input_state=[1, 0, 1, 0],
+            builder=builder,
+            measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+        )
+
+        params, batch_dim = layer._prepare_classical_parameters(
+            [torch.rand(2, 2), torch.rand(2, 2)]
+        )
+
+        assert batch_dim == 2
+        assert len(params) >= 2
+
     def test_forward_pass_single(self):
         """Test forward pass with single input."""
         builder = ML.CircuitBuilder(n_modes=4)
