@@ -27,6 +27,7 @@ import torch
 
 import merlin as ML
 from merlin.core.computation_space import ComputationSpace
+from typing import Any
 from merlin.measurement.strategies import (
     AmplitudesStrategy,
     MeasurementStrategy,
@@ -502,3 +503,137 @@ def test_amplitudes_strategy_returns_amplitudes_and_blocks_sampling():
         assert torch.allclose(
             torch.sum(output.abs() ** 2, dim=-1), torch.ones(output.shape[0]), atol=1e-6
         )
+
+
+class _DummyComputationProcess:
+    def __init__(self):
+        self.input_state = None
+        self.called = None
+        self.last_simultaneous_processes = None
+
+    def compute_ebs_simultaneously(self, params, simultaneous_processes):
+        self.called = "ebs"
+        self.last_simultaneous_processes = simultaneous_processes
+        return torch.tensor([float(simultaneous_processes)])
+
+    def compute_superposition_state(self, params):
+        self.called = "superposition"
+        return torch.tensor([1.0])
+
+    def compute(self, params):
+        self.called = "compute"
+        return torch.tensor([2.0])
+
+
+def _build_test_layer(amplitude_encoding: bool = False) -> ML.QuantumLayer:
+    builder = ML.CircuitBuilder(n_modes=2)
+    builder.add_entangling_layer(trainable=True, name="U1")
+    kwargs: dict[str, Any] = {"builder": builder}
+    if amplitude_encoding:
+        kwargs["amplitude_encoding"] = True
+        kwargs["n_photons"] = 1
+    else:
+        builder.add_angle_encoding(modes=[0, 1], name="input")
+        kwargs["input_size"] = 2
+        kwargs["n_photons"] = 1
+    return ML.QuantumLayer(**kwargs)
+
+
+def test_compute_amplitudes_helper_prefers_amplitude_ebs_path():
+    layer = _build_test_layer(amplitude_encoding=True)
+    stub = _DummyComputationProcess()
+    layer.computation_process = stub
+
+    inferred_state = torch.ones(4)
+    result = layer._compute_amplitudes(
+        params=[torch.tensor([0.0])],
+        inferred_state=inferred_state,
+        parameter_batch_dim=0,
+        simultaneous_processes=None,
+    )
+
+    assert stub.called == "ebs"
+    assert stub.last_simultaneous_processes == 1
+    assert torch.allclose(result, torch.tensor([1.0]))
+
+
+def test_compute_amplitudes_helper_uses_across_batch_when_requested():
+    layer = _build_test_layer(amplitude_encoding=True)
+    stub = _DummyComputationProcess()
+    layer.computation_process = stub
+
+    inferred_state = torch.ones(3, 5)
+    result = layer._compute_amplitudes(
+        params=[torch.tensor([0.0])],
+        inferred_state=inferred_state,
+        parameter_batch_dim=0,
+        simultaneous_processes=4,
+    )
+
+    assert stub.called == "ebs"
+    assert stub.last_simultaneous_processes == 4
+    assert torch.allclose(result, torch.tensor([4.0]))
+
+
+def test_compute_amplitudes_helper_handles_missing_state_in_amplitude_mode():
+    layer = _build_test_layer(amplitude_encoding=True)
+    layer.computation_process = _DummyComputationProcess()
+
+    with pytest.raises(TypeError):
+        layer._compute_amplitudes(
+            params=[torch.tensor([0.0])],
+            inferred_state=None,
+            parameter_batch_dim=0,
+            simultaneous_processes=None,
+        )
+
+
+def test_compute_amplitudes_helper_batches_classical_inputs():
+    layer = _build_test_layer()
+    stub = _DummyComputationProcess()
+    layer.computation_process = stub
+
+    inferred_state = torch.ones(2, 6)
+    result = layer._compute_amplitudes(
+        params=[torch.tensor([0.0])],
+        inferred_state=inferred_state,
+        parameter_batch_dim=2,
+        simultaneous_processes=None,
+    )
+
+    assert stub.called == "ebs"
+    assert stub.last_simultaneous_processes == inferred_state.shape[-1]
+    assert torch.allclose(result, torch.tensor([6.0]))
+
+
+def test_compute_amplitudes_helper_uses_superposition_when_unbatched():
+    layer = _build_test_layer()
+    stub = _DummyComputationProcess()
+    layer.computation_process = stub
+
+    inferred_state = torch.ones(3, 2)
+    result = layer._compute_amplitudes(
+        params=[torch.tensor([0.0])],
+        inferred_state=inferred_state,
+        parameter_batch_dim=0,
+        simultaneous_processes=None,
+    )
+
+    assert stub.called == "superposition"
+    assert torch.allclose(result, torch.tensor([1.0]))
+
+
+def test_compute_amplitudes_helper_delegates_to_compute_when_state_missing():
+    layer = _build_test_layer()
+    stub = _DummyComputationProcess()
+    layer.computation_process = stub
+
+    result = layer._compute_amplitudes(
+        params=[torch.tensor([0.0])],
+        inferred_state=None,
+        parameter_batch_dim=0,
+        simultaneous_processes=None,
+    )
+
+    assert stub.called == "compute"
+    assert torch.allclose(result, torch.tensor([2.0]))
