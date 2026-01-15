@@ -548,6 +548,7 @@ def test_amplitudes_strategy_rejects_sampling_in_layer():
         builder=builder,
         measurement_strategy=ML.MeasurementStrategy.AMPLITUDES,
     )
+    layer.eval()
     x = torch.rand(2, 2)
 
     with pytest.raises(RuntimeError, match="Sampling cannot be applied"):
