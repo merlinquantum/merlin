@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import warnings
 from collections.abc import Iterable, Sequence
+from contextlib import contextmanager
 from typing import Any, cast
 
 import perceval as pcvl
@@ -656,27 +657,23 @@ class QuantumLayer(MerlinModule):
         # Phase 2: Parameter assembly for circuit execution.
         params, parameter_batch_dim = self._prepare_classical_parameters(inputs)
         # Phase 3: Resolve computation path and evaluate the circuit.
-        # TODO: input_state should support StateVector
-        raw_inferred_state = getattr(self.computation_process, "input_state", None)
-        # normalize the retrieved input_state to an optional tensor an
-        inferred_state: torch.Tensor | None
-        if isinstance(raw_inferred_state, torch.Tensor):
-            inferred_state = raw_inferred_state
-        else:
-            inferred_state = None
         amplitudes: torch.Tensor
 
-        # TODO: challenge the need for trying/finally here
-        try:
+        with self._temporary_input_state(amplitude_input, original_input_state):
+            # TODO: input_state should support StateVector
+            raw_inferred_state = getattr(self.computation_process, "input_state", None)
+            # normalize the retrieved input_state to an optional tensor
+            inferred_state: torch.Tensor | None
+            if isinstance(raw_inferred_state, torch.Tensor):
+                inferred_state = raw_inferred_state
+            else:
+                inferred_state = None
             amplitudes = self._compute_amplitudes(
                 params,
                 inferred_state=inferred_state,
                 parameter_batch_dim=parameter_batch_dim,
                 simultaneous_processes=simultaneous_processes,
             )
-        finally:
-            if amplitude_input is not None and original_input_state is not None:
-                self.set_input_state(original_input_state)
 
         # Phase 4: Configure sampling/autodiff.
         needs_gradient = (
@@ -791,15 +788,30 @@ class QuantumLayer(MerlinModule):
     def _prepare_amplitude_input(
         self, inputs: list[torch.Tensor]
     ) -> tuple[torch.Tensor, list[torch.Tensor], torch.Tensor | None]:
-        """Validate amplitude-encoded input and update the computation input state."""
+        """Validate amplitude-encoded input and return remaining inputs."""
         if not inputs:
             raise ValueError(
                 "QuantumLayer configured with amplitude_encoding=True expects an amplitude tensor input."
             )
         amplitude_input = self._validate_amplitude_input(inputs[0])
         original_input_state = getattr(self.computation_process, "input_state", None)
-        self.set_input_state(amplitude_input)
         return amplitude_input, inputs[1:], original_input_state
+
+    @contextmanager
+    def _temporary_input_state(
+        self,
+        amplitude_input: torch.Tensor | None,
+        original_input_state: torch.Tensor | None,
+    ):
+        if amplitude_input is None:
+            yield
+            return
+        self.set_input_state(amplitude_input)
+        try:
+            yield
+        finally:
+            if original_input_state is not None:
+                self.set_input_state(original_input_state)
 
     def _prepare_classical_parameters(
         self, inputs: list[torch.Tensor]

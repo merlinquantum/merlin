@@ -278,7 +278,7 @@ class TestQuantumLayer:
         assert torch.all(output >= -1e6)  # More reasonable bounds for quantum outputs
 
     def test_prepare_amplitude_input_updates_state_and_splits_inputs(self):
-        """Amplitude input helper should update state and return remaining inputs."""
+        """Amplitude input helper should capture state and return remaining inputs."""
         circuit = pcvl.Circuit(2)
         layer = ML.QuantumLayer(
             circuit=circuit,
@@ -302,7 +302,11 @@ class TestQuantumLayer:
         assert saved_state is original_state
         assert remaining[0] is remaining_input
         assert torch.allclose(amplitude_out, amplitude)
-        assert torch.allclose(layer.computation_process.input_state, amplitude_out)
+        assert torch.allclose(layer.computation_process.input_state, original_state)
+
+        with layer._temporary_input_state(amplitude_out, saved_state):
+            assert torch.allclose(layer.computation_process.input_state, amplitude_out)
+        assert torch.allclose(layer.computation_process.input_state, original_state)
 
     def test_prepare_classical_parameters_detects_batch_mismatch(self):
         """Classical parameter helper should reject mismatched batch sizes."""
