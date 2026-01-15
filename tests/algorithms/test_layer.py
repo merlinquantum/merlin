@@ -417,6 +417,44 @@ class TestQuantumLayer:
         output = layer(torch.rand(1, 2))
         assert output.shape == (1, layer.output_size)
 
+    def test_renormalize_distribution_and_amplitudes_applies_for_unbunched(self):
+        """UNBUNCHED computation space should renormalize amplitudes and distribution."""
+        circuit = pcvl.Circuit(2)
+        layer = ML.QuantumLayer(
+            circuit=circuit,
+            input_state=[1, 0],
+            computation_space=ML.ComputationSpace.UNBUNCHED,
+            measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+        )
+
+        amplitudes = torch.tensor([[2.0 + 0j, 0.0 + 0j]], dtype=torch.cfloat)
+        distribution, normalized = layer._renormalize_distribution_and_amplitudes(
+            amplitudes
+        )
+
+        assert torch.allclose(distribution, torch.tensor([[1.0, 0.0]]))
+        assert torch.allclose(
+            normalized, torch.tensor([[1.0 + 0j, 0.0 + 0j]], dtype=torch.cfloat)
+        )
+
+    def test_renormalize_distribution_and_amplitudes_skips_for_fock(self):
+        """FOCK computation space should not renormalize amplitudes."""
+        circuit = pcvl.Circuit(2)
+        layer = ML.QuantumLayer(
+            circuit=circuit,
+            input_state=[1, 0],
+            computation_space=ML.ComputationSpace.FOCK,
+            measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+        )
+
+        amplitudes = torch.tensor([[2.0 + 0j, 0.0 + 0j]], dtype=torch.cfloat)
+        distribution, normalized = layer._renormalize_distribution_and_amplitudes(
+            amplitudes
+        )
+
+        assert torch.allclose(distribution, torch.tensor([[4.0, 0.0]]))
+        assert torch.allclose(normalized, amplitudes)
+
     def test_forward_pass_single(self):
         """Test forward pass with single input."""
         builder = ML.CircuitBuilder(n_modes=4)

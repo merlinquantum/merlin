@@ -639,6 +639,7 @@ class QuantumLayer(MerlinModule):
             - sampling_method (str): e.g. "multinomial".
         """
 
+        # Phase 1: Input handling (amplitude vs. classical).
         inputs = list(input_parameters)
         amplitude_input: torch.Tensor | None = None
         original_input_state = None
@@ -652,8 +653,9 @@ class QuantumLayer(MerlinModule):
         #    tensor for tensor in inputs if isinstance(tensor, torch.Tensor)
         # ]
 
-        # Prepare circuit parameters and any remaining classical inputs
+        # Phase 2: Parameter assembly for circuit execution.
         params, parameter_batch_dim = self._prepare_classical_parameters(inputs)
+        # Phase 3: Resolve computation path and evaluate the circuit.
         # TODO: input_state should support StateVector
         raw_inferred_state = getattr(self.computation_process, "input_state", None)
         # normalize the retrieved input_state to an optional tensor an
@@ -676,7 +678,7 @@ class QuantumLayer(MerlinModule):
             if amplitude_input is not None and original_input_state is not None:
                 self.set_input_state(original_input_state)
 
-        # Determine gradient needs
+        # Phase 4: Configure sampling/autodiff.
         needs_gradient = (
             self.training
             and torch.is_grad_enabled()
@@ -696,40 +698,16 @@ class QuantumLayer(MerlinModule):
             needs_gradient, apply_sampling, requested_shots
         )
 
-        # Convert amplitudes to probabilities if needed
+        # Phase 5: Convert and normalize amplitudes.
         if isinstance(amplitudes, tuple):
             amplitudes = amplitudes[1]
         elif not isinstance(amplitudes, torch.Tensor):
             raise TypeError(f"Unexpected amplitudes type: {type(amplitudes)}")
 
-        # even in amplitude mode, we do need to calculation distribution for renormalization
-        # of the amplitudes
-        distribution = amplitudes.real**2 + amplitudes.imag**2
-
-        # renormalize distribution and amplitudes for UNBUNCHED and DUAL_RAIL spaces
-        if (
-            self.computation_space is ComputationSpace.UNBUNCHED
-            or self.computation_space is ComputationSpace.DUAL_RAIL
-        ):
-            sum_probs = distribution.sum(dim=-1, keepdim=True)
-
-            # Only normalize when sum > 0 to avoid division by zero
-            valid_entries = sum_probs > 0
-            if valid_entries.any():
-                distribution = torch.where(
-                    valid_entries,
-                    distribution
-                    / torch.where(valid_entries, sum_probs, torch.ones_like(sum_probs)),
-                    distribution,
-                )
-                amplitudes = torch.where(
-                    valid_entries,
-                    amplitudes
-                    / torch.where(
-                        valid_entries, sum_probs.sqrt(), torch.ones_like(sum_probs)
-                    ),
-                    amplitudes,
-                )
+        distribution, amplitudes = self._renormalize_distribution_and_amplitudes(
+            amplitudes
+        )
+        # Phase 6: Measurement strategy dispatch and output mapping.
         strategy = resolve_measurement_strategy(self.measurement_strategy)
         results = strategy.process(
             distribution=distribution,
@@ -774,6 +752,41 @@ class QuantumLayer(MerlinModule):
                 )
             return self.computation_process.compute_superposition_state(params)
         return self.computation_process.compute(params)
+
+    def _renormalize_distribution_and_amplitudes(
+        self, amplitudes: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Return probability distribution and renormalized amplitudes."""
+        # even in amplitude mode, we do need to calculation distribution for renormalization
+        # of the amplitudes
+        distribution = amplitudes.real**2 + amplitudes.imag**2
+
+        # renormalize distribution and amplitudes for UNBUNCHED and DUAL_RAIL spaces
+        if (
+            self.computation_space is ComputationSpace.UNBUNCHED
+            or self.computation_space is ComputationSpace.DUAL_RAIL
+        ):
+            sum_probs = distribution.sum(dim=-1, keepdim=True)
+
+            # Only normalize when sum > 0 to avoid division by zero
+            valid_entries = sum_probs > 0
+            if valid_entries.any():
+                distribution = torch.where(
+                    valid_entries,
+                    distribution
+                    / torch.where(valid_entries, sum_probs, torch.ones_like(sum_probs)),
+                    distribution,
+                )
+                amplitudes = torch.where(
+                    valid_entries,
+                    amplitudes
+                    / torch.where(
+                        valid_entries, sum_probs.sqrt(), torch.ones_like(sum_probs)
+                    ),
+                    amplitudes,
+                )
+
+        return distribution, amplitudes
 
     def _prepare_amplitude_input(
         self, inputs: list[torch.Tensor]
