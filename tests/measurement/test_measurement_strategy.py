@@ -536,6 +536,7 @@ def test_amplitudes_strategy_returns_amplitudes_and_blocks_sampling():
 
 def test_amplitudes_strategy_rejects_sampling_in_layer():
     """AMPLITUDES strategy should reject sampling at the layer level."""
+    #TODO: this test should be updated when MeasurementStrategy.AMPLITUDES will be deprecated
     builder = ML.CircuitBuilder(n_modes=3)
     builder.add_entangling_layer(trainable=True, name="U1")
     builder.add_angle_encoding(modes=[0, 1], name="input")
