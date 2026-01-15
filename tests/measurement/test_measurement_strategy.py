@@ -438,6 +438,34 @@ def test_probabilities_strategy_applies_transforms_and_sampling():
     assert torch.allclose(result, torch.tensor([5.0]))
 
 
+def test_probabilities_strategy_skips_sampling_when_zero_shots():
+    """Sampling should be bypassed when effective shots are zero."""
+    strategy = ProbabilitiesStrategy()
+    distribution = torch.tensor([1.0])
+    amplitudes = torch.tensor([0.5])
+
+    def apply_photon_loss(dist: torch.Tensor) -> torch.Tensor:
+        return dist + 1.0
+
+    def apply_detectors(dist: torch.Tensor) -> torch.Tensor:
+        return dist * 2.0
+
+    def sample_fn(dist: torch.Tensor, shots: int) -> torch.Tensor:
+        raise AssertionError("Sampling should not be called when shots are zero.")
+
+    result = strategy.process(
+        distribution=distribution,
+        amplitudes=amplitudes,
+        apply_sampling=True,
+        effective_shots=0,
+        sample_fn=sample_fn,
+        apply_photon_loss=apply_photon_loss,
+        apply_detectors=apply_detectors,
+    )
+
+    assert torch.allclose(result, torch.tensor([4.0]))
+
+
 def test_mode_expectations_strategy_skips_sampling_when_disabled():
     strategy = ModeExpectationsStrategy()
     distribution = torch.tensor([2.0])
@@ -504,6 +532,25 @@ def test_amplitudes_strategy_returns_amplitudes_and_blocks_sampling():
             apply_photon_loss=apply_photon_loss,
             apply_detectors=apply_detectors,
         )
+
+
+def test_amplitudes_strategy_rejects_sampling_in_layer():
+    """AMPLITUDES strategy should reject sampling at the layer level."""
+    builder = ML.CircuitBuilder(n_modes=3)
+    builder.add_entangling_layer(trainable=True, name="U1")
+    builder.add_angle_encoding(modes=[0, 1], name="input")
+    builder.add_entangling_layer(trainable=True, name="U2")
+
+    layer = ML.QuantumLayer(
+        input_size=2,
+        n_photons=1,
+        builder=builder,
+        measurement_strategy=ML.MeasurementStrategy.AMPLITUDES,
+    )
+    x = torch.rand(2, 2)
+
+    with pytest.raises(RuntimeError, match="Sampling cannot be applied"):
+        layer(x, shots=5)
 
 
 class _DummyComputationProcess:
