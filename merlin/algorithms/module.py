@@ -24,7 +24,10 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 
+import torch
 import torch.nn as nn
+
+from ..utils.dtypes import complex_dtype_for
 
 
 class MerlinModule(nn.Module):
@@ -74,3 +77,17 @@ class MerlinModule(nn.Module):
 
         # execution policy: when True, always simulate locally (do not offload)
         self._force_simulation: bool = False
+
+    @staticmethod
+    def setup_device_and_dtype(
+        device: torch.device | None,
+        dtype: torch.dtype | None,
+    ) -> tuple[torch.device | None, torch.dtype, torch.dtype]:
+        """Normalize device/dtype to final forms."""
+        resolved_dtype = dtype or torch.float32
+        if resolved_dtype not in (torch.float32, torch.float64):
+            raise ValueError(
+                "dtype must be torch.float32 or torch.float64 for Merlin modules."
+            )
+        resolved_complex = complex_dtype_for(resolved_dtype)
+        return device, resolved_dtype, resolved_complex

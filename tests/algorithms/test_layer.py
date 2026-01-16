@@ -135,6 +135,85 @@ class TestQuantumLayer:
                 measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
             )
 
+    def test_amplitude_encoding_rejects_input_size(self):
+        """Amplitude encoding forbids explicit input_size."""
+        circuit = pcvl.Circuit(2)
+
+        with pytest.raises(ValueError, match="amplitude_encoding"):
+            ML.QuantumLayer(
+                input_size=2,
+                circuit=circuit,
+                amplitude_encoding=True,
+                n_photons=1,
+            )
+
+    def test_amplitude_encoding_requires_n_photons(self):
+        """Amplitude encoding requires n_photons."""
+        circuit = pcvl.Circuit(2)
+
+        with pytest.raises(ValueError, match="n_photons"):
+            ML.QuantumLayer(
+                input_size=None,
+                circuit=circuit,
+                amplitude_encoding=True,
+            )
+
+    def test_amplitude_encoding_rejects_input_parameters(self):
+        """Amplitude encoding cannot be combined with classical input parameters."""
+        circuit = pcvl.Circuit(2)
+
+        with pytest.raises(ValueError, match="input parameters"):
+            ML.QuantumLayer(
+                circuit=circuit,
+                amplitude_encoding=True,
+                n_photons=1,
+                input_parameters=["x"],
+            )
+
+    def test_experiment_input_state_overrides_warns(self):
+        """Experiment input_state should override user input_state with a warning."""
+        circuit = pcvl.Circuit(2)
+        experiment = pcvl.Experiment(circuit)
+        experiment.with_input(pcvl.BasicState([1, 0]))
+
+        with pytest.warns(UserWarning, match="experiment.input_state"):
+            layer = ML.QuantumLayer(
+                input_size=0,
+                experiment=experiment,
+                input_state=[0, 1],
+            )
+
+        assert layer.input_state == [1, 0]
+
+    def test_statevector_empty_rejected(self):
+        """Empty StateVector inputs should be rejected."""
+        circuit = pcvl.Circuit(2)
+        empty_state = pcvl.StateVector()
+
+        with pytest.raises(ValueError, match="StateVector cannot be empty"):
+            ML.QuantumLayer(
+                input_size=0,
+                circuit=circuit,
+                input_state=empty_state,
+            )
+
+    def test_amplitudes_reject_custom_detectors(self):
+        """Amplitude readout is incompatible with custom detectors."""
+        circuit = pcvl.Circuit(2)
+        experiment = pcvl.Experiment(circuit)
+        experiment._add_detector(mode=0, detector=pcvl.Detector.threshold())
+
+        with pytest.raises(
+            RuntimeError, match="does not support experiments with detectors"
+        ):
+            ML.QuantumLayer(
+                input_size=0,
+                experiment=experiment,
+                input_state=[1, 0],
+                computation_space=ML.ComputationSpace.FOCK,
+                measurement_strategy=ML.MeasurementStrategy.AMPLITUDES,
+            )
+
     def test_builder_based_layer_creation(self):
         """Test creating a layer from an builder."""
         builder = ML.CircuitBuilder(n_modes=4)
