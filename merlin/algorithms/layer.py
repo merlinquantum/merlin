@@ -50,9 +50,13 @@ from ..utils.deprecations import sanitize_parameters
 from ..utils.grouping import ModGrouping
 from .layer_utils import (
     InitializationContext,
+    apply_angle_encoding,
+    feature_count_for_prefix,
     prepare_input_state,
+    prepare_input_encoding,
     resolve_circuit,
     setup_noise_and_detectors,
+    split_inputs_by_prefix,
     validate_and_resolve_circuit_source,
     validate_encoding_mode,
     vet_experiment,
@@ -381,10 +385,6 @@ class QuantumLayer(MerlinModule):
         if self.amplitude_encoding:
             self._init_amplitude_metadata()
 
-        # set input_size for amplitude encoding
-        if self.amplitude_encoding:
-            self.input_size = len(self.output_keys)
-
     def _setup_parameters_from_custom(self, trainable_parameters: list[str] | None):
         """Setup parameters from custom circuit configuration."""
         spec_mappings = self.computation_process.converter.spec_mappings
@@ -457,6 +457,8 @@ class QuantumLayer(MerlinModule):
             "logical_keys",
             list(self.computation_process.simulation_graph.mapped_keys),
         )
+        #TODO: here, the input_size corresponds to the size of the computation space
+        # In future, we might want to decouple those two concepts
         self.input_size = len(logical_keys)
 
     def _create_dummy_parameters(self) -> list[torch.Tensor]:
@@ -503,110 +505,31 @@ class QuantumLayer(MerlinModule):
 
     def _feature_count_for_prefix(self, prefix: str) -> int | None:
         """Infer the number of raw features associated with an encoding prefix."""
-        spec = self.angle_encoding_specs.get(prefix)
-        if spec:
-            combos = spec.get("combinations", [])
-            feature_indices = {idx for combo in combos for idx in combo}
-            if feature_indices:
-                return len(feature_indices)
-
         spec_mappings = getattr(self.computation_process.converter, "spec_mappings", {})
-        mapping = spec_mappings.get(prefix, [])
-        if mapping:
-            return len(mapping)
-
-        return None
+        return feature_count_for_prefix(
+            prefix, self.angle_encoding_specs, spec_mappings
+        )
 
     def _split_inputs_by_prefix(
         self, prefixes: list[str], tensor: torch.Tensor
     ) -> list[torch.Tensor] | None:
         """Split a single logical input tensor into per-prefix chunks when possible."""
-
-        counts: list[int] = []
-        for prefix in prefixes:
-            count = self._feature_count_for_prefix(prefix)
-            if count is None:
-                return None
-            counts.append(count)
-
-        total_required = sum(counts)
-        feature_dim = tensor.shape[-1] if tensor.dim() > 1 else tensor.shape[0]
-        if total_required != feature_dim:
-            return None
-
-        slices: list[torch.Tensor] = []
-        offset = 0
-        for count in counts:
-            end = offset + count
-            slices.append(
-                tensor[..., offset:end] if tensor.dim() > 1 else tensor[offset:end]
-            )
-            offset = end
-        return slices
+        spec_mappings = getattr(self.computation_process.converter, "spec_mappings", {})
+        return split_inputs_by_prefix(
+            prefixes, tensor, self.angle_encoding_specs, spec_mappings
+        )
 
     def _prepare_input_encoding(
         self, x: torch.Tensor, prefix: str | None = None
     ) -> torch.Tensor:
         """Prepare input encoding based on mode."""
-        spec = None
-        if prefix is not None:
-            spec = self.angle_encoding_specs.get(prefix)
-        elif len(self.angle_encoding_specs) == 1:
-            spec = next(iter(self.angle_encoding_specs.values()))
-
-        if spec:
-            return self._apply_angle_encoding(x, spec)
-
-        return x
+        return prepare_input_encoding(x, prefix, self.angle_encoding_specs)
 
     def _apply_angle_encoding(
         self, x: torch.Tensor, spec: dict[str, Any]
     ) -> torch.Tensor:
         """Apply custom angle encoding using stored metadata."""
-        combos: list[tuple[int, ...]] = spec.get("combinations", [])
-        scale_map: dict[int, float] = spec.get("scales", {})
-
-        if x.dim() == 1:
-            x_batch = x.unsqueeze(0)
-            squeeze = True
-        elif x.dim() == 2:
-            x_batch = x
-            squeeze = False
-        else:
-            raise ValueError(
-                f"Angle encoding expects 1D or 2D tensors, got shape {tuple(x.shape)}"
-            )
-
-        if not combos:
-            encoded = x_batch
-            return encoded.squeeze(0) if squeeze else encoded
-
-        encoded_cols: list[torch.Tensor] = []
-        feature_dim = x_batch.shape[-1]
-
-        for combo in combos:
-            indices = list(combo)
-            if any(idx >= feature_dim for idx in indices):
-                raise ValueError(
-                    f"Input feature dimension {feature_dim} insufficient for angle encoding combination {combo}"
-                )
-
-            # Select per-combo features and scale
-            selected = x_batch[:, indices]
-            scales = [scale_map.get(idx, 1.0) for idx in indices]
-            scale_tensor = x_batch.new_tensor(scales)
-            value = (selected * scale_tensor).sum(dim=1, keepdim=True)
-            encoded_cols.append(value)
-
-        encoded = (
-            torch.cat(encoded_cols, dim=1)
-            if encoded_cols
-            else x_batch.new_zeros((x_batch.shape[0], 0))
-        )
-
-        if squeeze:
-            return encoded.squeeze(0)
-        return encoded
+        return apply_angle_encoding(x, spec)
 
     def _validate_amplitude_input(self, amplitude: torch.Tensor) -> torch.Tensor:
         if not isinstance(amplitude, torch.Tensor):
