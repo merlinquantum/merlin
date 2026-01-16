@@ -46,6 +46,7 @@ import torch
 
 from ..builder.circuit_builder import CircuitBuilder
 from ..core.computation_space import ComputationSpace
+from ..core.generators import StateGenerator, StatePattern
 from ..measurement.detectors import resolve_detectors
 from ..measurement.photon_loss import resolve_photon_loss
 from ..measurement.strategies import MeasurementStrategy
@@ -162,6 +163,8 @@ def prepare_input_state(
     device: torch.device | None,
     complex_dtype: torch.dtype,
     experiment: pcvl.Experiment | None = None,
+    circuit_m: int | None = None,
+    amplitude_encoding: bool = False,
 ) -> tuple[list[int] | torch.Tensor | None, int | None]:
     """Normalize input_state to canonical form."""
     if experiment is not None and experiment.input_state is not None:
@@ -198,6 +201,24 @@ def prepare_input_state(
 
     if input_state is None and n_photons is None:
         raise ValueError("Either input_state or n_photons must be provided")
+
+    if input_state is None and n_photons is not None:
+        if computation_space is ComputationSpace.DUAL_RAIL:
+            input_state = [1, 0] * n_photons
+        elif amplitude_encoding:
+            if circuit_m is None:
+                raise ValueError(
+                    "circuit_m must be provided to generate default state for amplitude encoding."
+                )
+            input_state = [1] * n_photons + [0] * (circuit_m - n_photons)
+        else:
+            if circuit_m is None:
+                raise ValueError(
+                    "circuit_m must be provided to generate default state when input_state is omitted."
+                )
+            input_state = StateGenerator.generate_state(
+                circuit_m, n_photons, StatePattern.SPACED
+            )
 
     return input_state, n_photons
 

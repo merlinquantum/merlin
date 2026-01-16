@@ -52,8 +52,8 @@ from .layer_utils import (
     InitializationContext,
     apply_angle_encoding,
     feature_count_for_prefix,
-    prepare_input_state,
     prepare_input_encoding,
+    prepare_input_state,
     resolve_circuit,
     setup_noise_and_detectors,
     split_inputs_by_prefix,
@@ -202,17 +202,24 @@ class QuantumLayer(MerlinModule):
             circuit_source.input_parameters,
         )
         # Phase 5: input state normalization
-        input_state, resolved_n_photons = prepare_input_state(
-            input_state, n_photons, computation_space, device, complex_dtype, experiment
-        )
-
         # Phase 6: experiment vetting (if provided)
         if experiment is not None:
             vet_experiment(experiment)
 
         # Phase 7: circuit resolution
         resolved_circuit = resolve_circuit(circuit_source, pcvl)
-        # Phase 8: noise + detector setup
+        # Phase 8: input state normalization
+        input_state, resolved_n_photons = prepare_input_state(
+            input_state,
+            n_photons,
+            computation_space,
+            device,
+            complex_dtype,
+            resolved_circuit.experiment,
+            circuit_m=resolved_circuit.circuit.m,
+            amplitude_encoding=amplitude_encoding,
+        )
+        # Phase 9: noise + detector setup
         noise_and_detectors = setup_noise_and_detectors(
             resolved_circuit.experiment,
             resolved_circuit.circuit,
@@ -220,7 +227,7 @@ class QuantumLayer(MerlinModule):
             measurement_strategy,
         )
 
-        # Phase 9: build initialization context
+        # Phase 10: build initialization context
         context = InitializationContext(
             device=device,
             dtype=dtype,
@@ -244,9 +251,9 @@ class QuantumLayer(MerlinModule):
             warnings=noise_and_detectors.detector_warnings,
         )
 
-        # Phase 10: assign context to self + warnings
+        # Phase 11: assign context to self + warnings
         self._finalize_from_context(context)
-        # Phase 11: downstream setup
+        # Phase 12: downstream setup
         self._init_from_custom_circuit(context)
 
     def _finalize_from_context(self, context: InitializationContext) -> None:
@@ -457,7 +464,7 @@ class QuantumLayer(MerlinModule):
             "logical_keys",
             list(self.computation_process.simulation_graph.mapped_keys),
         )
-        #TODO: here, the input_size corresponds to the size of the computation space
+        # TODO: here, the input_size corresponds to the size of the computation space
         # In future, we might want to decouple those two concepts
         self.input_size = len(logical_keys)
 

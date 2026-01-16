@@ -112,6 +112,20 @@ def test_prepare_input_state_experiment_override_warns():
     assert state == [1, 0]
 
 
+def test_prepare_input_state_default_generation():
+    state, _ = prepare_input_state(
+        None,
+        2,
+        ComputationSpace.UNBUNCHED,
+        None,
+        torch.complex64,
+        circuit_m=4,
+        amplitude_encoding=False,
+    )
+    assert state == ML.StateGenerator.generate_state(
+        4, 2, ML.StatePattern.SPACED
+    )
+
 def test_validate_and_resolve_circuit_source_builder_conflict():
     builder = ML.CircuitBuilder(n_modes=2)
     with pytest.raises(ValueError, match="do not also specify"):
