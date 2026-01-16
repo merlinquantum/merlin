@@ -254,6 +254,10 @@ class QuantumLayer(MerlinModule):
         # Phase 11: assign context to self + warnings
         self._finalize_from_context(context)
         # Phase 12: downstream setup
+        # Defaults/validation handled in this method:
+        # - Generate default input_state from n_photons when missing.
+        # - Infer/validate input_size against encoder metadata.
+        # - Setup parameters, measurement strategy, and output sizing.
         self._init_from_custom_circuit(context)
 
     def _finalize_from_context(self, context: InitializationContext) -> None:
