@@ -30,7 +30,6 @@ import warnings
 from collections.abc import Iterable, Sequence
 from typing import Any, cast
 
-import exqalibur as xqlbr
 import perceval as pcvl
 import torch
 import torch.nn as nn
@@ -44,13 +43,20 @@ from ..core.generators import StateGenerator, StatePattern
 from ..core.process import ComputationProcessFactory
 from ..measurement import OutputMapper
 from ..measurement.autodiff import AutoDiffProcess
-from ..measurement.detectors import DetectorTransform, resolve_detectors
-from ..measurement.photon_loss import PhotonLossTransform, resolve_photon_loss
+from ..measurement.detectors import DetectorTransform
+from ..measurement.photon_loss import PhotonLossTransform
 from ..measurement.strategies import MeasurementStrategy
-from ..pcvl_pytorch.utils import pcvl_to_tensor
 from ..utils.deprecations import sanitize_parameters
-from ..utils.dtypes import complex_dtype_for
 from ..utils.grouping import ModGrouping
+from .layer_utils import (
+    InitializationContext,
+    prepare_input_state,
+    resolve_circuit,
+    setup_noise_and_detectors,
+    validate_and_resolve_circuit_source,
+    validate_encoding_mode,
+    vet_experiment,
+)
 from .module import MerlinModule
 
 
@@ -173,198 +179,100 @@ class QuantumLayer(MerlinModule):
         """
         super().__init__()
 
-        self.device = device
-        self.dtype = dtype or torch.float32
-        self.complex_dtype = complex_dtype_for(self.dtype)
-        self.input_size = input_size
-        self.measurement_strategy = measurement_strategy
-        self.experiment: pcvl.Experiment | None = None
-        self.noise_model: Any | None = None  # type: ignore[assignment]
-        self._detector_transform: DetectorTransform | None = None
-        self._detector_keys: list[tuple[int, ...]] = []
-        self._raw_output_keys: list[tuple[int, ...]] = []
-        self._detector_is_identity: bool = True
-        self._output_size: int = 0
-        self.amplitude_encoding = amplitude_encoding
+        device, dtype, complex_dtype = MerlinModule.setup_device_and_dtype(
+            device, dtype
+        )
+        computation_space = ComputationSpace.coerce(computation_space)
 
-        # input_size management: input_size can be given only if amplitude_encoding is False
-        # otherwise, it is determined by the computation space and n_photons
-        if self.amplitude_encoding:
-            if input_size is not None:
-                raise ValueError(
-                    "When amplitude_encoding is enabled, do not specify input_size; it "
-                    "is inferred from the computation space."
-                )
-            self.input_size = 0  # temporary value, revisited after setup
-            if n_photons is None:
-                raise ValueError(
-                    "n_photons must be provided when amplitude_encoding=True."
-                )
-            if input_parameters:
-                raise ValueError(
-                    "Amplitude encoding cannot be combined with classical input parameters."
-                )
-        else:
-            # Defer fixing input_size until converter metadata is available so we can infer it automatically.
-            self.input_size = int(input_size) if input_size is not None else None
-
-        self.computation_space = ComputationSpace.coerce(computation_space)
-
-        if experiment is not None and experiment.input_state is not None:
-            if input_state is not None and experiment.input_state != input_state:
-                warnings.warn(
-                    "Both 'experiment.input_state' and 'input_state' are provided. "
-                    "'experiment.input_state' will be used.",
-                    UserWarning,
-                    stacklevel=2,
-                )
-            input_state = experiment.input_state
-
-        if isinstance(input_state, pcvl.BasicState):
-            if not isinstance(input_state, xqlbr.FockState):
-                raise ValueError("BasicState with annotations is not supported")
-            input_state = list(input_state)
-        elif isinstance(input_state, pcvl.StateVector):
-            if len(input_state) == 0:
-                raise ValueError("input_state StateVector cannot be empty")
-            sv_n_photons = input_state.n.pop()
-            if n_photons is not None and sv_n_photons != n_photons:
-                raise ValueError(
-                    "Inconsistent number of photons between input_state and n_photons."
-                )
-            self.n_photons = sv_n_photons
-            input_state = pcvl_to_tensor(
-                input_state,
-                self.computation_space,
-                device=device,
-                dtype=self.complex_dtype,
-            )
-        self.input_state = input_state
-
-        # exclusivity of circuit/builder/experiment
-        if sum(x is not None for x in (circuit, builder, experiment)) != 1:
-            raise ValueError(
-                "Provide exactly one of 'circuit', 'builder', or 'experiment'."
-            )
-
-        if builder is not None and (
-            trainable_parameters is not None or input_parameters is not None
-        ):
-            raise ValueError(
-                "When providing a builder, do not also specify 'trainable_parameters' "
-                "or 'input_parameters'. Those prefixes are derived from the builder."
-            )
+        circuit_source = validate_and_resolve_circuit_source(
+            builder, circuit, experiment, trainable_parameters, input_parameters
+        )
+        encoding_config = validate_encoding_mode(
+            amplitude_encoding,
+            input_size,
+            n_photons,
+            circuit_source.input_parameters,
+        )
+        input_state, resolved_n_photons = prepare_input_state(
+            input_state, n_photons, computation_space, device, complex_dtype, experiment
+        )
 
         if experiment is not None:
-            if (
-                experiment.post_select_fn is not None
-                or experiment.heralds
-                or experiment.in_heralds
-            ):
-                raise ValueError(
-                    "The provided experiment must not have post-selection or heralding."
-                )
-            if getattr(experiment, "has_feedforward", False):
-                raise ValueError(
-                    "Feed-forward components are not supported inside a QuantumLayer experiment."
-                )
-            has_td_attr = getattr(experiment, "has_td", None)
-            if callable(has_td_attr):
-                has_td = has_td_attr()
-            else:
-                has_td = bool(has_td_attr)
-            if has_td:
-                raise ValueError(
-                    "The provided experiment must be unitary, and must not have post-selection or heralding."
-                )
+            vet_experiment(experiment)
 
-            # TODO: handle "min_detected_photons" from experiment, currently ignored => will come with post_selection_scheme introduction
-            if experiment.min_photons_filter:
-                raise ValueError(
-                    "The provided experiment must not have a min_photons_filter."
-                )
-            self.experiment = experiment
-
-        self.angle_encoding_specs: dict[str, dict[str, Any]] = {}
-
-        resolved_circuit: pcvl.Circuit | None = None
-        trainable_parameters = (
-            list(trainable_parameters) if trainable_parameters else []
-        )
-        input_parameters = list(input_parameters) if input_parameters else []
-
-        if builder is not None:
-            if circuit is not None:
-                raise ValueError("Provide either 'circuit' or 'builder', not both")
-            trainable_parameters = list(builder.trainable_parameter_prefixes)
-            input_parameters = list(builder.input_parameter_prefixes)
-            self.angle_encoding_specs = builder.angle_encoding_specs
-            resolved_circuit = builder.to_pcvl_circuit(pcvl)
-            self.experiment = pcvl.Experiment(resolved_circuit)
-        elif circuit is not None:
-            resolved_circuit = circuit
-            self.experiment = pcvl.Experiment(resolved_circuit)
-        elif experiment is not None:
-            self.experiment = experiment
-            self.noise_model = getattr(experiment, "noise", None)
-            resolved_circuit = experiment.unitary_circuit()
-        else:
-            raise RuntimeError("Resolved circuit could not be determined.")
-
-        if self.experiment is None:
-            raise RuntimeError("Experiment must be initialised.")
-
-        self.circuit = resolved_circuit
-
-        self._photon_survival_probs, empty_noise_model = resolve_photon_loss(
-            self.experiment, resolved_circuit.m
-        )
-        self.has_custom_noise_model = not empty_noise_model
-
-        self._detectors, empty_detectors = resolve_detectors(
-            self.experiment, resolved_circuit.m
-        )
-        self._has_custom_detectors = not empty_detectors
-        self.detectors = self._detectors  # Backward compatibility alias
-
-        # Detectors are ignored if ComputationSpace is not FOCK
-        if (
-            self._has_custom_detectors
-            and self.computation_space is not ComputationSpace.FOCK
-        ):
-            self._detectors = [pcvl.Detector.pnr()] * resolved_circuit.m
-            warnings.warn(
-                f"Detectors are ignored in favor of ComputationSpace: {self.computation_space}",
-                UserWarning,
-                stacklevel=2,
-            )
-        # Noise models or detectors are incompatible with amplitude readout because amplitudes assume noiseless, detector-free evolution.
-        amplitude_readout = measurement_strategy == MeasurementStrategy.AMPLITUDES
-        if amplitude_readout and self.has_custom_noise_model:
-            raise RuntimeError(
-                "measurement_strategy=MeasurementStrategy.AMPLITUDES cannot be used when the experiment defines a NoiseModel."
-            )
-        if amplitude_readout and self._has_custom_detectors:
-            raise RuntimeError(
-                "measurement_strategy=MeasurementStrategy.AMPLITUDES does not support experiments with detectors. "
-                "Compute amplitudes without detectors and apply a Partial DetectorTransform manually if needed."
-            )
-
-        # persist prefixes for export/introspection
-        self.trainable_parameters: list[str] = list(trainable_parameters)
-        self.input_parameters: list[str] = list(input_parameters)
-
-        self._init_from_custom_circuit(
-            resolved_circuit,
-            input_state,
-            n_photons,
-            trainable_parameters,
-            input_parameters,
+        resolved_circuit = resolve_circuit(circuit_source, pcvl)
+        noise_and_detectors = setup_noise_and_detectors(
+            resolved_circuit.experiment,
+            resolved_circuit.circuit,
+            computation_space,
             measurement_strategy,
         )
 
-        # export snapshot cache
-        self._current_params: dict[str, Any] = {}
+        context = InitializationContext(
+            device=device,
+            dtype=dtype,
+            complex_dtype=complex_dtype,
+            amplitude_encoding=encoding_config.amplitude_encoding,
+            input_size=encoding_config.input_size,
+            circuit=resolved_circuit.circuit,
+            experiment=resolved_circuit.experiment,
+            noise_model=resolved_circuit.noise_model,
+            has_custom_noise=resolved_circuit.has_custom_noise,
+            input_state=input_state,
+            n_photons=resolved_n_photons,
+            trainable_parameters=circuit_source.trainable_parameters,
+            input_parameters=circuit_source.input_parameters,
+            angle_encoding_specs=circuit_source.angle_encoding_specs,
+            photon_survival_probs=noise_and_detectors.photon_survival_probs,
+            detectors=noise_and_detectors.detectors,
+            has_custom_detectors=noise_and_detectors.has_custom_detectors,
+            computation_space=computation_space,
+            measurement_strategy=measurement_strategy,
+            warnings=noise_and_detectors.detector_warnings,
+        )
+
+        self._finalize_from_context(context)
+
+        self._init_from_custom_circuit(
+            self.circuit,
+            self.input_state,
+            self.n_photons,
+            self.trainable_parameters,
+            self.input_parameters,
+            self.measurement_strategy,
+        )
+
+    def _finalize_from_context(self, context: InitializationContext) -> None:
+        """Assign initialization context to instance attributes."""
+        self.device = context.device
+        self.dtype = context.dtype
+        self.complex_dtype = context.complex_dtype
+        self.input_size = context.input_size
+        self.measurement_strategy = context.measurement_strategy
+        self.experiment = context.experiment
+        self.noise_model = context.noise_model
+        self.amplitude_encoding = context.amplitude_encoding
+        self.computation_space = context.computation_space
+        self.angle_encoding_specs = context.angle_encoding_specs
+        self.circuit = context.circuit
+        self.has_custom_noise_model = context.has_custom_noise
+        self.trainable_parameters = context.trainable_parameters
+        self.input_parameters = context.input_parameters
+        self.input_state = context.input_state
+        self.n_photons = context.n_photons
+        self._photon_survival_probs = context.photon_survival_probs
+        self._detectors = context.detectors
+        self._has_custom_detectors = context.has_custom_detectors
+        self.detectors = self._detectors
+        self._detector_transform = None
+        self._detector_keys = []
+        self._raw_output_keys = []
+        self._detector_is_identity = True
+        self._output_size = 0
+        self._current_params = {}
+
+        for warning_msg in context.warnings:
+            warnings.warn(warning_msg, UserWarning, stacklevel=3)
 
     # ---------------- core init paths ----------------
 
