@@ -179,28 +179,36 @@ class QuantumLayer(MerlinModule):
         """
         super().__init__()
 
+        # Phase 1: device + dtype normalization
         device, dtype, complex_dtype = MerlinModule.setup_device_and_dtype(
             device, dtype
         )
+        # Phase 2: computation space coercion
         computation_space = ComputationSpace.coerce(computation_space)
 
+        # Phase 3: circuit source resolution (builder/circuit/experiment)
         circuit_source = validate_and_resolve_circuit_source(
             builder, circuit, experiment, trainable_parameters, input_parameters
         )
+        # Phase 4: encoding validation (post-resolution)
         encoding_config = validate_encoding_mode(
             amplitude_encoding,
             input_size,
             n_photons,
             circuit_source.input_parameters,
         )
+        # Phase 5: input state normalization
         input_state, resolved_n_photons = prepare_input_state(
             input_state, n_photons, computation_space, device, complex_dtype, experiment
         )
 
+        # Phase 6: experiment vetting (if provided)
         if experiment is not None:
             vet_experiment(experiment)
 
+        # Phase 7: circuit resolution
         resolved_circuit = resolve_circuit(circuit_source, pcvl)
+        # Phase 8: noise + detector setup
         noise_and_detectors = setup_noise_and_detectors(
             resolved_circuit.experiment,
             resolved_circuit.circuit,
@@ -208,6 +216,7 @@ class QuantumLayer(MerlinModule):
             measurement_strategy,
         )
 
+        # Phase 9: build initialization context
         context = InitializationContext(
             device=device,
             dtype=dtype,
@@ -231,8 +240,9 @@ class QuantumLayer(MerlinModule):
             warnings=noise_and_detectors.detector_warnings,
         )
 
+        # Phase 10: assign context to self + warnings
         self._finalize_from_context(context)
-
+        # Phase 11: downstream setup
         self._init_from_custom_circuit(context)
 
     def _finalize_from_context(self, context: InitializationContext) -> None:
