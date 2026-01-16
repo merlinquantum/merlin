@@ -282,12 +282,13 @@ class QuantumLayer(MerlinModule):
         self._detectors = context.detectors
         self._has_custom_detectors = context.has_custom_detectors
         self.detectors = self._detectors
-        self._detector_transform = None
-        self._detector_keys = []
-        self._raw_output_keys = []
+        self._detector_transform: DetectorTransform | None = None
+        self._photon_loss_transform: PhotonLossTransform | None = None
+        self._detector_keys: list[tuple[int, ...]] = []
+        self._raw_output_keys: list[tuple[int, ...]] = []
         self._detector_is_identity = True
         self._output_size = 0
-        self._current_params = {}
+        self._current_params: dict[str, Any] = {}
 
         for warning_msg in context.warnings:
             warnings.warn(warning_msg, UserWarning, stacklevel=3)
@@ -455,7 +456,7 @@ class QuantumLayer(MerlinModule):
             raise TypeError(f"Unknown measurement_strategy: {measurement_strategy}")
 
         # Create measurement mapping
-        self.measurement_mapping = OutputMapper.create_mapping(
+        self.measurement_mapping: nn.Module = OutputMapper.create_mapping(
             measurement_strategy,
             self.computation_process.computation_space,
             keys,
@@ -860,14 +861,15 @@ class QuantumLayer(MerlinModule):
         self._photon_loss_is_identity = self._photon_loss_transform.is_identity
 
     def _initialize_detector_transform(self) -> None:
-        self._detector_transform = DetectorTransform(
+        detector_transform = DetectorTransform(
             self._photon_loss_keys,
             self._detectors,
             dtype=self.dtype,
             device=self.device,
         )
-        self._detector_keys = self._detector_transform.output_keys
-        self._detector_is_identity = self._detector_transform.is_identity
+        self._detector_transform = detector_transform
+        self._detector_keys = detector_transform.output_keys
+        self._detector_is_identity = detector_transform.is_identity
 
     @staticmethod
     def _normalize_output_key(
