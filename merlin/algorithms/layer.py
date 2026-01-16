@@ -233,14 +233,7 @@ class QuantumLayer(MerlinModule):
 
         self._finalize_from_context(context)
 
-        self._init_from_custom_circuit(
-            self.circuit,
-            self.input_state,
-            self.n_photons,
-            self.trainable_parameters,
-            self.input_parameters,
-            self.measurement_strategy,
-        )
+        self._init_from_custom_circuit(context)
 
     def _finalize_from_context(self, context: InitializationContext) -> None:
         """Assign initialization context to instance attributes."""
@@ -276,16 +269,15 @@ class QuantumLayer(MerlinModule):
 
     # ---------------- core init paths ----------------
 
-    def _init_from_custom_circuit(
-        self,
-        circuit: pcvl.Circuit,
-        input_state: list[int] | None,
-        n_photons: int | None,
-        trainable_parameters: list[str],
-        input_parameters: list[str],
-        measurement_strategy: MeasurementStrategy,
-    ):
+    def _init_from_custom_circuit(self, context: InitializationContext):
         """Initialize from custom circuit (backward compatible mode)."""
+        circuit = context.circuit
+        input_state = context.input_state
+        n_photons = context.n_photons
+        trainable_parameters = context.trainable_parameters
+        input_parameters = context.input_parameters
+        measurement_strategy = context.measurement_strategy
+
         if input_state is not None:
             self.input_state = input_state
         elif n_photons is not None:
