@@ -31,16 +31,18 @@ its amplitude tensor. It supports dense and sparse tensors, Fock ordering via
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from functools import cache
-from numbers import Number
+from typing import cast
 
 import perceval as pcvl
 import torch
 
 from ..utils.combinadics import Combinadics
 from ..utils.dtypes import complex_dtype_for
+
+Scalar = float | int | complex
 
 Basis = Combinadics
 
@@ -301,12 +303,12 @@ class StateVector:
             if coalesced._nnz() != 1:
                 return None
             idx = int(coalesced.indices()[0, 0].item())
-            return self.basis[idx], coalesced.values()[0]
+            return cast(tuple[int, ...], self.basis[idx]), coalesced.values()[0]
         non_zero = torch.nonzero(self.tensor.abs(), as_tuple=False)
         if non_zero.numel() != 1:
             return None
         idx = int(non_zero[0].item())
-        return self.basis[idx], self.tensor[idx]
+        return cast(tuple[int, ...], self.basis[idx]), self.tensor[idx]
 
     def to_perceval(self) -> pcvl.StateVector | list[pcvl.StateVector]:
         """Convert to ``pcvl.StateVector``.
@@ -332,17 +334,21 @@ class StateVector:
 
     @staticmethod
     def _perceval_from_1d(vector: torch.Tensor, basis: Basis) -> pcvl.StateVector:
+        entries: Iterable[tuple[int, complex]]
         if vector.is_sparse:
             coalesced = vector.coalesce()
-            entries = zip(
-                coalesced.indices().flatten().tolist(),
-                coalesced.values().tolist(),
-                strict=False,
+            entries = (
+                (int(i), complex(val))
+                for i, val in zip(
+                    coalesced.indices().flatten().tolist(),
+                    coalesced.values().tolist(),
+                    strict=False,
+                )
             )
         else:
-            entries = enumerate(vector.tolist())
+            entries = ((i, complex(val)) for i, val in enumerate(vector.tolist()))
         mapping = [
-            (pcvl.BasicState(basis[idx]), complex(val))
+            (pcvl.BasicState(basis[idx]), val)
             for idx, val in entries
             if val != 0 and val != 0.0
         ]
@@ -405,7 +411,9 @@ class StateVector:
             for basis_idx, amp in entries.items():
                 if amp == 0 or amp == 0.0:
                     continue
-                term = pcvl.StateVector(pcvl.BasicState(basis[basis_idx]))
+                term = pcvl.StateVector(
+                    pcvl.BasicState(cast(tuple[int, ...], basis[basis_idx]))
+                )
                 if amp != 1:
                     term = term * complex(amp)
                 acc = term if acc is None else acc + term
@@ -490,7 +498,10 @@ class StateVector:
             idx = index_map.get(tuple(int(v) for v in basic))
             if idx is None:
                 continue
-            dense[idx] = complex(amplitude)
+            amp_tensor = torch.tensor(
+                complex(amplitude), dtype=dense.dtype, device=dense.device
+            )
+            dense[idx] = amp_tensor
         dense = _to_complex(dense, dtype=dtype, device=device)
         return cls(dense, n_modes, n_photons, _normalized=False)
 
@@ -762,9 +773,9 @@ class StateVector:
         diff = left - right
         return StateVector(diff, self.n_modes, self.n_photons, _normalized=False)
 
-    def __mul__(self, scalar: Number) -> StateVector:
+    def __mul__(self, scalar: Scalar) -> StateVector:
         """Scale amplitudes by a scalar (no renormalization)."""
-        if not isinstance(scalar, Number):
+        if not isinstance(scalar, (int, float, complex)):
             return NotImplemented
         if self.is_sparse:
             return StateVector(
@@ -774,7 +785,7 @@ class StateVector:
             self.tensor * scalar, self.n_modes, self.n_photons, _normalized=False
         )
 
-    def __rmul__(self, scalar: Number) -> StateVector:
+    def __rmul__(self, scalar: Scalar) -> StateVector:
         """Right scalar multiplication delegation."""
         return self.__mul__(scalar)
 

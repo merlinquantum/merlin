@@ -25,7 +25,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from functools import cache
-from typing import Union
+from typing import Union, cast
 
 import perceval as pcvl
 import torch
@@ -39,9 +39,7 @@ Basis = Union[Combinadics, "FilteredBasis", tuple[tuple[int, ...], ...]]
 class FilteredBasis:
     """Lazy subset view over a base basis with bidirectional lookup."""
 
-    def __init__(
-        self, base: Combinadics | tuple[tuple[int, ...], ...], kept: Iterable[int]
-    ) -> None:
+    def __init__(self, base: Basis, kept: Iterable[int]) -> None:
         self._base = base
         self._kept = tuple(int(i) for i in kept)
         self._state_to_idx = {self._base[i]: pos for pos, i in enumerate(self._kept)}
@@ -49,11 +47,11 @@ class FilteredBasis:
     def __len__(self) -> int:
         return len(self._kept)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterable[tuple[int, ...]]:
         for pos in range(len(self._kept)):
-            yield self._base[self._kept[pos]]
+            yield cast(tuple[int, ...], self._base[self._kept[pos]])
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: int | Iterable[int]) -> int | tuple[int, ...]:
         if isinstance(key, int):
             if key < 0 or key >= len(self._kept):
                 raise IndexError("FilteredBasis index out of range")
@@ -398,7 +396,8 @@ class ProbabilityDistribution:
             if sum(int(v) for v in basic) != n_photons:
                 raise ValueError("BSDistribution must have uniform photon number.")
         basis = _basis_for_space(ComputationSpace.FOCK, n_modes, n_photons)
-        index_map = {state: idx for idx, state in enumerate(basis)}
+        iter_basis = cast(Iterable[tuple[int, ...]], basis)
+        index_map = {state: idx for idx, state in enumerate(iter_basis)}
         basis_size = len(basis)
         if sparse is None:
             sparse = (len(items) / basis_size) <= 0.3
@@ -458,6 +457,7 @@ class ProbabilityDistribution:
     @staticmethod
     def _to_pcvl_single(vector: torch.Tensor, basis: Basis) -> pcvl.BSDistribution:
         dist = pcvl.BSDistribution()
+        entries: Iterable[tuple[int, float]]
         if vector.is_sparse:
             coalesced = vector.coalesce()
             entries = zip(
@@ -466,7 +466,8 @@ class ProbabilityDistribution:
                 strict=False,
             )
         else:
-            entries = enumerate(vector.tolist())
+            dense_list = vector.tolist()
+            entries = ((i, float(val)) for i, val in enumerate(dense_list))
         for idx, prob in entries:
             if prob == 0 or prob == 0.0:
                 continue
@@ -548,6 +549,7 @@ class ProbabilityDistribution:
         """
         basis = self.basis
         target_space: ComputationSpace | None = None
+        predicate: Callable[[tuple[int, ...]], bool]
         extra_predicate: Callable[[tuple[int, ...]], bool] | None = None
 
         # allow (space, predicate) tuple to combine constraints
@@ -594,9 +596,10 @@ class ProbabilityDistribution:
             else:
                 raise ValueError("Unknown computation space filter")
         elif callable(rule):
-            predicate = rule
+            predicate = cast(Callable[[tuple[int, ...]], bool], rule)
         else:
-            allowed = {tuple(int(x) for x in state) for state in rule}
+            allowed_states = cast(Iterable[Sequence[int]], rule)
+            allowed = {tuple(int(x) for x in state) for state in allowed_states}
 
             def predicate(state: tuple[int, ...]) -> bool:
                 return tuple(state) in allowed
@@ -609,6 +612,8 @@ class ProbabilityDistribution:
 
             predicate = combined
 
+        iter_basis = cast(Iterable[tuple[int, ...]], basis)
+
         if self.is_sparse:
             coalesced = self._tensor_coalesced()
             idx = coalesced.indices()
@@ -617,7 +622,7 @@ class ProbabilityDistribution:
             kept_basis_indices: list[int] = []
             for col in range(vals.shape[0]):
                 basis_idx = int(idx[-1, col].item())
-                state = basis[basis_idx]
+                state = cast(tuple[int, ...], basis[basis_idx])
                 if predicate(state):
                     keep_cols.append(col)
                     kept_basis_indices.append(basis_idx)
@@ -692,10 +697,11 @@ class ProbabilityDistribution:
         dense = self.to_dense()
         if target_space in (ComputationSpace.UNBUNCHED, ComputationSpace.DUAL_RAIL):
             target_basis = _basis_for_space(target_space, self.n_modes, self.n_photons)
-            src_index = {state: idx for idx, state in enumerate(basis)}
+            src_index = {state: idx for idx, state in enumerate(iter_basis)}
             gather_src: list[int] = []
             kept_positions: list[int] = []
-            for pos, state in enumerate(target_basis):
+            target_iter = cast(Iterable[tuple[int, ...]], target_basis)
+            for pos, state in enumerate(target_iter):
                 if predicate(state):
                     kept_positions.append(pos)
                     gather_src.append(src_index[state])
@@ -733,8 +739,8 @@ class ProbabilityDistribution:
             )
 
         gather_indices: list[int] = []
-        for i, state in enumerate(basis):
-            if predicate(state):
+        for i, state in enumerate(iter_basis):
+            if predicate(cast(tuple[int, ...], state)):
                 gather_indices.append(i)
         if not gather_indices:
             shape = dense.shape[:-1] + (0,)

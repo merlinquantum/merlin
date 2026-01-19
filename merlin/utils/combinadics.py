@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Iterable, Iterator
+from typing import overload
 
 TupleInt = tuple[int, ...]
 
@@ -131,40 +132,36 @@ class Combinadics:
             return self._unrank_unbunched(index)
         return self._unrank_dualrail(index)
 
-    def __getitem__(self, key: object) -> int | TupleInt:
-        """Symmetric lookup: index -> state or state -> index.
+    @overload
+    def __getitem__(self, key: int) -> TupleInt: ...
+
+    @overload
+    def __getitem__(self, key: Iterable[int]) -> int: ...
+
+    def __getitem__(self, key: int | Iterable[int]) -> int | TupleInt:
+        """Symmetric lookup: rank -> state or state -> rank.
 
         Parameters
         ----------
-        key : int | Iterable[int] | object
-            Integer rank to decode, iterable photon counts to encode, or any
-            object that can be coerced to a sequence via ``list(key)`` (e.g.,
-            Perceval ``BasicState``).
+        key : int | Iterable[int]
+            Integer rank to decode, or photon counts to encode.
 
         Returns
         -------
-        Tuple[int, ...] | int
-            Fock state when ``key`` is an integer; rank when ``key`` is a state.
+        tuple[int, ...] | int
+            State when given an ``int``; rank when given counts.
 
         Raises
         ------
         TypeError
-            If ``key`` is neither an integer nor an iterable of integers.
-        ValueError
-            If the provided state violates scheme constraints.
+            If ``key`` is neither an int nor an iterable of ints.
         """
 
         if isinstance(key, int):
             return self.index_to_fock(key)
         if isinstance(key, Iterable) and not isinstance(key, (str, bytes)):
             return self.fock_to_index(key)
-        try:
-            as_list = list(key)
-        except TypeError as exc:  # not iterable
-            raise TypeError(
-                "Combinadics key must be an int or iterable of ints"
-            ) from exc
-        return self.fock_to_index(as_list)
+        raise TypeError("Combinadics key must be an int or iterable of ints")
 
     def index(self, state: Iterable[int]) -> int:
         """Return the rank for a given state (``tuple.index`` compatible).
