@@ -23,9 +23,13 @@
 """Measurement strategy definitions for quantum-to-classical conversion."""
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from enum import Enum
 
 import torch
+
+from merlin.core.computation_space import ComputationSpace
+from merlin.utils.grouping import LexGrouping, ModGrouping
 
 
 class MeasurementStrategy(Enum):
@@ -129,3 +133,58 @@ def resolve_measurement_strategy(
     if measurement_strategy == MeasurementStrategy.AMPLITUDES:
         return AmplitudesStrategy()
     raise TypeError(f"Unknown measurement_strategy: {measurement_strategy}")
+
+
+class MeasurementType(Enum):
+    """Low-level measurement type used by strategy implementations."""
+
+    PARTIAL = "partial"
+
+
+@dataclass(frozen=True, slots=True)
+class MeasurementStrategyV3:
+    """Immutable definition of a measurement strategy for output post-processing."""
+
+    type: MeasurementType
+    measured_modes: tuple[int, ...]
+    computation_space: ComputationSpace | None = None
+    grouping: LexGrouping | ModGrouping | None = None
+
+    @staticmethod
+    def partial(
+        modes: list[int],
+        computation_space: ComputationSpace,
+        grouping: LexGrouping | ModGrouping | None = None,
+    ) -> "MeasurementStrategyV3":
+        """Create a partial measurement on the given mode indices."""
+
+        if len(modes) == 0:
+            raise ValueError("modes cannot be empty")
+        if len(set(modes)) != len(modes):
+            raise ValueError("Duplicate mode indices")
+        if any(m < 0 for m in modes):
+            raise ValueError("Negative mode index")
+
+        return MeasurementStrategyV3(
+            type=MeasurementType.PARTIAL,
+            measured_modes=tuple(modes),
+            grouping=grouping,
+            computation_space=computation_space,
+        )
+
+    def validate_modes(self, n_modes: int) -> None:
+        """Validate mode indices and warn when the selection covers all modes."""
+        for m in self.measured_modes:
+            if m < 0 or m >= n_modes:
+                raise ValueError(
+                    f"Invalid mode indices {self.measured_modes} for circuit with {n_modes} modes"
+                )
+        if len(self.measured_modes) == n_modes:
+            raise Warning(
+                "All modes are measured; consider using .probs() instead of .partial()"
+            )
+
+    def get_unmeasured_modes(self, n_modes: int) -> tuple[int, ...]:
+        """Return the complement of the measured modes after validation."""
+        self.validate_modes(n_modes)
+        return tuple(m for m in range(n_modes) if m not in self.measured_modes)
