@@ -708,9 +708,13 @@ class ProbabilityDistribution:
             kept_positions: list[int] = []
             target_iter = cast(Iterable[tuple[int, ...]], target_basis)
             for pos, state in enumerate(target_iter):
-                if predicate(state):
-                    kept_positions.append(pos)
-                    gather_src.append(src_index[state])
+                if not predicate(state):
+                    continue
+                src_idx = src_index.get(state)
+                if src_idx is None:
+                    continue
+                kept_positions.append(pos)
+                gather_src.append(src_idx)
             if not gather_src:
                 shape = dense.shape[:-1] + (0,)
                 zero = torch.zeros(shape, dtype=dense.dtype, device=dense.device)
