@@ -259,6 +259,12 @@ class ProbabilityDistribution:
             indices = coalesced.indices()
             values = coalesced.values()
             nnz = values.shape[0]
+            if nnz == 0:
+                # Nothing to renormalize; keep an empty sparse tensor with the same shape
+                self.tensor = torch.sparse_coo_tensor(
+                    indices, values, coalesced.shape, device=coalesced.device
+                )
+                return self
             for col in range(nnz):
                 batch_coords = tuple(int(v) for v in indices[:-1, col].tolist())
                 sums[batch_coords] += values[col]
