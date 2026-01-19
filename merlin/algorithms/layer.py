@@ -46,7 +46,10 @@ from ..measurement import OutputMapper
 from ..measurement.autodiff import AutoDiffProcess
 from ..measurement.detectors import DetectorTransform
 from ..measurement.photon_loss import PhotonLossTransform
-from ..measurement.strategies import MeasurementStrategy
+from ..measurement.strategies import (
+    MeasurementStrategy,
+    resolve_measurement_strategy,
+)
 from ..utils.deprecations import sanitize_parameters
 from ..utils.grouping import ModGrouping
 from .layer_utils import (
