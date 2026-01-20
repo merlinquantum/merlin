@@ -21,11 +21,10 @@
 # SOFTWARE.
 
 import perceval as pcvl
-import pytest
 import torch
-from merlin.core.state_vector import StateVector
 
 from merlin.core.partial_measurement import PartialMeasurement, PartialMeasurementBranch
+from merlin.core.state_vector import StateVector
 from merlin.measurement import DetectorTransform
 
 
@@ -33,7 +32,7 @@ class TestPartialMeasurementBranch:
     def test_branch_creation(self):
         prob = torch.tensor([0.12, 0.34], dtype=torch.float32, requires_grad=True)
         amps = torch.randn(2, 4, dtype=torch.cfloat)  # (batch, remaining_basis_dim)
-        sv = StateVector(tensor=amps, n_modes=3)  # to adapt after PML-120
+        sv = StateVector(tensor=amps, n_modes=3, n_photons=2)
         b = PartialMeasurementBranch(
             outcome=(0, 2),
             probability=prob,
@@ -45,12 +44,16 @@ class TestPartialMeasurementBranch:
 
 
 class TestPartialMeasurement:
-    def test_constructor_rejects_unordered_branches(self):
+    def test_constructor_orders_branches(self):
         # Outcomes intentionally out of order
         prob_a = torch.tensor([0.14, 0.20], dtype=torch.float32)
         prob_b = torch.tensor([0.12, 0.10], dtype=torch.float32)
-        sv_a = StateVector(tensor=torch.randn(2, 3, dtype=torch.cfloat), n_modes=2)
-        sv_b = StateVector(tensor=torch.randn(2, 3, dtype=torch.cfloat), n_modes=2)
+        sv_a = StateVector(
+            tensor=torch.randn(2, 3, dtype=torch.cfloat), n_modes=2, n_photons=1
+        )
+        sv_b = StateVector(
+            tensor=torch.randn(2, 3, dtype=torch.cfloat), n_modes=2, n_photons=0
+        )
         branches = (
             PartialMeasurementBranch(
                 outcome=(1, 0), probability=prob_a, amplitudes=sv_a
@@ -59,18 +62,61 @@ class TestPartialMeasurement:
                 outcome=(0, 2), probability=prob_b, amplitudes=sv_b
             ),
         )
-        with pytest.raises(ValueError, match="ordered lexicographically"):
-            PartialMeasurement(
-                branches=branches,
-                measured_modes=(0, 1),
-                unmeasured_modes=(2, 3),
-            )
+        result = PartialMeasurement(
+            branches=branches,
+            measured_modes=(0, 1),
+            unmeasured_modes=(2, 3),
+        )
+        assert [b.outcome for b in result.branches] == [(0, 2), (1, 0)], (
+            "Branches are not ordered lexicographically by outcome"
+        )
+
+    def test_constructor_orders_branches_with_duplicate_outcomes(self):
+        prob_first = torch.tensor([0.10, 0.11], dtype=torch.float32)
+        prob_second = torch.tensor([0.20, 0.21], dtype=torch.float32)
+        prob_third = torch.tensor([0.30, 0.31], dtype=torch.float32)
+
+        sv_first = StateVector(
+            tensor=torch.randn(2, 3, dtype=torch.cfloat), n_modes=2, n_photons=1
+        )
+        sv_second = StateVector(
+            tensor=torch.randn(2, 3, dtype=torch.cfloat), n_modes=2, n_photons=0
+        )
+        sv_third = StateVector(
+            tensor=torch.randn(2, 3, dtype=torch.cfloat), n_modes=2, n_photons=0
+        )
+
+        branches = (
+            PartialMeasurementBranch(
+                outcome=(1, 0), probability=prob_first, amplitudes=sv_first
+            ),
+            PartialMeasurementBranch(
+                outcome=(0, 2), probability=prob_second, amplitudes=sv_second
+            ),
+            PartialMeasurementBranch(
+                outcome=(0, 2), probability=prob_third, amplitudes=sv_third
+            ),
+        )
+        result = PartialMeasurement(
+            branches=branches,
+            measured_modes=(0, 1),
+            unmeasured_modes=(2, 3),
+        )
+
+        assert [b.outcome for b in result.branches] == [(0, 2), (0, 2), (1, 0)]
+        assert torch.equal(result.branches[0].probability, prob_second)
+        assert torch.equal(result.branches[1].probability, prob_third)
+        assert torch.equal(result.branches[2].probability, prob_first)
 
     def test_tensor_stacks_probabilities_in_branch_order(self):
         prob_a = torch.tensor([0.12, 0.10], dtype=torch.float32)
         prob_b = torch.tensor([0.14, 0.20], dtype=torch.float32)
-        sv_a = StateVector(tensor=torch.randn(2, 3, dtype=torch.cfloat), n_modes=2)
-        sv_b = StateVector(tensor=torch.randn(2, 3, dtype=torch.cfloat), n_modes=2)
+        sv_a = StateVector(
+            tensor=torch.randn(2, 3, dtype=torch.cfloat), n_modes=2, n_photons=0
+        )
+        sv_b = StateVector(
+            tensor=torch.randn(2, 3, dtype=torch.cfloat), n_modes=2, n_photons=1
+        )
         branches = (
             PartialMeasurementBranch(
                 outcome=(0, 2), probability=prob_a, amplitudes=sv_a
@@ -108,8 +154,12 @@ class TestPartialMeasurement:
     def test_tensor_handles_scalar_probabilities(self):
         prob_a = torch.tensor(0.75)
         prob_b = torch.tensor(0.25)
-        sv_a = StateVector(tensor=torch.randn(1, 2, dtype=torch.cfloat), n_modes=1)
-        sv_b = StateVector(tensor=torch.randn(1, 2, dtype=torch.cfloat), n_modes=1)
+        sv_a = StateVector(
+            tensor=torch.randn(1, 2, dtype=torch.cfloat), n_modes=1, n_photons=1
+        )
+        sv_b = StateVector(
+            tensor=torch.randn(1, 2, dtype=torch.cfloat), n_modes=1, n_photons=0
+        )
         branches = (
             PartialMeasurementBranch(outcome=(0,), probability=prob_a, amplitudes=sv_a),
             PartialMeasurementBranch(outcome=(1,), probability=prob_b, amplitudes=sv_b),
@@ -124,9 +174,11 @@ class TestPartialMeasurement:
 
     def test_properties_expose_mode_counts(self):
         prob = torch.tensor([1.0], dtype=torch.float32)
-        sv = StateVector(tensor=torch.randn(1, 2, dtype=torch.cfloat), n_modes=1)
+        sv = StateVector(
+            tensor=torch.randn(1, 2, dtype=torch.cfloat), n_modes=1, n_photons=1
+        )
         branches = (
-            PartialMeasurementBranch(outcome=(0,), probability=prob, amplitudes=sv),
+            PartialMeasurementBranch(outcome=(0, 0), probability=prob, amplitudes=sv),
         )
         result = PartialMeasurement(
             branches=branches,
@@ -208,9 +260,13 @@ class TestPartialMeasurement:
         for level in detector_output:
             for full_outcome, entries in level.items():
                 measured_only = tuple(elem for elem in full_outcome if elem is not None)
-                expected_by_outcome[measured_only] = entries[0]
+                expected_by_outcome[measured_only] = entries
 
         for branch in pm.branches:
-            expected_prob, expected_amp = expected_by_outcome[branch.outcome]
-            assert torch.allclose(branch.probability, expected_prob)
-            assert torch.allclose(branch.amplitudes.tensor, expected_amp)
+            output = expected_by_outcome[branch.outcome]
+            if len(output) == 1:
+                expected_prob, expected_amp = output[0]
+                assert torch.allclose(branch.probability, expected_prob)
+                assert torch.allclose(branch.amplitudes.tensor, expected_amp)
+            else:
+                assert (branch.probability, branch.amplitudes) in output

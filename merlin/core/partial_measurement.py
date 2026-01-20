@@ -81,7 +81,7 @@ class PartialMeasurement:
             return
         previous_outcome = self.branches[0].outcome
         for branch in self.branches[1:]:
-            if branch.outcome <= previous_outcome:
+            if branch.outcome < previous_outcome:
                 self.reorder_branches()
                 return
             previous_outcome = branch.outcome
@@ -147,7 +147,9 @@ class PartialMeasurement:
         unmeasured_modes: tuple[int, ...] = ()
         modes_initialized = False
 
-        for item in detector_output:
+        for i in range(len(detector_output)):
+            item = detector_output[i]
+            n_photons = i  # Number of photons in unmeasured modes (to verify)
             for full_outcome, outputs in item.items():
                 if not modes_initialized:
                     measured_modes = tuple(
@@ -161,15 +163,20 @@ class PartialMeasurement:
                 measured_only_outcome = tuple(
                     elem for elem in full_outcome if elem is not None
                 )
-                probs, amps = outputs[0]  # A bit weird but only one entry per outcome
-                # TODO verify why outputs is a list of tuples, not just a tuple
-                branches.append(
-                    PartialMeasurementBranch(
-                        outcome=measured_only_outcome,
-                        probability=probs,
-                        amplitudes=StateVector.from_tensor(amps),
+                # For every (prob, amp) corresponding to this outcome, create a branch
+                for output in outputs:
+                    probs, amps = output
+                    branches.append(
+                        PartialMeasurementBranch(
+                            outcome=measured_only_outcome,
+                            probability=probs,
+                            amplitudes=StateVector(
+                                tensor=amps,
+                                n_modes=len(unmeasured_modes),
+                                n_photons=n_photons,
+                            ),
+                        )
                     )
-                )
 
         branches.sort(key=lambda branch: branch.outcome)
         return PartialMeasurement(
