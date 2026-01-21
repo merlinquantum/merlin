@@ -42,6 +42,7 @@ from ..builder.circuit_builder import (
 from ..core.computation_space import ComputationSpace
 from ..core.generators import StateGenerator, StatePattern
 from ..core.process import ComputationProcessFactory
+from ..core.state_vector import StateVector
 from ..measurement import OutputMapper
 from ..measurement.autodiff import AutoDiffProcess
 from ..measurement.detectors import DetectorTransform
@@ -93,7 +94,7 @@ class QuantumLayer(MerlinModule):
         # Custom experiment construction
         experiment: pcvl.Experiment | None = None,
         # For both custom circuits and builder
-        input_state: list[int] | pcvl.BasicState | pcvl.StateVector | None = None,
+        input_state: StateVector | pcvl.StateVector | pcvl.BasicState | list | tuple | torch.Tensor | None = None,
         n_photons: int | None = None,
         # only for custom circuits and experiments
         trainable_parameters: list[str] | None = None,
@@ -132,16 +133,15 @@ class QuantumLayer(MerlinModule):
         experiment : pcvl.Experiment | None, optional
             A Perceval experiment. Must be unitary and without post-selection or
             heralding. Mutually exclusive with ``builder`` and ``circuit``.
-        input_state : list[int] | pcvl.BasicState | pcvl.StateVector | None, optional
+        input_state : StateVector | pcvl.StateVector | pcvl.BasicState | list | tuple | torch.Tensor | None, optional
             Logical input state of the circuit. Accepted forms:
-            - list of occupations (length = number of modes),
-            - ``pcvl.BasicState`` without annotations (plain FockState only),
-            - ``pcvl.StateVector`` (converted to a tensor according to
-              ``computation_space``).
+            - ``StateVector`` (preferred, canonical type),
+            - ``pcvl.StateVector`` (converted via ``StateVector.from_perceval()``),
+            - ``pcvl.BasicState`` (converted via ``StateVector.from_basic_state()``),
+            - list/tuple of occupations (converted via ``StateVector.from_basic_state()``),
+            - ``torch.Tensor`` (DEPRECATED - will be removed in 0.4).
             If QuantumLayer is built from an experiment, the experiment's input state is used.
             If omitted, ``n_photons`` must be provided to derive a default state.
-            The dual-rail space defaults to ``[1,0,1,0,...]`` while other spaces
-            evenly distribute the photons across the available modes.
         n_photons : int | None, optional
             Number of photons used to infer a default input state and to size the
             computation space when amplitude encoding is enabled.
@@ -154,6 +154,8 @@ class QuantumLayer(MerlinModule):
             Perceval parameter prefixes used for classical (angle) encoding. For
             amplitude encoding, this must be empty/None.
         amplitude_encoding : bool, default: False
+            DEPRECATED - will be removed in 0.4. Pass a ``StateVector`` to
+            ``forward()`` for amplitude encoding instead.
             When True, the forward call expects an amplitude vector (or batch) on
             the first positional argument and propagates it through the quantum
             layer; ``input_size`` must not be set in this mode and
@@ -192,9 +194,23 @@ class QuantumLayer(MerlinModule):
         UserWarning
             When ``experiment.min_photons_filter`` or ``experiment.detectors`` are
             present (currently ignored).
+        DeprecationWarning
+            When ``amplitude_encoding=True`` is passed (deprecated in favor of
+            passing ``StateVector`` to ``forward()``).
+            When ``torch.Tensor`` is passed as ``input_state`` (deprecated in favor
+            of ``StateVector``).
 
         """
         super().__init__()
+
+        # === DEPRECATION WARNING: amplitude_encoding ===
+        if amplitude_encoding:
+            warnings.warn(
+                "amplitude_encoding=True is deprecated and will be removed in 0.4. "
+                "Pass a StateVector to forward() for amplitude encoding instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
 
         # Phase 1: device + dtype normalization
         device, dtype, complex_dtype = MerlinModule.setup_device_and_dtype(
@@ -648,46 +664,128 @@ class QuantumLayer(MerlinModule):
 
     def forward(
         self,
-        *input_parameters: torch.Tensor,
+        *input_parameters: torch.Tensor | StateVector,
         shots: int | None = None,
         sampling_method: str | None = None,
         simultaneous_processes: int | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor] | torch.Tensor:
+    ) -> torch.Tensor:
         """Forward pass through the quantum layer.
 
-        When ``self.amplitude_encoding`` is ``True`` the first positional argument
-        must contain the amplitude-encoded input state (either ``[num_states]`` or
-        ``[batch_size, num_states]``). Remaining positional arguments are treated
-        as classical inputs and processed via the standard encoding pipeline.
+        Encoding is inferred from the input type:
 
-        Sampling is controlled by:
-            - shots (int): number of samples; if 0 or None, return exact amplitudes/probabilities.
-            - sampling_method (str): e.g. "multinomial".
+        - ``torch.Tensor`` (float): angle encoding (compatible with ``nn.Sequential``)
+        - ``torch.Tensor`` (complex): amplitude encoding
+        - ``StateVector``: amplitude encoding (preferred for quantum state injection)
+
+        Parameters
+        ----------
+        *input_parameters : torch.Tensor | StateVector
+            Input data. For angle encoding, pass float tensors. For amplitude
+            encoding, pass a single ``StateVector`` or complex tensor.
+        shots : int | None, optional
+            Number of samples; if 0 or None, return exact amplitudes/probabilities.
+        sampling_method : str | None, optional
+            Sampling method, e.g. "multinomial".
+        simultaneous_processes : int | None, optional
+            Batch size hint for parallel computation.
+
+        Returns
+        -------
+        torch.Tensor
+            Output tensor after measurement mapping.
+
+        Raises
+        ------
+        TypeError
+            If inputs mix ``torch.Tensor`` and ``StateVector``, or if an
+            unsupported input type is provided.
+        ValueError
+            If multiple ``StateVector`` inputs are provided.
         """
+        # === Input classification ===
+        tensors: list[torch.Tensor] = []
+        state_vectors: list[StateVector] = []
+        other: list[Any] = []
 
-        # Phase 1: Input handling (amplitude vs. classical).
-        inputs = list(input_parameters)
+        for inp in input_parameters:
+            if isinstance(inp, StateVector):
+                state_vectors.append(inp)
+            elif isinstance(inp, torch.Tensor):
+                tensors.append(inp)
+            else:
+                other.append(inp)
+
+        # === Validation ===
+        if other:
+            raise TypeError(
+                f"Unsupported input types: {[type(x).__name__ for x in other]}. "
+                "Expected torch.Tensor or StateVector."
+            )
+
+        if tensors and state_vectors:
+            raise TypeError(
+                "Cannot mix torch.Tensor and StateVector inputs in the same forward() call. "
+                "Use either tensor inputs (angle encoding) or StateVector (amplitude encoding)."
+            )
+
+        # === Dispatch by input type ===
+        # Case 1: StateVector → amplitude encoding
+        if state_vectors:
+            if len(state_vectors) > 1:
+                raise ValueError("Only one StateVector input is allowed per forward() call.")
+            return self._forward_amplitude_statevector(
+                state_vectors[0],
+                shots=shots,
+                sampling_method=sampling_method,
+                simultaneous_processes=simultaneous_processes,
+            )
+
+        # Case 2: Complex tensor → amplitude encoding
+        if tensors and len(tensors) == 1 and tensors[0].is_complex():
+            return self._forward_amplitude_tensor(
+                tensors[0],
+                shots=shots,
+                sampling_method=sampling_method,
+                simultaneous_processes=simultaneous_processes,
+            )
+
+        # Case 3: Float tensor(s) → angle encoding (or legacy amplitude_encoding flag)
+        return self._forward_angle(
+            tensors,
+            shots=shots,
+            sampling_method=sampling_method,
+            simultaneous_processes=simultaneous_processes,
+        )
+
+    def _forward_angle(
+        self,
+        inputs: list[torch.Tensor],
+        *,
+        shots: int | None,
+        sampling_method: str | None,
+        simultaneous_processes: int | None,
+    ) -> torch.Tensor:
+        """Angle encoding path (classical tensor inputs).
+
+        Also handles legacy amplitude_encoding=True for backward compatibility.
+        """
+        # Handle legacy amplitude_encoding=True flag
         amplitude_input: torch.Tensor | None = None
         original_input_state = None
 
         if self.amplitude_encoding:
-            amplitude_input, inputs, original_input_state = (
-                self._prepare_amplitude_input(inputs)
-            )
+            if not inputs:
+                raise ValueError(
+                    "QuantumLayer configured with amplitude_encoding=True expects an amplitude tensor input."
+                )
+            amplitude_input, inputs, original_input_state = self._prepare_amplitude_input(inputs)
 
-        # classical_inputs = [
-        #    tensor for tensor in inputs if isinstance(tensor, torch.Tensor)
-        # ]
-
-        # Phase 2: Parameter assembly for circuit execution.
+        # Parameter assembly
         params, parameter_batch_dim = self._prepare_classical_parameters(inputs)
-        # Phase 3: Resolve computation path and evaluate the circuit.
-        amplitudes: torch.Tensor
 
+        # Compute amplitudes
         with self._temporary_input_state(amplitude_input, original_input_state):
-            # TODO: input_state should support StateVector
             raw_inferred_state = getattr(self.computation_process, "input_state", None)
-            # normalize the retrieved input_state to an optional tensor
             inferred_state: torch.Tensor | None
             if isinstance(raw_inferred_state, torch.Tensor):
                 inferred_state = raw_inferred_state
@@ -700,36 +798,104 @@ class QuantumLayer(MerlinModule):
                 simultaneous_processes=simultaneous_processes,
             )
 
-        # Phase 4: Configure sampling/autodiff.
+        return self._finalize_forward(amplitudes, shots=shots, sampling_method=sampling_method)
+
+    def _forward_amplitude_tensor(
+        self,
+        amplitude_tensor: torch.Tensor,
+        *,
+        shots: int | None,
+        sampling_method: str | None,
+        simultaneous_processes: int | None,
+    ) -> torch.Tensor:
+        """Amplitude encoding path from complex tensor."""
+        # Validate and convert tensor
+        amplitude_input = self._validate_amplitude_input(amplitude_tensor)
+        original_input_state = getattr(self.computation_process, "input_state", None)
+
+        # Parameter assembly (no classical inputs for amplitude encoding)
+        params, parameter_batch_dim = self._prepare_classical_parameters([])
+
+        with self._temporary_input_state(amplitude_input, original_input_state):
+            inferred_state = amplitude_input
+            amplitudes = self._compute_amplitudes(
+                params,
+                inferred_state=inferred_state,
+                parameter_batch_dim=parameter_batch_dim,
+                simultaneous_processes=simultaneous_processes,
+            )
+
+        return self._finalize_forward(amplitudes, shots=shots, sampling_method=sampling_method)
+
+    def _forward_amplitude_statevector(
+        self,
+        state_vector: StateVector,
+        *,
+        shots: int | None,
+        sampling_method: str | None,
+        simultaneous_processes: int | None,
+    ) -> torch.Tensor:
+        """Amplitude encoding path from StateVector (preferred)."""
+        # Convert StateVector to tensor for computation
+        amplitude_tensor = state_vector.to_dense()
+
+        # Validate dimensions and move to correct device/dtype
+        if amplitude_tensor.device != self.device:
+            amplitude_tensor = amplitude_tensor.to(self.device)
+        if amplitude_tensor.dtype != self.complex_dtype:
+            amplitude_tensor = amplitude_tensor.to(self.complex_dtype)
+
+        amplitude_input = self._validate_amplitude_input(amplitude_tensor)
+        original_input_state = getattr(self.computation_process, "input_state", None)
+
+        # Parameter assembly (no classical inputs for amplitude encoding)
+        params, parameter_batch_dim = self._prepare_classical_parameters([])
+
+        with self._temporary_input_state(amplitude_input, original_input_state):
+            inferred_state = amplitude_input
+            amplitudes = self._compute_amplitudes(
+                params,
+                inferred_state=inferred_state,
+                parameter_batch_dim=parameter_batch_dim,
+                simultaneous_processes=simultaneous_processes,
+            )
+
+        return self._finalize_forward(amplitudes, shots=shots, sampling_method=sampling_method)
+
+    def _finalize_forward(
+        self,
+        amplitudes: torch.Tensor,
+        *,
+        shots: int | None,
+        sampling_method: str | None,
+    ) -> torch.Tensor:
+        """Common finalization: sampling, normalization, measurement mapping."""
+        # Configure sampling/autodiff
         needs_gradient = (
             self.training
             and torch.is_grad_enabled()
             and any(p.requires_grad for p in self.parameters())
         )
 
-        # Per-call autodiff/sampling backend
         local_sampling_method = sampling_method or "multinomial"
         adp = AutoDiffProcess(local_sampling_method)
 
-        # Derive apply_sampling from shots > 0
         requested_shots = int(shots or 0)
         apply_sampling = requested_shots > 0
 
-        # Backend may override shots/sampling if gradients are required
         apply_sampling, effective_shots = adp.autodiff_backend(
             needs_gradient, apply_sampling, requested_shots
         )
 
-        # Phase 5: Convert and normalize amplitudes.
+        # Convert and normalize amplitudes
         if isinstance(amplitudes, tuple):
             amplitudes = amplitudes[1]
         elif not isinstance(amplitudes, torch.Tensor):
             raise TypeError(f"Unexpected amplitudes type: {type(amplitudes)}")
 
-        distribution, amplitudes = self._renormalize_distribution_and_amplitudes(
-            amplitudes
-        )
-        # Phase 6: Measurement strategy dispatch and output mapping.
+        distribution, amplitudes = self._renormalize_distribution_and_amplitudes(amplitudes)
+
+        # Measurement strategy dispatch
         strategy = resolve_measurement_strategy(self.measurement_strategy)
         # Handle backward compatibility for backpropagation - will be removed in future
         grouping = None
@@ -754,7 +920,6 @@ class QuantumLayer(MerlinModule):
         ):
             return results
 
-        # Apply measurement mapping (returns tensor of shape [B, output_size])
         return self.measurement_mapping(results)
 
     def _compute_amplitudes(
