@@ -180,6 +180,9 @@ class TestMeasurementStrategyV3:
         assert result.measured_modes == (0, 2)
         assert result.unmeasured_modes == (1, 3)
         assert type(result.tensor) is torch.Tensor and result.tensor.shape[0] == 2
+        assert all(type(amp) is StateVector for amp in result.amplitudes)
+        assert all(len(outcome) == 2 for outcome in result.outcomes)
+        assert all(sum(outcome) <= 2 for outcome in result.outcomes)
 
     def test_partial_measurement_grouping(self):
         """Test that grouping is only applied on probabilities when specified with partial measurement."""
@@ -217,3 +220,36 @@ class TestMeasurementStrategyV3:
         assert type(
             result_no_grouping.tensor
         ) is torch.Tensor and result_no_grouping.tensor.shape == (3, 10)
+
+    def test_partial_measurement_gradients_flow_probabilities_and_amplitudes(self):
+        """Ensure gradients flow through probabilities and branch amplitudes."""
+        strategy = MeasurementStrategyV3.partial(
+            modes=[0, 2],
+        )
+
+        amplitudes_prob = torch.randn(2, 10, dtype=torch.cfloat, requires_grad=True)
+        state_prob = StateVector(tensor=amplitudes_prob, n_modes=4, n_photons=2)
+        result_prob = strategy.process_measurement(state_prob)
+
+        assert result_prob.tensor.requires_grad
+        loss_prob = result_prob.tensor.sum()
+        loss_prob.backward()
+
+        assert amplitudes_prob.grad is not None
+        assert torch.any(amplitudes_prob.grad.abs() > 0)
+
+        amplitudes_amp = torch.randn(2, 10, dtype=torch.cfloat, requires_grad=True)
+        state_amp = StateVector(tensor=amplitudes_amp, n_modes=4, n_photons=2)
+        result_amp = strategy.process_measurement(state_amp)
+
+        assert all(
+            branch.amplitudes.tensor.requires_grad for branch in result_amp.branches
+        )
+        amp_loss = torch.stack([
+            (branch.amplitudes.tensor.real**2 + branch.amplitudes.tensor.imag**2).sum()
+            for branch in result_amp.branches
+        ]).sum()
+        amp_loss.backward()
+
+        assert amplitudes_amp.grad is not None
+        assert torch.any(amplitudes_amp.grad.abs() > 0)
