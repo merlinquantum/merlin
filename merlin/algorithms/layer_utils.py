@@ -162,7 +162,13 @@ def validate_encoding_mode(
 
 
 def prepare_input_state(
-    input_state: StateVector | pcvl.StateVector | pcvl.BasicState | list | tuple | torch.Tensor | None,
+    input_state: StateVector
+    | pcvl.StateVector
+    | pcvl.BasicState
+    | list
+    | tuple
+    | torch.Tensor
+    | None,
     n_photons: int | None,
     computation_space: ComputationSpace,
     device: torch.device | None,

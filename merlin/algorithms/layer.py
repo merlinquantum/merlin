@@ -94,7 +94,13 @@ class QuantumLayer(MerlinModule):
         # Custom experiment construction
         experiment: pcvl.Experiment | None = None,
         # For both custom circuits and builder
-        input_state: StateVector | pcvl.StateVector | pcvl.BasicState | list | tuple | torch.Tensor | None = None,
+        input_state: StateVector
+        | pcvl.StateVector
+        | pcvl.BasicState
+        | list
+        | tuple
+        | torch.Tensor
+        | None = None,
         n_photons: int | None = None,
         # only for custom circuits and experiments
         trainable_parameters: list[str] | None = None,
@@ -356,16 +362,24 @@ class QuantumLayer(MerlinModule):
         process_input_state: list[int] | torch.Tensor
         statevector_input: StateVector | None = None
         if isinstance(self.input_state, StateVector):
-            resolved_n_photons = n_photons if n_photons is not None else self.input_state.n_photons
+            resolved_n_photons = (
+                n_photons if n_photons is not None else self.input_state.n_photons
+            )
             # Pass a placeholder list to ComputationProcess to avoid tensor dimension validation
-            process_input_state = [1] * resolved_n_photons + [0] * (circuit.m - resolved_n_photons)
+            process_input_state = [1] * resolved_n_photons + [0] * (
+                circuit.m - resolved_n_photons
+            )
             statevector_input = self.input_state
         elif isinstance(self.input_state, torch.Tensor):
-            resolved_n_photons = n_photons  # n_photons must be provided for tensor input
+            resolved_n_photons = (
+                n_photons  # n_photons must be provided for tensor input
+            )
             process_input_state = self.input_state
         else:
             # list[int]
-            resolved_n_photons = n_photons if n_photons is not None else sum(self.input_state)
+            resolved_n_photons = (
+                n_photons if n_photons is not None else sum(self.input_state)
+            )
             process_input_state = self.input_state
 
         self.computation_process = ComputationProcessFactory.create(
@@ -731,7 +745,11 @@ class QuantumLayer(MerlinModule):
         original_input_state = None
 
         # Check for unsupported input types
-        unsupported = [x for x in input_parameters if not isinstance(x, (torch.Tensor, StateVector))]
+        unsupported = [
+            x
+            for x in input_parameters
+            if not isinstance(x, (torch.Tensor, StateVector))
+        ]
         if unsupported:
             raise TypeError(
                 f"Unsupported input types: {[type(x).__name__ for x in unsupported]}. "
@@ -740,9 +758,15 @@ class QuantumLayer(MerlinModule):
 
         # Check for StateVector input → amplitude encoding
         if input_parameters and isinstance(input_parameters[0], StateVector):
-            if len(input_parameters) > 1 and any(isinstance(x, StateVector) for x in input_parameters[1:]):
-                raise ValueError("Only one StateVector input is allowed per forward() call.")
-            if len(input_parameters) > 1 and any(isinstance(x, torch.Tensor) for x in input_parameters[1:]):
+            if len(input_parameters) > 1 and any(
+                isinstance(x, StateVector) for x in input_parameters[1:]
+            ):
+                raise ValueError(
+                    "Only one StateVector input is allowed per forward() call."
+                )
+            if len(input_parameters) > 1 and any(
+                isinstance(x, torch.Tensor) for x in input_parameters[1:]
+            ):
                 raise TypeError(
                     "Cannot mix torch.Tensor and StateVector inputs in the same forward() call. "
                     "Use either tensor inputs (angle encoding) or StateVector (amplitude encoding)."
@@ -757,7 +781,9 @@ class QuantumLayer(MerlinModule):
             if amplitude_tensor.dtype != self.complex_dtype:
                 amplitude_tensor = amplitude_tensor.to(self.complex_dtype)
             amplitude_input = self._validate_amplitude_input(amplitude_tensor)
-            original_input_state = getattr(self.computation_process, "input_state", None)
+            original_input_state = getattr(
+                self.computation_process, "input_state", None
+            )
             # tensor_inputs stays empty
 
         # Check for complex tensor input → amplitude encoding
@@ -768,7 +794,9 @@ class QuantumLayer(MerlinModule):
             and input_parameters[0].is_complex()
         ):
             amplitude_input = self._validate_amplitude_input(input_parameters[0])
-            original_input_state = getattr(self.computation_process, "input_state", None)
+            original_input_state = getattr(
+                self.computation_process, "input_state", None
+            )
             # tensor_inputs stays empty
 
         # Legacy amplitude_encoding=True flag
@@ -786,7 +814,9 @@ class QuantumLayer(MerlinModule):
                     DeprecationWarning,
                     stacklevel=2,
                 )
-            amplitude_input, tensor_inputs, original_input_state = self._prepare_amplitude_input(tensor_inputs)
+            amplitude_input, tensor_inputs, original_input_state = (
+                self._prepare_amplitude_input(tensor_inputs)
+            )
 
         # Float tensor(s) → angle encoding
         else:
@@ -836,7 +866,9 @@ class QuantumLayer(MerlinModule):
         elif not isinstance(amplitudes, torch.Tensor):
             raise TypeError(f"Unexpected amplitudes type: {type(amplitudes)}")
 
-        distribution, amplitudes = self._renormalize_distribution_and_amplitudes(amplitudes)
+        distribution, amplitudes = self._renormalize_distribution_and_amplitudes(
+            amplitudes
+        )
 
         # Phase 6: Measurement strategy dispatch and output mapping
         strategy = resolve_measurement_strategy(self.measurement_strategy)
