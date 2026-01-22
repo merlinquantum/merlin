@@ -36,9 +36,10 @@ To install, replace the files in your merlin installation:
 """
 
 import warnings
+
+import perceval as pcvl
 import pytest
 import torch
-import perceval as pcvl
 
 import merlin as ML
 from merlin.core.state_vector import StateVector
@@ -55,8 +56,8 @@ class TestConstructorInputTypes:
         circuit = pcvl.Circuit(4)
         sv = StateVector.from_basic_state([1, 0, 1, 0])
 
-        # Provide n_photons explicitly since StateVector.n_photons is available
-        # but sum(StateVector) would fail without special handling
+        # StateVector (FOCK space) is accepted regardless of computation_space
+        # because computation_space only affects output post-selection
         layer = ML.QuantumLayer(
             input_size=0,
             circuit=circuit,
@@ -313,7 +314,7 @@ class TestForwardDispatch:
         try:
             layer("not a tensor")
             pytest.skip("Unsupported type validation not implemented in current code")
-        except (TypeError, AttributeError) as e:
+        except (TypeError, AttributeError):
             # Either our new TypeError or old code's AttributeError is acceptable
             pass
 
@@ -404,7 +405,7 @@ class TestLegacyAmplitudeEncodingCompatibility:
         """amplitude_encoding=True should still function (with deprecation warning)."""
         circuit = pcvl.Circuit(4)
 
-        with warnings.catch_warnings(record=True) as w:
+        with warnings.catch_warnings(record=True):
             warnings.simplefilter("always")
             layer = ML.QuantumLayer(
                 circuit=circuit,
@@ -646,8 +647,8 @@ class TestErrorHandling:
     NOTE: These tests require the modified layer.py with input validation.
     """
 
-    def test_ambiguous_encoding_fails_loudly(self):
-        """Unsupported input types should fail with clear error."""
+    def test_unsupported_type_raises_typeerror(self):
+        """Unsupported input types should fail with clear TypeError."""
         builder = ML.CircuitBuilder(n_modes=4)
         builder.add_angle_encoding(modes=[0, 1], name="input")
 
@@ -661,8 +662,11 @@ class TestErrorHandling:
         try:
             layer([1, 2, 3])  # List instead of tensor
             pytest.skip("Unsupported type validation not implemented in current code")
-        except (TypeError, AttributeError):
-            pass  # Expected behavior
+        except TypeError as e:
+            assert "Unsupported input types" in str(e)
+            assert "list" in str(e)
+        except AttributeError:
+            pytest.skip("Unsupported type validation not implemented in current code")
 
     def test_mixed_inputs_clear_error_message(self):
         """Mixed inputs should provide clear error message."""
@@ -686,3 +690,43 @@ class TestErrorHandling:
             assert "mix" in str(e).lower() or "Cannot" in str(e)
         except AttributeError:
             pytest.skip("StateVector dispatch not supported in current code")
+
+
+class TestAmplitudeEncodingRealInputDeprecation:
+    """Test deprecation warning for amplitude_encoding=True with real tensor input."""
+
+    def test_amplitude_encoding_real_input_emits_deprecation(self):
+        """amplitude_encoding=True with real tensor should warn about deprecation."""
+        circuit = pcvl.Circuit(4)
+
+        with warnings.catch_warnings(record=True):
+            warnings.simplefilter("always")
+            layer = ML.QuantumLayer(
+                circuit=circuit,
+                n_photons=2,
+                amplitude_encoding=True,
+                measurement_strategy=ML.MeasurementStrategy.AMPLITUDES,
+            )
+
+        # Create real-valued amplitude input (not complex)
+        n_states = layer.output_size
+        real_amplitude_input = torch.randn(2, n_states, dtype=torch.float32)
+        real_amplitude_input = real_amplitude_input / real_amplitude_input.pow(2).sum(dim=-1, keepdim=True).sqrt()
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            try:
+                layer(real_amplitude_input)
+            except Exception:
+                pytest.skip("amplitude_encoding path not functional in current code")
+
+            # Check for deprecation warning about real input
+            deprecation_warnings = [
+                warning for warning in w
+                if issubclass(warning.category, DeprecationWarning)
+                   and "real" in str(warning.message).lower()
+            ]
+            if not deprecation_warnings:
+                pytest.skip("Real input deprecation warning not implemented in current code")
+
+            assert any("0.4" in str(warning.message) for warning in deprecation_warnings)

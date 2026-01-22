@@ -38,7 +38,7 @@ from __future__ import annotations
 import warnings
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import exqalibur as xqlbr
 import perceval as pcvl
@@ -288,7 +288,8 @@ def prepare_input_state(
                 circuit_m, n_photons, StatePattern.SPACED
             )
 
-    return input_state, n_photons
+    # At this point input_state is always list[int]
+    return cast(list[int], input_state), n_photons
 
 
 def validate_and_resolve_circuit_source(
