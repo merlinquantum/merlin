@@ -420,11 +420,13 @@ class TestPhotonLossWithQuantumLayer:
         layer.train()
         probabilities = layer(x)
         probabilities = probabilities
-        target = torch.tensor([
-            [0.0, 0.0, 0.0, 1.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0, 0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0, 0.0, 0.0, 1.0],
-        ])
+        target = torch.tensor(
+            [
+                [0.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0, 0.0, 0.0, 1.0],
+            ]
+        )
 
         cel = torch.nn.CrossEntropyLoss()
         loss = cel(probabilities, target)
@@ -619,8 +621,6 @@ class TestPhotonLossWithFidelityKernel:
         feature_map = ML.FeatureMap.simple(
             input_size=1,
             n_modes=3,
-            n_photons=3,
-            trainable=False,
         )
         input_state = [1, 1, 1]
 
@@ -632,8 +632,6 @@ class TestPhotonLossWithFidelityKernel:
         feature_map_noise = ML.FeatureMap.simple(
             input_size=1,
             n_modes=3,
-            n_photons=3,
-            trainable=False,
         )
         experiment_noise = feature_map_noise.experiment
         experiment_noise.noise = pcvl.NoiseModel(brightness=0.8, transmittance=1.0)

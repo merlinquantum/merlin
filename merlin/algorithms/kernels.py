@@ -40,6 +40,7 @@ from ..pcvl_pytorch.slos_torchscript import (
     build_slos_distribution_computegraph as build_slos_graph,
 )
 from ..utils.dtypes import to_torch_dtype
+from ..utils.deprecations import sanitize_parameters
 from .module import MerlinModule
 
 
@@ -379,65 +380,85 @@ class FeatureMap:
         raise ValueError(error_msg)
 
     @classmethod
+    @sanitize_parameters
     def simple(
         cls,
         input_size: int,
-        n_modes: int,
-        n_photons: int | None = None,
         *,
         dtype: str | torch.dtype = torch.float32,
         device: torch.device | None = None,
         angle_encoding_scale: float = 1.0,
-        trainable: bool = True,
-        trainable_prefix: str = "phi",
+        trainable_prefix: str = "",
+        n_modes: int = None,
     ) -> "FeatureMap":
         """
         Simple factory method to create a FeatureMap with minimal configuration.
 
         Args:
-            input_size: Classical feature dimension.
-            n_modes: Number of photonic modes used by the helper circuit.
+            input_size: Classical feature dimension. Maximum is 20.
             n_photons: Optional photon count (defaults to ``input_size``).
             dtype: Target dtype for internal tensors.
             device: Optional torch device handle.
             angle_encoding_scale: Global scaling applied to angle encoding features.
-            trainable: Whether to expose a trainable rotation layer.
-            trainable_prefix: Prefix used for the generated trainable parameter names.
+            trainable_prefix: Prefix used for the generated trainable parameter names. It will be added in front of the 'LI_simple' and 'LI_simple' prefixes of the trainable layers.
+            n_modes: Number of photonic modes used by the helper circuit. If it is not defined: n_modes=input_size. Maximum is 20.
 
         Returns:
             FeatureMap: Configured feature-map instance.
         """
-        if n_photons is None:
-            n_photons = input_size
-
+        if input_size > 20 or n_modes > 20:
+            raise ValueError(
+                "Input size to large for the simple layer construction. For large inputs (with larger size than 20), please use the CircuitBuilder. Here is a quick tutorial on how to use it: https://merlinquantum.ai/quickstart/first_quantum_layer.html#circuitbuilder-walkthrough"
+            )
         if input_size > n_modes:
             raise ValueError(ANGLE_ENCODING_MODE_ERROR)
+        if n_modes is None:
+            n_modes = input_size
 
-        builder = CircuitBuilder(n_modes=n_modes)
+        if n_modes == 1:
+            builder = CircuitBuilder(n_modes=2)
 
-        builder.add_superpositions(depth=1)
-        input_modes = list(range(input_size))
+            # Trainable entangling layer before encoding
+            builder.add_entangling_layer(trainable=True, name="LI_simple")
 
-        builder.add_angle_encoding(
-            modes=input_modes,
-            name="input",
-            scale=angle_encoding_scale,
-        )
+            # Angle encoding
+            builder.add_angle_encoding(
+                modes=[1], name="input", subset_combinations=False
+            )
 
-        trainable_parameters: list[str] | None
-        if trainable:
-            builder.add_rotations(trainable=True, name=trainable_prefix)
-            trainable_parameters = [trainable_prefix]
+            # Trainable entangling layer after encoding
+            builder.add_entangling_layer(trainable=True, name="RI_simple")
+
         else:
-            trainable_parameters = None
+            builder = CircuitBuilder(n_modes=n_modes)
 
-        builder.add_superpositions(depth=1)
+            # Trainable entangling layer before encoding
+            builder.add_entangling_layer(
+                trainable=True,
+                name="LI_simple",
+            )
+
+            # Angle encoding
+            builder.add_angle_encoding(
+                modes=range(input_size),
+                name="input",
+                subset_combinations=False,
+                scale=angle_encoding_scale,
+            )
+
+            # Trainable entangling layer after encoding
+            builder.add_entangling_layer(
+                trainable=True, name=trainable_prefix + "RI_simple"
+            )
 
         return cls(
             builder=builder,
             input_size=input_size,
             input_parameters=None,
-            trainable_parameters=trainable_parameters,
+            trainable_parameters=[
+                trainable_prefix + "LI_simple",
+                trainable_prefix + "RI_simple",
+            ],
             dtype=dtype,
             device=device,
         )
@@ -850,9 +871,9 @@ class FidelityKernel(MerlinModule):
 
         # Check if we are constructing training matrix
         equal_inputs = self._check_equal_inputs(x1, x2)
-        U_forward = torch.stack([
-            self.feature_map.compute_unitary(x).to(x1.device) for x in x1
-        ])
+        U_forward = torch.stack(
+            [self.feature_map.compute_unitary(x).to(x1.device) for x in x1]
+        )
 
         len_x1 = len(x1)
         if x2 is not None:
@@ -861,19 +882,25 @@ class FidelityKernel(MerlinModule):
                 if isinstance(x2, torch.Tensor)
                 else torch.as_tensor(x2, dtype=self.dtype, device=self.device)
             )
-            U_adjoint = torch.stack([
-                self.feature_map.compute_unitary(x).transpose(0, 1).conj().to(x1.device)
-                for x in x2_tensor
-            ])
-            if isinstance(x2, torch.Tensor):
-                U_adjoint = torch.stack([
-                    self.feature_map
-                    .compute_unitary(x)
+            U_adjoint = torch.stack(
+                [
+                    self.feature_map.compute_unitary(x)
                     .transpose(0, 1)
                     .conj()
                     .to(x1.device)
-                    for x in x2
-                ])
+                    for x in x2_tensor
+                ]
+            )
+            if isinstance(x2, torch.Tensor):
+                U_adjoint = torch.stack(
+                    [
+                        self.feature_map.compute_unitary(x)
+                        .transpose(0, 1)
+                        .conj()
+                        .to(x1.device)
+                        for x in x2
+                    ]
+                )
             else:
                 raise (TypeError("x2 is not None nor torch.Tensor"))
 
@@ -1012,41 +1039,37 @@ class FidelityKernel(MerlinModule):
         return value.item()
 
     @classmethod
+    @sanitize_parameters
     def simple(
         cls,
         input_size: int,
-        n_modes: int,
-        n_photons: int | None = None,
-        input_state: list[int] | None = None,
         *,
         shots: int = 0,
         sampling_method: str = "multinomial",
         no_bunching: bool = False,
         force_psd: bool = True,
-        trainable: bool = True,
         dtype: str | torch.dtype = torch.float32,
         device: torch.device | None = None,
         angle_encoding_scale: float = 1.0,
+        n_modes: int = None,
     ) -> "FidelityKernel":
         """
         Simple factory method to create a FidelityKernel with minimal configuration.
         """
-        if n_photons is None:
-            n_photons = input_size
         feature_map = FeatureMap.simple(
             input_size=input_size,
             n_modes=n_modes,
-            n_photons=n_photons,
-            trainable=trainable,
             dtype=dtype,
             device=device,
             angle_encoding_scale=angle_encoding_scale,
         )
 
-        if input_state is None:
-            input_state = StateGenerator.generate_state(
-                n_modes, n_photons, StatePattern.SPACED
-            )
+        state_size = max(n_modes, input_size)
+
+        input_state = state_size * [0]
+        for i in range(state_size):
+            if i % 2 == 1:
+                input_state[i] = 1
 
         return cls(
             feature_map=feature_map,

@@ -759,8 +759,8 @@ class TestQuantumLayer:
                 measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
             )
 
-        with pytest.raises(TypeError):
-            ML.QuantumLayer.simple(n_params=0)
+        with pytest.raises(ValueError):
+            ML.QuantumLayer.simple(input_size=21)
 
     def test_subset_combinations_respected(self):
         """Ensure subset combinations expose more parameters without breaking input size checks."""
@@ -907,9 +907,9 @@ class TestQuantumLayer:
         assert model[1].out_features == 3
         # Check that it has trainable parameters (only in Linear layer)
         trainable_params_layer = [p for p in layer.parameters() if p.requires_grad]
-        assert len(trainable_params_layer) == 0, (
-            "Layer should have no trainable parameters"
-        )
+        assert (
+            len(trainable_params_layer) == 0
+        ), "Layer should have no trainable parameters"
         trainable_params = [p for p in model.parameters() if p.requires_grad]
         assert len(trainable_params) > 0, "Model should have trainable parameters"
 

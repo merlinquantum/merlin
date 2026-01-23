@@ -785,8 +785,6 @@ class TestDetectorsWithKernels:
         feature_map = ML.FeatureMap.simple(
             input_size=1,
             n_modes=2,
-            n_photons=1,
-            trainable=False,
         )
 
         experiment = feature_map.experiment
@@ -812,8 +810,6 @@ class TestDetectorsWithKernels:
         feature_map = ML.FeatureMap.simple(
             input_size=1,
             n_modes=3,
-            n_photons=1,
-            trainable=False,
         )
 
         experiment = feature_map.experiment
@@ -840,8 +836,6 @@ class TestDetectorsWithKernels:
         feature_map = ML.FeatureMap.simple(
             input_size=1,
             n_modes=3,
-            n_photons=1,
-            trainable=False,
         )
 
         experiment = feature_map.experiment
@@ -869,8 +863,6 @@ class TestDetectorsWithKernels:
         feature_map = ML.FeatureMap.simple(
             input_size=1,
             n_modes=3,
-            n_photons=3,
-            trainable=False,
         )
         input_state = [1, 1, 1]
 
@@ -882,8 +874,6 @@ class TestDetectorsWithKernels:
         feature_map_threshold = ML.FeatureMap.simple(
             input_size=1,
             n_modes=3,
-            n_photons=3,
-            trainable=False,
         )
         experiment_threshold = feature_map_threshold.experiment
         experiment_threshold.detectors[0] = pcvl.Detector.threshold()
