@@ -70,7 +70,6 @@ integrated into any PyTorch model, and supports usual PyTorch operations like tr
    # Create a simple quantum layer
    quantum_layer = ML.QuantumLayer.simple(
        input_size=3,
-       n_params=50  # Number of trainable quantum parameters
    )
 
    # Use it like any PyTorch layer

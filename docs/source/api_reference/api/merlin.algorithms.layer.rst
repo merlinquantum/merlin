@@ -22,7 +22,6 @@ Example: Quickstart QuantumLayer
 
     simple_layer = QuantumLayer.simple(
         input_size=4,
-        n_params=120,
     )
 
     model = nn.Sequential(
@@ -43,10 +42,10 @@ Example: Quickstart QuantumLayer
    :width: 600px
    :align: center
 
-The simple quantum layer above implements a circuit of 10 modes and 5 photons with at least 90 trainable parameters. This circuit is made of:
-- A first entangling layer (trainable)
-- Angle encoding on the first N modes (for N input parameters with `input_size <= n_modes`)
-- Add MZI blocks (two trainable parameters each) to match the requested number of trainable parameters
+The simple quantum layer above implements a circuit of (input_size) modes and (input_size//2) photons. This circuit is made of:
+- A fully trainable entangling layer acting on all modes;
+- A full input encoding layer spanning all encoded features;
+- A fully trainable entangling layer acting on all modes.
 
 Additional trainable budget must therefore increase in multiples of two beyond the base interferometer (90 parameters).
 

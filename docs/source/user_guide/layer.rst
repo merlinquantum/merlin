@@ -36,8 +36,8 @@ Initialisation recipes
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The :meth:`~merlin.algorithms.layer.QuantumLayer.simple` helper generates a
-trainable, 10-mode interferometer with angle encoding and a configurable number
-of parameters. It is convenient for quick experiments, baselines or for machine 
+trainable interferometer with angle encoding that has the same number of modes as 
+the input size. It is convenient for quick experiments, baselines or for machine
 learning experts without any prior knowledge in quantum machine learning.
 
 .. code-block:: python
@@ -46,7 +46,6 @@ learning experts without any prior knowledge in quantum machine learning.
 
    layer = ML.QuantumLayer.simple(
        input_size=4,
-       n_params=64,
        measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
    )
 

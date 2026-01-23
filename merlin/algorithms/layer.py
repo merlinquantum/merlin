@@ -1228,6 +1228,8 @@ class QuantumLayer(MerlinModule):
             raise ValueError(
                 "Input size to large for the simple layer construction. For large inputs (with larger size than 20), please use the CircuitBuilder. Here is a quick tutorial on how to use it: https://merlinquantum.ai/quickstart/first_quantum_layer.html#circuitbuilder-walkthrough"
             )
+        if input_size < 1:
+            raise ValueError(f"input_size must be at least 1, got {input_size}")
 
         if input_size == 1:
             n_photons = 1
@@ -1270,6 +1272,7 @@ class QuantumLayer(MerlinModule):
 
         quantum_layer_kwargs = {
             "input_size": input_size,
+            "input_state": input_state,
             "builder": builder,
             "n_photons": n_photons,
             "measurement_strategy": MeasurementKind["PROBABILITIES"],

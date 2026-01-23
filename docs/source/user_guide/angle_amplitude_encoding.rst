@@ -113,7 +113,6 @@ If you want a quick start without designing the circuit:
 
     layer = QuantumLayer.simple(
         input_size=6,   # number of classical features
-        n_params=100,   # parameter budget for a 10-mode circuit
         output_size=10  # output dimensionality
     )
 

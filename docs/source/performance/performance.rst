@@ -20,7 +20,6 @@ MerLin Quantum Layers can be executed on either CPU or GPU, like any other PyTor
    # Create a simple quantum layer
    quantum_layer = ML.QuantumLayer.simple(
        input_size=3,
-       n_params=50,  # Number of trainable quantum parameters
        device = device
    )
 

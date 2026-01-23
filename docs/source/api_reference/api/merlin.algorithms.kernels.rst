@@ -29,7 +29,7 @@ Quickstart: Fidelity kernel in a few lines
     # Build a kernel where inputs of size 2 are encoded in a 4-mode circuit
     kernel = FidelityKernel.simple(
         input_size=2,
-        n_modes=4,
+        n_modes=4,               # Here the number of modes is optional, if n_modes is not given, n_modes=input_size
         shots=0,                 # exact probabilities (no sampling)
         no_bunching=False,       # allow bunched outcomes if needed
         dtype=torch.float32,

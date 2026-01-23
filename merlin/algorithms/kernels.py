@@ -412,6 +412,9 @@ class FeatureMap:
             raise ValueError(
                 "Input size to large for the simple layer construction. For large inputs (with larger size than 20), please use the CircuitBuilder. Here is a quick tutorial on how to use it: https://merlinquantum.ai/quickstart/first_quantum_layer.html#circuitbuilder-walkthrough"
             )
+        if input_size < 1:
+            raise ValueError(f"input_size must be at least 1, got {input_size}")
+
         if input_size > n_modes:
             raise ValueError(ANGLE_ENCODING_MODE_ERROR)
 
@@ -1069,10 +1072,13 @@ class FidelityKernel(MerlinModule):
         else:
             state_size = max(n_modes, input_size)
 
-        input_state = state_size * [0]
-        for i in range(state_size):
-            if i % 2 == 1:
-                input_state[i] = 1
+        if state_size == 1:
+            input_state = [0, 1]
+        else:
+            input_state = state_size * [0]
+            for i in range(state_size):
+                if i % 2 == 1:
+                    input_state[i] = 1
 
         return cls(
             feature_map=feature_map,
