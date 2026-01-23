@@ -443,7 +443,7 @@ class FeatureMap:
 
             # Angle encoding
             builder.add_angle_encoding(
-                modes=range(input_size),
+                modes=[range(input_size)],
                 name="input",
                 subset_combinations=False,
                 scale=angle_encoding_scale,
