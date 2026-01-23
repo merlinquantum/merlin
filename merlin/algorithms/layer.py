@@ -32,12 +32,10 @@ from contextlib import contextmanager
 from typing import Any, cast
 
 import perceval as pcvl
-import numpy as np
 import torch
 import torch.nn as nn
 
 from ..builder.circuit_builder import (
-    ANGLE_ENCODING_MODE_ERROR,
     CircuitBuilder,
 )
 from ..core.computation_space import ComputationSpace

@@ -907,9 +907,9 @@ class TestQuantumLayer:
         assert model[1].out_features == 3
         # Check that it has trainable parameters (only in Linear layer)
         trainable_params_layer = [p for p in layer.parameters() if p.requires_grad]
-        assert (
-            len(trainable_params_layer) == 0
-        ), "Layer should have no trainable parameters"
+        assert len(trainable_params_layer) == 0, (
+            "Layer should have no trainable parameters"
+        )
         trainable_params = [p for p in model.parameters() if p.requires_grad]
         assert len(trainable_params) > 0, "Model should have trainable parameters"
 
@@ -1000,7 +1000,7 @@ def test_simple_num_photons_modes_and_input_state():
 def test_simple_parameters():
     for i in range(1, 15):
         ql = ML.QuantumLayer.simple(input_size=i)
-        params = [j for j in ql.quantum_layer.parameters()]
+        params = list(ql.quantum_layer.parameters())
         named_params = [k[0] for k in ql.quantum_layer.named_parameters()]
         if i < 2:
             assert params[0].numel() == 2

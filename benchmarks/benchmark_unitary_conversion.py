@@ -49,10 +49,12 @@ runner = UnitaryConversionBenchmarkRunner()
 def _generic_interferometer_weightparamweight(circuit_size):
     wl = pcvl.GenericInterferometer(
         circuit_size,
-        lambda i: pcvl.BS()
-        // pcvl.PS(pcvl.P(f"theta_li{i}"))
-        // pcvl.BS()
-        // pcvl.PS(pcvl.P(f"theta_lo{i}")),
+        lambda i: (
+            pcvl.BS()
+            // pcvl.PS(pcvl.P(f"theta_li{i}"))
+            // pcvl.BS()
+            // pcvl.PS(pcvl.P(f"theta_lo{i}"))
+        ),
         depth=circuit_size // 2,
         shape=pcvl.InterferometerShape.RECTANGLE,
     )
@@ -62,10 +64,12 @@ def _generic_interferometer_weightparamweight(circuit_size):
         c_var.add(i, pcvl.PS(px))
     wr = pcvl.GenericInterferometer(
         circuit_size,
-        lambda i: pcvl.BS()
-        // pcvl.PS(pcvl.P(f"theta_ri{i}"))
-        // pcvl.BS()
-        // pcvl.PS(pcvl.P(f"theta_ro{i}")),
+        lambda i: (
+            pcvl.BS()
+            // pcvl.PS(pcvl.P(f"theta_ri{i}"))
+            // pcvl.BS()
+            // pcvl.PS(pcvl.P(f"theta_ro{i}"))
+        ),
         depth=circuit_size // 2,
         shape=pcvl.InterferometerShape.RECTANGLE,
     )

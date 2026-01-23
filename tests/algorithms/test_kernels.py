@@ -234,14 +234,14 @@ class TestFidelityKernel:
         # Check that all eigenvalues are non-negative
         eigenvals = torch.linalg.eigvals(psd_matrix)
         # Assert eigenvalues are real (imaginary parts are essentially zero)
-        assert torch.all(
-            torch.abs(eigenvals.imag) < 1e-12
-        ), f"Eigenvalues have significant imaginary parts: {eigenvals.imag}"
+        assert torch.all(torch.abs(eigenvals.imag) < 1e-12), (
+            f"Eigenvalues have significant imaginary parts: {eigenvals.imag}"
+        )
         # Assert all eigenvalues are non-negative (PSD condition)
         real_eigenvals = eigenvals.real
-        assert torch.all(
-            real_eigenvals >= -1e-10
-        ), f"Matrix has negative eigenvalues: {real_eigenvals[real_eigenvals < -1e-10]}"
+        assert torch.all(real_eigenvals >= -1e-10), (
+            f"Matrix has negative eigenvalues: {real_eigenvals[real_eigenvals < -1e-10]}"
+        )
 
     def test_kernel_no_bunching(self):
         from perceval import (
@@ -643,7 +643,7 @@ class TestFidelityKernelFactoryMethods:
     def test_simple_parameters(self):
         for i in range(1, 15):
             kernel = FidelityKernel.simple(input_size=i)
-            params = [i for i in kernel.parameters()]
+            params = list(kernel.parameters())
             named_params = [i[0] for i in kernel.named_parameters()]
             if i == 1:
                 assert params[0].numel() == 2
@@ -1099,9 +1099,9 @@ def test_iris_dataset_quantum_kernel():
     assert all(pred in [0, 1, 2] for pred in y_pred)  # Valid class predictions
 
     print(f"Iris dataset quantum kernel test - Accuracy: {accuracy:.4f}")
-    assert (
-        accuracy > 0.8
-    ), f"Accuracy too low: {accuracy:.4f}, there may be a problem with the kernel"
+    assert accuracy > 0.8, (
+        f"Accuracy too low: {accuracy:.4f}, there may be a problem with the kernel"
+    )
     # test functions must not return values (pytest expects None)
 
 

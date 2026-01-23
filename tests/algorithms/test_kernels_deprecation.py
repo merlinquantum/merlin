@@ -1,7 +1,6 @@
 import pytest
 
-from merlin.algorithms.kernels import FidelityKernel, FeatureMap
-from merlin.core.computation_space import ComputationSpace
+from merlin.algorithms.kernels import FeatureMap, FidelityKernel
 
 
 def test_FeatureMap_simple_warns():
