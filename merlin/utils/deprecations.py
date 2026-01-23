@@ -35,6 +35,66 @@ def _convert_no_bunching_init(
     return kwargs
 
 
+def _remove_QuantumLayer_simple_n_params(
+    method_qualname: str, kwargs: dict[str, Any]
+) -> dict[str, Any]:
+    """Converter for QuantumLayer.__init__ deprecated `no_bunching`.
+    Removes `no_bunching`, sets/validates `computation_space`.
+    """
+    _ = kwargs.pop("n_params", None)
+    return kwargs
+
+
+def _remove_FeatureMap_simple_n_photons(
+    method_qualname: str, kwargs: dict[str, Any]
+) -> dict[str, Any]:
+    """Converter for QuantumLayer.__init__ deprecated `no_bunching`.
+    Removes `no_bunching`, sets/validates `computation_space`.
+    """
+    _ = kwargs.pop("n_photons", None)
+    return kwargs
+
+
+def _remove_FeatureMap_simple_trainable(
+    method_qualname: str, kwargs: dict[str, Any]
+) -> dict[str, Any]:
+    """Converter for QuantumLayer.__init__ deprecated `no_bunching`.
+    Removes `no_bunching`, sets/validates `computation_space`.
+    """
+    _ = kwargs.pop("trainable", None)
+    return kwargs
+
+
+def _remove_FidelityKernel_simple_n_photons(
+    method_qualname: str, kwargs: dict[str, Any]
+) -> dict[str, Any]:
+    """Converter for QuantumLayer.__init__ deprecated `no_bunching`.
+    Removes `no_bunching`, sets/validates `computation_space`.
+    """
+    _ = kwargs.pop("n_photons", None)
+    return kwargs
+
+
+def _remove_FidelityKernel_simple_trainable(
+    method_qualname: str, kwargs: dict[str, Any]
+) -> dict[str, Any]:
+    """Converter for QuantumLayer.__init__ deprecated `no_bunching`.
+    Removes `no_bunching`, sets/validates `computation_space`.
+    """
+    _ = kwargs.pop("trainable", None)
+    return kwargs
+
+
+def _remove_FidelityKernel_input_state(
+    method_qualname: str, kwargs: dict[str, Any]
+) -> dict[str, Any]:
+    """Converter for QuantumLayer.__init__ deprecated `no_bunching`.
+    Removes `no_bunching`, sets/validates `computation_space`.
+    """
+    _ = kwargs.pop("input_state", None)
+    return kwargs
+
+
 # Global deprecation registry: keys are "ClassName.method_name.param_name"
 # Values are tuples: (message, severity, converter)
 # - message: str | None → the text to emit; None means no emission
@@ -68,7 +128,7 @@ DEPRECATION_REGISTRY: dict[
     "QuantumLayer.simple.n_params": (
         "Since merlin >= 0.3, input parameter allocation is automatically inferred from input dimensionality, following Gan et al. (2022) on Fock-space expressivity. Manual control of input/trainable parameters is deprecated.",
         False,
-        None,
+        _remove_QuantumLayer_simple_n_params,
     ),
     "QuantumLayer.simple.reservoir_mode": (
         "The 'reservoir_mode' argument is no longer supported in the 'simple' method. Use torch tooling to freeze weights when needed, e.g., call layer.requires_grad_(False).",
@@ -85,28 +145,28 @@ DEPRECATION_REGISTRY: dict[
     "FeatureMap.simple.n_photons": (
         "Since merlin >= 0.3, the number of photons is automatically inferred from input dimensionality, following Gan et al. (2022) on Fock-space expressivity. Manual control of photons is deprecated.",
         False,
-        None,
+        _remove_FeatureMap_simple_n_photons,
     ),
     "FeatureMap.simple.trainable": (
         "Since merlin >= 0.3, input parameter allocation is automatically inferred from input dimensionality, following Gan et al. (2022) on Fock-space expressivity. Manual control of input/trainable parameters is deprecated.",
         False,
-        None,
+        _remove_FeatureMap_simple_trainable,
     ),
     # FidelityKernel.simple deprecations
     "FidelityKernel.simple.n_photons": (
         "Since merlin >= 0.3, the number of photons is automatically inferred from input dimensionality, following Gan et al. (2022) on Fock-space expressivity. Manual control of photons is deprecated.",
         False,
-        None,
+        _remove_FidelityKernel_simple_n_photons,
     ),
     "FidelityKernel.simple.trainable": (
         "Since merlin >= 0.3, input parameter allocation is automatically inferred from input dimensionality, following Gan et al. (2022) on Fock-space expressivity. Manual control of input/trainable parameters is deprecated.",
         False,
-        None,
+        _remove_FidelityKernel_simple_trainable,
     ),
     "FidelityKernel.simple.input_state": (
         "Since merlin >= 0.3, The input state is alway going to be a [0,1,0,1,...] state depending on input size.",
         False,
-        None,
+        _remove_FidelityKernel_input_state,
     ),
 }
 

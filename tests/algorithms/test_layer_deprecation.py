@@ -40,3 +40,9 @@ def test_simple_accepts_computation_space_without_warning():
     )
 
     assert model.quantum_layer.computation_space == ComputationSpace.FOCK
+
+
+def test_simple_warns_on_n_params():
+    with pytest.warns(DeprecationWarning, match=r"Parameter 'n_params' is deprecated"):
+        obj = QuantumLayer.simple(input_size=2, n_params=95)
+    assert obj is not None

@@ -207,8 +207,8 @@ def test_circuit_and_output_size_access(quantum_layer_api):
     assert circuit == simple_layer.quantum_layer.circuit
     assert output_size == simple_layer.quantum_layer.output_size
 
-    simple_layer = QuantumLayer.simple(input_size=3, output_size=3)
+    simple_layer = QuantumLayer.simple(input_size=3, output_size=4)
     output_size = simple_layer.output_size
-    assert output_size == 3
+    assert output_size == 4
     assert output_size != simple_layer.quantum_layer.output_size
-    # assert output_size == simple_layer.post_processing.output_size
+    assert output_size == simple_layer.post_processing.output_size
