@@ -31,17 +31,17 @@ from merlin.measurement.strategies import MeasurementKind, MeasurementStrategy
 class TestMeasurementStrategy:
     def test_factory_probs_creates_correct_instance(self):
         strategy = MeasurementStrategy.probs(ComputationSpace.FOCK)
-        assert strategy.kind == MeasurementKind.PROBABILITIES
+        assert strategy.type == MeasurementKind.PROBABILITIES
         assert strategy.computation_space == ComputationSpace.FOCK
 
     def test_factory_mode_expectations_creates_correct_instance(self):
         strategy = MeasurementStrategy.mode_expectations(ComputationSpace.DUAL_RAIL)
-        assert strategy.kind == MeasurementKind.MODE_EXPECTATIONS
+        assert strategy.type == MeasurementKind.MODE_EXPECTATIONS
         assert strategy.computation_space == ComputationSpace.DUAL_RAIL
 
     def test_factory_amplitudes_creates_correct_instance(self):
         strategy = MeasurementStrategy.amplitudes()
-        assert strategy.kind == MeasurementKind.AMPLITUDES
+        assert strategy.type == MeasurementKind.AMPLITUDES
         assert strategy.computation_space == ComputationSpace.UNBUNCHED
 
     def test_factory_equality(self):
@@ -56,7 +56,7 @@ class TestMeasurementStrategy:
             computation_space=ComputationSpace.DUAL_RAIL,
             grouping=None,
         )
-        assert strategy.kind == MeasurementKind.PARTIAL
+        assert strategy.type == MeasurementKind.PARTIAL
         assert strategy.measured_modes == (0, 2, 5)
         assert strategy.computation_space == ComputationSpace.DUAL_RAIL
         assert strategy.grouping is None

@@ -28,11 +28,12 @@ import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
-from typing import ClassVar, TypeAlias
+from typing import TYPE_CHECKING, ClassVar, TypeAlias
 
 import torch
 
 from merlin.core.computation_space import ComputationSpace
+from merlin.utils.deprecations import warn_deprecated_enum_access
 from merlin.utils.grouping import LexGrouping, ModGrouping
 
 
@@ -135,24 +136,27 @@ class MeasurementKind(Enum):
     PARTIAL = "PARTIAL"
 
 
+class _MeasurementStrategyMeta(type):
+    def __getattr__(cls, name: str) -> _LegacyMeasurementStrategy:
+        if warn_deprecated_enum_access("MeasurementStrategy", name):
+            return _LegacyMeasurementStrategy[name]
+        raise AttributeError(
+            f"type object 'MeasurementStrategy' has no attribute {name!r}"
+        )
+
+
 @dataclass(frozen=True, slots=True)
-class MeasurementStrategy:
+class MeasurementStrategy(metaclass=_MeasurementStrategyMeta):
     """Immutable definition of a measurement strategy for output post-processing."""
 
-    kind: MeasurementKind
+    type: MeasurementKind
     measured_modes: tuple[int, ...] = ()
     computation_space: ComputationSpace | None = None
     grouping: LexGrouping | ModGrouping | None = None
-
-    PROBABILITIES: ClassVar[_LegacyMeasurementStrategy] = (
-        _LegacyMeasurementStrategy.PROBABILITIES
-    )
-    MODE_EXPECTATIONS: ClassVar[_LegacyMeasurementStrategy] = (
-        _LegacyMeasurementStrategy.MODE_EXPECTATIONS
-    )
-    AMPLITUDES: ClassVar[_LegacyMeasurementStrategy] = (
-        _LegacyMeasurementStrategy.AMPLITUDES
-    )
+    if TYPE_CHECKING:
+        PROBABILITIES: ClassVar[_LegacyMeasurementStrategy]
+        MODE_EXPECTATIONS: ClassVar[_LegacyMeasurementStrategy]
+        AMPLITUDES: ClassVar[_LegacyMeasurementStrategy]
 
     @staticmethod
     def probs(
@@ -160,7 +164,7 @@ class MeasurementStrategy:
         grouping: LexGrouping | ModGrouping | None = None,
     ) -> MeasurementStrategy:
         return MeasurementStrategy(
-            kind=MeasurementKind.PROBABILITIES,
+            type=MeasurementKind.PROBABILITIES,
             computation_space=computation_space,
             grouping=grouping,
         )
@@ -170,14 +174,14 @@ class MeasurementStrategy:
         computation_space: ComputationSpace,
     ) -> MeasurementStrategy:
         return MeasurementStrategy(
-            kind=MeasurementKind.MODE_EXPECTATIONS,
+            type=MeasurementKind.MODE_EXPECTATIONS,
             computation_space=computation_space,
         )
 
     @staticmethod
     def amplitudes() -> MeasurementStrategy:
         return MeasurementStrategy(
-            kind=MeasurementKind.AMPLITUDES,
+            type=MeasurementKind.AMPLITUDES,
             computation_space=ComputationSpace.UNBUNCHED,
         )
 
@@ -197,7 +201,7 @@ class MeasurementStrategy:
             raise ValueError("Negative mode index")
 
         return MeasurementStrategy(
-            kind=MeasurementKind.PARTIAL,
+            type=MeasurementKind.PARTIAL,
             measured_modes=tuple(modes),
             grouping=grouping,
             computation_space=computation_space,
@@ -206,22 +210,22 @@ class MeasurementStrategy:
     def __eq__(self, other: object) -> bool:
         if isinstance(other, MeasurementStrategy):
             return (
-                self.kind == other.kind
+                self.type == other.type
                 and self.measured_modes == other.measured_modes
                 and self.computation_space == other.computation_space
                 and self.grouping == other.grouping
             )
         if isinstance(other, _LegacyMeasurementStrategy):
-            return self.kind.name == other.name
+            return self.type.name == other.name
         if isinstance(other, MeasurementKind):
-            return self.kind == other
+            return self.type == other
         if isinstance(other, str):
-            return self.kind.name == other or self.kind.value == other
+            return self.type.name == other or self.type.value == other
         return NotImplemented
 
     def __hash__(self) -> int:
         return hash((
-            self.kind,
+            self.type,
             self.measured_modes,
             self.computation_space,
             self.grouping,
@@ -258,7 +262,7 @@ def _resolve_measurement_kind(
     measurement_strategy: MeasurementStrategyLike,
 ) -> MeasurementKind:
     if isinstance(measurement_strategy, MeasurementStrategy):
-        return measurement_strategy.kind
+        return measurement_strategy.type
     if isinstance(measurement_strategy, _LegacyMeasurementStrategy):
         return MeasurementKind[measurement_strategy.name]
     if isinstance(measurement_strategy, MeasurementKind):

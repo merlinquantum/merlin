@@ -78,6 +78,26 @@ DEPRECATION_REGISTRY: dict[
     ),
 }
 
+_MEASUREMENT_STRATEGY_ENUM_MIGRATIONS = {
+    "PROBABILITIES": "probs(computation_space)",
+    "MODE_EXPECTATIONS": "mode_expectations(computation_space)",
+    "AMPLITUDES": "amplitudes()",
+}
+
+
+def warn_deprecated_enum_access(owner: str, name: str) -> bool:
+    """Warn on deprecated enum-style attribute access and return True if handled."""
+    if owner == "MeasurementStrategy" and name in _MEASUREMENT_STRATEGY_ENUM_MIGRATIONS:
+        replacement = _MEASUREMENT_STRATEGY_ENUM_MIGRATIONS[name]
+        warnings.warn(
+            f"{owner}.{name} is deprecated. Use {owner}.{replacement} instead. "
+            "Will be removed in v0.4.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return True
+    return False
+
 
 def _collect_deprecations_and_converters(
     method_qualname: str, raw_kwargs: dict[str, Any]
