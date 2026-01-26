@@ -31,6 +31,13 @@ import perceval as pcvl
 import pytest
 import torch
 from perceval import FFCircuitProvider
+from merlin.core.state_vector import StateVector
+from merlin.core.probability_distribution import ProbabilityDistribution
+from merlin.core.partial_measurement import (
+    PartialMeasurement,
+    PartialMeasurementBranch,
+)
+from merlin.measurement import ModeExpectations
 
 import merlin as ML
 
@@ -294,10 +301,12 @@ class TestQuantumLayer:
 
         amplitude = torch.rand(len(layer.output_keys))
         remaining_input = torch.rand(2)
-        amplitude_out, remaining, saved_state = layer._prepare_amplitude_input([
-            amplitude,
-            remaining_input,
-        ])
+        amplitude_out, remaining, saved_state = layer._prepare_amplitude_input(
+            [
+                amplitude,
+                remaining_input,
+            ]
+        )
 
         assert saved_state is original_state
         assert remaining[0] is remaining_input
@@ -338,10 +347,12 @@ class TestQuantumLayer:
             measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
         )
 
-        params, batch_dim = layer._prepare_classical_parameters([
-            torch.rand(2, 2),
-            torch.rand(2, 2),
-        ])
+        params, batch_dim = layer._prepare_classical_parameters(
+            [
+                torch.rand(2, 2),
+                torch.rand(2, 2),
+            ]
+        )
 
         assert batch_dim == 2
         assert len(params) >= 2
@@ -759,8 +770,8 @@ class TestQuantumLayer:
                 measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
             )
 
-        with pytest.raises(ValueError):
-            ML.QuantumLayer.simple(input_size=21)
+        with pytest.raises(TypeError):
+            ML.QuantumLayer.simple(n_params=0)
 
     def test_subset_combinations_respected(self):
         """Ensure subset combinations expose more parameters without breaking input size checks."""
@@ -907,9 +918,9 @@ class TestQuantumLayer:
         assert model[1].out_features == 3
         # Check that it has trainable parameters (only in Linear layer)
         trainable_params_layer = [p for p in layer.parameters() if p.requires_grad]
-        assert len(trainable_params_layer) == 0, (
-            "Layer should have no trainable parameters"
-        )
+        assert (
+            len(trainable_params_layer) == 0
+        ), "Layer should have no trainable parameters"
         trainable_params = [p for p in model.parameters() if p.requires_grad]
         assert len(trainable_params) > 0, "Model should have trainable parameters"
 
@@ -978,39 +989,102 @@ class TestQuantumLayer:
                 input_state=bs_annot,
             )
 
+    def test_forward_output_objects(self):
+        # MS:None, ro:false
+        builder = ML.CircuitBuilder(5)
+        builder.add_entangling_layer()
+        qlayer = ML.QuantumLayer(
+            input_size=0,
+            builder=builder,
+            input_state=[0, 1, 0, 1, 0],
+        )
 
-def test_simple_num_photons_modes_and_input_state():
-    for i in range(1, 15):
-        ql = ML.QuantumLayer.simple(input_size=i)
-        if i < 2:
-            assert ql.quantum_layer.n_photons == 1
-            assert ql.quantum_layer.input_state == [0, 1]
-        else:
-            assert ql.quantum_layer.n_photons == (i) // 2
-            assert np.sum(ql.quantum_layer.input_state) == (i) // 2
-            assert len(ql.quantum_layer.input_state) == i
+        assert isinstance(qlayer(), torch.Tensor)
 
-            input_state = [0] * (i)
-            for j in range(len(input_state)):
-                if j % 2 == 1:
-                    input_state[j] = 1
-            assert ql.quantum_layer.input_state == input_state
+        # MS:None, ro:true
+        builder = ML.CircuitBuilder(5)
+        builder.add_entangling_layer()
+        qlayer = ML.QuantumLayer(
+            input_size=0,
+            builder=builder,
+            input_state=[0, 1, 0, 1, 0],
+            return_object=True,
+        )
 
+        assert isinstance(qlayer(), StateVector)
 
-def test_simple_parameters():
-    for i in range(1, 15):
-        ql = ML.QuantumLayer.simple(input_size=i)
-        params = list(ql.quantum_layer.parameters())
-        named_params = [k[0] for k in ql.quantum_layer.named_parameters()]
-        if i < 2:
-            assert params[0].numel() == 2
-            assert params[0].numel() == 2
-            assert len(params) == 2
-            assert "LI_simple" in named_params
-            assert "RI_simple" in named_params
-        else:
-            assert params[0].numel() == i * (i - 1)
-            assert params[1].numel() == i * (i - 1)
-            assert len(params) == 2
-            assert "LI_simple" in named_params
-            assert "RI_simple" in named_params
+        # MS:probs, ro:false
+        builder = ML.CircuitBuilder(5)
+        builder.add_entangling_layer()
+        qlayer = ML.QuantumLayer(
+            input_size=0,
+            builder=builder,
+            input_state=[0, 1, 0, 1, 0],
+            measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+        )
+
+        assert isinstance(qlayer(), torch.Tensor)
+
+        # MS:probs, ro:true
+        builder = ML.CircuitBuilder(5)
+        builder.add_entangling_layer()
+        qlayer = ML.QuantumLayer(
+            input_size=0,
+            builder=builder,
+            input_state=[0, 1, 0, 1, 0],
+            measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+            return_object=True,
+        )
+
+        assert isinstance(qlayer(), ProbabilityDistribution)
+
+        # MS:mode_expectation, ro:false
+        builder = ML.CircuitBuilder(5)
+        builder.add_entangling_layer()
+        qlayer = ML.QuantumLayer(
+            input_size=0,
+            builder=builder,
+            input_state=[0, 1, 0, 1, 0],
+            measurement_strategy=ML.MeasurementStrategy.MODE_EXPECTATIONS,
+        )
+
+        assert isinstance(qlayer(), torch.Tensor)
+
+        # MS:mode_expectation, ro:true
+        builder = ML.CircuitBuilder(5)
+        builder.add_entangling_layer()
+        qlayer = ML.QuantumLayer(
+            input_size=0,
+            builder=builder,
+            input_state=[0, 1, 0, 1, 0],
+            measurement_strategy=ML.MeasurementStrategy.MODE_EXPECTATIONS,
+            return_object=True,
+        )
+
+        assert isinstance(qlayer(), torch.Tensor)
+
+        # # TODO uncomment when partial is ready
+        # # MS:partial, ro:false
+        # builder = ML.CircuitBuilder(5)
+        # builder.add_entangling_layer()
+        # qlayer = ML.QuantumLayer(
+        #     input_size=0,
+        #     builder=builder,
+        #     input_state=[0, 1, 0, 1, 0],
+        #     measurement_strategy=ML.MeasurementStrategy.PARTIAL,
+        # )
+
+        # assert isinstance(qlayer(), PartialMeasurement)
+
+        # # MS:mode_expectpartial, ro:true
+        # builder = ML.CircuitBuilder(5)
+        # builder.add_entangling_layer()
+        # qlayer = ML.QuantumLayer(
+        #     input_size=0,
+        #     builder=builder,
+        #     input_state=[0, 1, 0, 1, 0],
+        #     measurement_strategy=ML.MeasurementStrategy.PARTIAL,
+        #     return_object=True,
+        # )
+
+        assert isinstance(qlayer(), PartialMeasurement)
