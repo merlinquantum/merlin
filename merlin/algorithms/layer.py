@@ -1224,7 +1224,7 @@ class QuantumLayer(MerlinModule):
         """
         if input_size > 20:
             raise ValueError(
-                "Input size to large for the simple layer construction. For large inputs (with larger size than 20), please use the CircuitBuilder. Here is a quick tutorial on how to use it: https://merlinquantum.ai/quickstart/first_quantum_layer.html#circuitbuilder-walkthrough"
+                "Input size too large for the simple layer construction. For large inputs (with larger size than 20), please use the CircuitBuilder. Here is a quick tutorial on how to use it: https://merlinquantum.ai/quickstart/first_quantum_layer.html#circuitbuilder-walkthrough"
             )
         if input_size < 1:
             raise ValueError(f"input_size must be at least 1, got {input_size}")

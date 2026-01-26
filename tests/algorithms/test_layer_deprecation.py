@@ -46,3 +46,5 @@ def test_simple_warns_on_n_params():
     with pytest.warns(DeprecationWarning, match=r"Parameter 'n_params' is deprecated"):
         obj = QuantumLayer.simple(input_size=2, n_params=95)
     assert obj is not None
+    assert obj.circuit.m == 2
+    assert obj.quantum_layer.input_state == [0, 1]

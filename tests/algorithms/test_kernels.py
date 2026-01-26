@@ -649,12 +649,14 @@ class TestFidelityKernelFactoryMethods:
                 assert params[0].numel() == 2
                 assert params[0].numel() == 2
                 assert len(params) == 2
+                assert kernel.feature_map.is_trainable
                 assert "LI_simple" in named_params
                 assert "RI_simple" in named_params
             else:
                 assert params[0].numel() == i * (i - 1)
                 assert params[1].numel() == i * (i - 1)
                 assert len(params) == 2
+                assert kernel.feature_map.is_trainable
                 assert "LI_simple" in named_params
                 assert "RI_simple" in named_params
 

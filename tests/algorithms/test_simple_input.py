@@ -107,7 +107,6 @@ def test_simple_signature_does_not_include_reservoir_mode(quantum_layer_api):
 
 def test_gradient_flow_for_strategies(quantum_layer_api):
     QuantumLayer = quantum_layer_api
-    # nb_params = 90
 
     layer = QuantumLayer.simple(
         input_size=3,
@@ -132,23 +131,6 @@ def test_gradient_flow_for_strategies(quantum_layer_api):
     assert any(
         p.grad is not None and torch.any(p.grad != 0) for p in base_none.parameters()
     )
-    # mzi_param_count = sum(
-    #     param.numel()
-    #     for name, param in base_none.named_parameters()
-    #     if name.startswith("mzi_extra")
-    # )
-    # interferometer_param_count = sum(
-    #     param.numel()
-    #     for name, param in base_none.named_parameters()
-    #     if name.startswith("gi_simple")
-    # )
-
-    # total_trainable = mzi_param_count + interferometer_param_count
-    # expected_total = max(nb_params, interferometer_param_count)
-    # expected_mzi = max(nb_params - interferometer_param_count, 0)
-
-    # assert total_trainable == expected_total
-    # assert mzi_param_count == expected_mzi
 
 
 def test_quantum_layer_simple_raises_when_input_exceeds_modes(quantum_layer_api):

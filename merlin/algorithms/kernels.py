@@ -388,7 +388,6 @@ class FeatureMap:
         dtype: str | torch.dtype = torch.float32,
         device: torch.device | None = None,
         angle_encoding_scale: float = 1.0,
-        trainable_prefix: str = "",
         n_modes: int = None,
     ) -> "FeatureMap":
         """
@@ -400,7 +399,6 @@ class FeatureMap:
             dtype: Target dtype for internal tensors.
             device: Optional torch device handle.
             angle_encoding_scale: Global scaling applied to angle encoding features.
-            trainable_prefix: Prefix used for the generated trainable parameter names. It will be added in front of the 'LI_simple' and 'LI_simple' prefixes of the trainable layers.
             n_modes: Number of photonic modes used by the helper circuit. If it is not defined: n_modes=input_size. Maximum is 20.
 
         Returns:
@@ -410,7 +408,7 @@ class FeatureMap:
             n_modes = input_size
         if input_size > 20 or n_modes > 20:
             raise ValueError(
-                "Input size to large for the simple layer construction. For large inputs (with larger size than 20), please use the CircuitBuilder. Here is a quick tutorial on how to use it: https://merlinquantum.ai/quickstart/first_quantum_layer.html#circuitbuilder-walkthrough"
+                "Input size too large for the simple layer construction. For large inputs (with larger size than 20), please use the CircuitBuilder. Here is a quick tutorial on how to use it: https://merlinquantum.ai/quickstart/first_quantum_layer.html#circuitbuilder-walkthrough"
             )
         if input_size < 1:
             raise ValueError(f"input_size must be at least 1, got {input_size}")
@@ -450,17 +448,15 @@ class FeatureMap:
             )
 
             # Trainable entangling layer after encoding
-            builder.add_entangling_layer(
-                trainable=True, name=trainable_prefix + "RI_simple"
-            )
+            builder.add_entangling_layer(trainable=True, name="RI_simple")
 
         return cls(
             builder=builder,
             input_size=input_size,
             input_parameters=None,
             trainable_parameters=[
-                trainable_prefix + "LI_simple",
-                trainable_prefix + "RI_simple",
+                "LI_simple",
+                "RI_simple",
             ],
             dtype=dtype,
             device=device,

@@ -38,9 +38,7 @@ def _convert_no_bunching_init(
 def _remove_QuantumLayer_simple_n_params(
     method_qualname: str, kwargs: dict[str, Any]
 ) -> dict[str, Any]:
-    """Converter for QuantumLayer.__init__ deprecated `no_bunching`.
-    Removes `no_bunching`, sets/validates `computation_space`.
-    """
+    """Removes the n_params parameter from QuantumLayer.simple()"""
     _ = kwargs.pop("n_params", None)
     return kwargs
 
@@ -48,9 +46,7 @@ def _remove_QuantumLayer_simple_n_params(
 def _remove_FeatureMap_simple_n_photons(
     method_qualname: str, kwargs: dict[str, Any]
 ) -> dict[str, Any]:
-    """Converter for QuantumLayer.__init__ deprecated `no_bunching`.
-    Removes `no_bunching`, sets/validates `computation_space`.
-    """
+    """Removes the n_photons parameter from FeatureMap.simple()"""
     _ = kwargs.pop("n_photons", None)
     return kwargs
 
@@ -58,9 +54,7 @@ def _remove_FeatureMap_simple_n_photons(
 def _remove_FeatureMap_simple_trainable(
     method_qualname: str, kwargs: dict[str, Any]
 ) -> dict[str, Any]:
-    """Converter for QuantumLayer.__init__ deprecated `no_bunching`.
-    Removes `no_bunching`, sets/validates `computation_space`.
-    """
+    """Removes the trainable parameter from FeatureMap.simple()"""
     _ = kwargs.pop("trainable", None)
     return kwargs
 
@@ -68,9 +62,7 @@ def _remove_FeatureMap_simple_trainable(
 def _remove_FidelityKernel_simple_n_photons(
     method_qualname: str, kwargs: dict[str, Any]
 ) -> dict[str, Any]:
-    """Converter for QuantumLayer.__init__ deprecated `no_bunching`.
-    Removes `no_bunching`, sets/validates `computation_space`.
-    """
+    """Removes the n_photons parameter from FidelityKernel.simple()"""
     _ = kwargs.pop("n_photons", None)
     return kwargs
 
@@ -78,9 +70,7 @@ def _remove_FidelityKernel_simple_n_photons(
 def _remove_FidelityKernel_simple_trainable(
     method_qualname: str, kwargs: dict[str, Any]
 ) -> dict[str, Any]:
-    """Converter for QuantumLayer.__init__ deprecated `no_bunching`.
-    Removes `no_bunching`, sets/validates `computation_space`.
-    """
+    """Removes the trainable parameter from FidelityKernel.simple()"""
     _ = kwargs.pop("trainable", None)
     return kwargs
 
@@ -88,9 +78,7 @@ def _remove_FidelityKernel_simple_trainable(
 def _remove_FidelityKernel_input_state(
     method_qualname: str, kwargs: dict[str, Any]
 ) -> dict[str, Any]:
-    """Converter for QuantumLayer.__init__ deprecated `no_bunching`.
-    Removes `no_bunching`, sets/validates `computation_space`.
-    """
+    """Removes the input_state parameter from FidelityKernel.simple()"""
     _ = kwargs.pop("input_state", None)
     return kwargs
 
@@ -143,7 +131,7 @@ DEPRECATION_REGISTRY: dict[
     ),
     # FeatureMap.simple deprecations
     "FeatureMap.simple.n_photons": (
-        "Since merlin >= 0.3, the number of photons is automatically inferred from input dimensionality, following Gan et al. (2022) on Fock-space expressivity. Manual control of photons is deprecated.",
+        "Since merlin >= 0.3, the number of photons is automatically inferred from input dimensionality. Manual control of photons is deprecated.",
         False,
         _remove_FeatureMap_simple_n_photons,
     ),
@@ -154,7 +142,7 @@ DEPRECATION_REGISTRY: dict[
     ),
     # FidelityKernel.simple deprecations
     "FidelityKernel.simple.n_photons": (
-        "Since merlin >= 0.3, the number of photons is automatically inferred from input dimensionality, following Gan et al. (2022) on Fock-space expressivity. Manual control of photons is deprecated.",
+        "Since merlin >= 0.3, the number of photons is automatically inferred from input dimensionality. Manual control of photons is deprecated.",
         False,
         _remove_FidelityKernel_simple_n_photons,
     ),
