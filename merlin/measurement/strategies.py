@@ -28,11 +28,13 @@ import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING, ClassVar, TypeAlias
+from typing import TYPE_CHECKING, ClassVar, TypeAlias, cast
 
 import torch
 
 from merlin.core.computation_space import ComputationSpace
+from merlin.core.partial_measurement import DetectorTransformOutput, PartialMeasurement
+from merlin.measurement.process import partial_measurement
 from merlin.utils.deprecations import warn_deprecated_enum_access
 from merlin.utils.grouping import LexGrouping, ModGrouping
 
@@ -127,6 +129,35 @@ class AmplitudesStrategy(BaseMeasurementStrategy):
         return amplitudes
 
 
+class PartialMeasurementStrategy(BaseMeasurementStrategy):
+    """Return a PartialMeasurement from detector partial-measurement output."""
+
+    def __init__(self, measured_modes: tuple[int, ...]) -> None:
+        self._measured_modes = measured_modes
+
+    def process(
+        self,
+        *,
+        distribution: torch.Tensor,
+        amplitudes: torch.Tensor,
+        apply_sampling: bool,
+        effective_shots: int,
+        sample_fn: Callable[[torch.Tensor, int], torch.Tensor],
+        apply_photon_loss: Callable[[torch.Tensor], torch.Tensor],
+        apply_detectors: Callable[[torch.Tensor], torch.Tensor],
+    ) -> PartialMeasurement:
+        if apply_sampling and effective_shots > 0:
+            raise RuntimeError(
+                "Sampling cannot be applied when measurement_strategy=MeasurementStrategy.partial()."
+            )
+        detector_output = apply_detectors(amplitudes)
+        if not isinstance(detector_output, list):
+            raise TypeError(
+                "Partial measurement expects detector output in partial_measurement mode."
+            )
+        return partial_measurement(cast(DetectorTransformOutput, detector_output))
+
+
 class MeasurementKind(Enum):
     """High-level measurement kinds used by MeasurementStrategy."""
 
@@ -164,7 +195,7 @@ class MeasurementStrategy(metaclass=_MeasurementStrategyMeta):
         grouping: LexGrouping | ModGrouping | None = None,
     ) -> MeasurementStrategy:
         return MeasurementStrategy(
-            type=MeasurementKind.PROBABILITIES,
+            type=MeasurementKind["PROBABILITIES"],
             computation_space=computation_space,
             grouping=grouping,
         )
@@ -275,10 +306,18 @@ def resolve_measurement_strategy(
 ) -> BaseMeasurementStrategy:
     """Return the concrete strategy implementation for the enum value."""
     kind = _resolve_measurement_kind(measurement_strategy)
-    if kind == MeasurementKind.PROBABILITIES:
+    if kind == MeasurementKind["PROBABILITIES"]:
         return ProbabilitiesStrategy()
     if kind == MeasurementKind.MODE_EXPECTATIONS:
         return ModeExpectationsStrategy()
     if kind == MeasurementKind.AMPLITUDES:
         return AmplitudesStrategy()
+    if kind == MeasurementKind.PARTIAL:
+        if not isinstance(measurement_strategy, MeasurementStrategy):
+            raise TypeError(
+                "MeasurementStrategy.partial() must be used for partial measurement."
+            )
+        return PartialMeasurementStrategy(
+            measured_modes=measurement_strategy.measured_modes
+        )
     raise TypeError(f"Unknown measurement_strategy: {measurement_strategy}")

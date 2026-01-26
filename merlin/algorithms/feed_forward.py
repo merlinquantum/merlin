@@ -34,7 +34,11 @@ from perceval.utils import NoiseModel
 from ..core.computation_space import ComputationSpace
 from ..measurement.detectors import DetectorTransform
 from ..measurement.mappers import OutputMapper
-from ..measurement.strategies import MeasurementStrategy, MeasurementStrategyLike
+from ..measurement.strategies import (
+    MeasurementKind,
+    MeasurementStrategyLike,
+    _resolve_measurement_kind,
+)
 from ..pcvl_pytorch.utils import pcvl_to_tensor
 from .layer import QuantumLayer
 from .module import MerlinModule
@@ -140,7 +144,9 @@ class FeedForwardBlock(MerlinModule):
         trainable_parameters: list[str] | None = None,
         input_parameters: list[str] | None = None,
         computation_space: ComputationSpace = ComputationSpace.FOCK,
-        measurement_strategy: MeasurementStrategyLike = MeasurementStrategy.PROBABILITIES,
+        measurement_strategy: MeasurementStrategyLike = MeasurementKind[
+            "PROBABILITIES"
+        ],
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
@@ -497,7 +503,7 @@ class FeedForwardBlock(MerlinModule):
                 n_photons=self.n_photons,
                 trainable_parameters=trainable_parameters,
                 input_parameters=input_parameters,
-                measurement_strategy=MeasurementStrategy.AMPLITUDES,
+                measurement_strategy=MeasurementKind.AMPLITUDES,
                 amplitude_encoding=amplitude_encoding,
                 computation_space=self.computation_space,
                 device=self.device,
@@ -557,7 +563,7 @@ class FeedForwardBlock(MerlinModule):
                 circuit=stage.unitary.copy(),
                 amplitude_encoding=True,
                 n_photons=remaining,
-                measurement_strategy=MeasurementStrategy.AMPLITUDES,
+                measurement_strategy=MeasurementKind.AMPLITUDES,
                 computation_space=self.computation_space,
                 device=self.device,
                 dtype=self.dtype,
@@ -922,7 +928,7 @@ class FeedForwardBlock(MerlinModule):
                 circuit=runtime.circuit.copy(),
                 amplitude_encoding=True,
                 n_photons=remaining_n,
-                measurement_strategy=MeasurementStrategy.AMPLITUDES,
+                measurement_strategy=MeasurementKind.AMPLITUDES,
                 computation_space=self.computation_space,
                 device=self.device,
                 dtype=self.dtype,
@@ -1021,7 +1027,7 @@ class FeedForwardBlock(MerlinModule):
                 circuit=circuit.copy(),
                 amplitude_encoding=True,
                 n_photons=remaining_n,
-                measurement_strategy=MeasurementStrategy.AMPLITUDES,
+                measurement_strategy=MeasurementKind.AMPLITUDES,
                 computation_space=self.computation_space,
                 device=self.device,
                 dtype=self.dtype,
@@ -1062,7 +1068,10 @@ class FeedForwardBlock(MerlinModule):
     def _branches_to_outputs(
         self, branches: dict[tuple[int, ...], list[BranchState]]
     ) -> torch.Tensor | list[tuple[tuple[int, ...], torch.Tensor, int, torch.Tensor]]:
-        if self.measurement_strategy == MeasurementStrategy.AMPLITUDES:
+        if (
+            _resolve_measurement_kind(self.measurement_strategy)
+            == MeasurementKind.AMPLITUDES
+        ):
             return self._branches_to_mixed_states(branches)
         return self._branches_to_classical(branches)
 
@@ -1098,7 +1107,8 @@ class FeedForwardBlock(MerlinModule):
                     continue
                 if (
                     weight_total is None
-                    and self.measurement_strategy != MeasurementStrategy.PROBABILITIES
+                    and _resolve_measurement_kind(self.measurement_strategy)
+                    != MeasurementKind["PROBABILITIES"]
                 ):
                     continue
                 entries.append((
@@ -1113,16 +1123,19 @@ class FeedForwardBlock(MerlinModule):
         if not entries:
             self._output_keys = []
             self._output_state_sizes = {}
-            if self.measurement_strategy == MeasurementStrategy.MODE_EXPECTATIONS:
+            if (
+                _resolve_measurement_kind(self.measurement_strategy)
+                == MeasurementKind.MODE_EXPECTATIONS
+            ):
                 return torch.zeros(
                     (0, self.total_modes), dtype=self.dtype, device=self.device
                 )
             return torch.zeros(0, device=self.device)
 
         strategy = self.measurement_strategy
-        if strategy == MeasurementStrategy.PROBABILITIES:
+        if _resolve_measurement_kind(strategy) == MeasurementKind["PROBABILITIES"]:
             return self._build_probability_tensor(entries)
-        if strategy == MeasurementStrategy.MODE_EXPECTATIONS:
+        if _resolve_measurement_kind(strategy) == MeasurementKind.MODE_EXPECTATIONS:
             return self._build_mode_expectations(entries)
 
         keys: list[tuple[int, ...]] = []
@@ -1534,13 +1547,16 @@ class FeedForwardBlock(MerlinModule):
         basis_keys: tuple[tuple[int, ...], ...],
     ) -> torch.Tensor:
         strategy = self.measurement_strategy
-        if strategy == MeasurementStrategy.AMPLITUDES:
+        if _resolve_measurement_kind(strategy) == MeasurementKind.AMPLITUDES:
             return self._normalize_amplitudes(amplitude_sum, weight_sum)
 
         if probability is None:
             raise RuntimeError("Probability data missing for feed-forward branch.")
 
-        if strategy == MeasurementStrategy.MODE_EXPECTATIONS and not basis_keys:
+        if (
+            _resolve_measurement_kind(strategy) == MeasurementKind.MODE_EXPECTATIONS
+            and not basis_keys
+        ):
             shape = probability.shape[:-1] + (0,)
             return torch.zeros(
                 shape, dtype=probability.dtype, device=probability.device

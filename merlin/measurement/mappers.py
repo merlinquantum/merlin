@@ -75,7 +75,7 @@ class OutputMapper:
             kind = _resolve_measurement_kind(strategy)
         except TypeError as exc:
             raise ValueError(f"Unknown measurement strategy: {strategy}") from exc
-        if kind == MeasurementKind.PROBABILITIES:
+        if kind == MeasurementKind["PROBABILITIES"]:
             return Probabilities()
         elif kind == MeasurementKind.MODE_EXPECTATIONS:
             if keys is None:

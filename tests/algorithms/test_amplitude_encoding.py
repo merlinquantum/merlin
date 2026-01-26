@@ -304,6 +304,12 @@ def test_computation_space_selector(make_layer):
     with warnings.catch_warnings(record=True) as caught:
         # don't fail because of the DeprecationWarning
         warnings.filterwarnings("default", category=DeprecationWarning)
+        # ignore filter for Deprecation Strategy.PROBABILITIES set in pytest.ini
+        warnings.filterwarnings(
+            "ignore",
+            message="MeasurementStrategy\\..*deprecated",
+            category=DeprecationWarning,
+        )
         with pytest.raises(
             ValueError,
             match="Incompatible 'no_bunching' value with selected 'computation_space'.",

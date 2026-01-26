@@ -31,7 +31,7 @@ from merlin.measurement.strategies import MeasurementKind, MeasurementStrategy
 class TestMeasurementStrategy:
     def test_factory_probs_creates_correct_instance(self):
         strategy = MeasurementStrategy.probs(ComputationSpace.FOCK)
-        assert strategy.type == MeasurementKind.PROBABILITIES
+        assert strategy.type == MeasurementKind["PROBABILITIES"]
         assert strategy.computation_space == ComputationSpace.FOCK
 
     def test_factory_mode_expectations_creates_correct_instance(self):

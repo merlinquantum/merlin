@@ -50,10 +50,14 @@ from ..measurement.strategies import (
     MeasurementKind,
     MeasurementStrategy,
     MeasurementStrategyLike,
+    _LegacyMeasurementStrategy,
     _resolve_measurement_kind,
     resolve_measurement_strategy,
 )
-from ..utils.deprecations import sanitize_parameters
+from ..utils.deprecations import (
+    process_measurement_strategy_computation_space,
+    sanitize_parameters,
+)
 from ..utils.grouping import ModGrouping
 from .layer_utils import (
     InitializationContext,
@@ -79,7 +83,7 @@ class QuantumLayer(MerlinModule):
     or an :class:Experiment`.
     """
 
-    @sanitize_parameters
+    @sanitize_parameters(process_measurement_strategy_computation_space)
     def __init__(
         self,
         input_size: int | None = None,
@@ -97,8 +101,10 @@ class QuantumLayer(MerlinModule):
         input_parameters: list[str] | None = None,
         # Common parameters
         amplitude_encoding: bool = False,
-        computation_space: ComputationSpace | str = ComputationSpace.UNBUNCHED,
-        measurement_strategy: MeasurementStrategyLike = MeasurementStrategy.PROBABILITIES,
+        computation_space: ComputationSpace | str | None = None,
+        measurement_strategy: MeasurementStrategyLike = MeasurementKind[
+            "PROBABILITIES"
+        ],
         # device and dtype
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
@@ -194,8 +200,38 @@ class QuantumLayer(MerlinModule):
         device, dtype, complex_dtype = MerlinModule.setup_device_and_dtype(
             device, dtype
         )
-        # Phase 2: computation space coercion
+        # Phase 2: computation space resolution (legacy vs strategy-driven)
+        if isinstance(measurement_strategy, str):
+            normalized = measurement_strategy.upper()
+            try:
+                measurement_strategy = MeasurementKind[normalized]
+            except KeyError as exc:
+                raise TypeError(
+                    f"Unknown measurement_strategy: {measurement_strategy}"
+                ) from exc
+
+        if isinstance(measurement_strategy, MeasurementStrategy):
+            if measurement_strategy.computation_space is None:
+                raise ValueError(
+                    "MeasurementStrategy must define computation_space. "
+                    "Use MeasurementStrategy.probs(computation_space) instead."
+                )
+            computation_space = measurement_strategy.computation_space
+        else:
+            if computation_space is None:
+                computation_space = ComputationSpace.UNBUNCHED
+
         computation_space = ComputationSpace.coerce(computation_space)
+
+        if isinstance(measurement_strategy, _LegacyMeasurementStrategy):
+            if measurement_strategy == _LegacyMeasurementStrategy.PROBABILITIES:
+                measurement_strategy = MeasurementStrategy.probs(computation_space)
+            elif measurement_strategy == _LegacyMeasurementStrategy.MODE_EXPECTATIONS:
+                measurement_strategy = MeasurementStrategy.mode_expectations(
+                    computation_space
+                )
+            elif measurement_strategy == _LegacyMeasurementStrategy.AMPLITUDES:
+                measurement_strategy = MeasurementStrategy.amplitudes()
 
         # Phase 3: circuit source resolution (builder/circuit/experiment)
         circuit_source = validate_and_resolve_circuit_source(
@@ -451,7 +487,7 @@ class QuantumLayer(MerlinModule):
         dist_size = len(keys)
 
         # Determine output size (upstream model)
-        if kind == MeasurementKind.PROBABILITIES:
+        if kind == MeasurementKind["PROBABILITIES"]:
             self._output_size = dist_size
         elif kind == MeasurementKind.MODE_EXPECTATIONS:
             # be defensive: `self.circuit` may be None or an untyped external object
@@ -461,16 +497,25 @@ class QuantumLayer(MerlinModule):
                 raise TypeError(f"Unknown circuit type: {type(self.circuit)}")
         elif kind == MeasurementKind.AMPLITUDES:
             self._output_size = dist_size
+        elif kind == MeasurementKind.PARTIAL:
+            if self._detector_transform is None:
+                raise RuntimeError(
+                    "Detector transform must be initialised before sizing."
+                )
+            self._output_size = self._detector_transform.output_size
         else:
             raise TypeError(f"Unknown measurement_strategy: {measurement_strategy}")
 
         # Create measurement mapping
-        self.measurement_mapping: nn.Module = OutputMapper.create_mapping(
-            measurement_strategy,
-            self.computation_process.computation_space,
-            keys,
-            dtype=self.dtype,
-        )
+        if kind == MeasurementKind.PARTIAL:
+            self.measurement_mapping = nn.Identity()
+        else:
+            self.measurement_mapping = OutputMapper.create_mapping(
+                measurement_strategy,
+                self.computation_process.computation_space,
+                keys,
+                dtype=self.dtype,
+            )
 
     def _init_amplitude_metadata(self) -> None:
         logical_keys = getattr(
@@ -724,6 +769,12 @@ class QuantumLayer(MerlinModule):
             apply_detectors=self._apply_detector_transform,
         )
 
+        if (
+            _resolve_measurement_kind(self.measurement_strategy)
+            == MeasurementKind.PARTIAL
+        ):
+            return results
+
         # Apply measurement mapping (returns tensor of shape [B, output_size])
         return self.measurement_mapping(results)
 
@@ -878,7 +929,10 @@ class QuantumLayer(MerlinModule):
             or getattr(self, "_detector_transform", None) is None
         ):
             return [self._normalize_output_key(key) for key in self._raw_output_keys]
-        if self.measurement_strategy == MeasurementStrategy.AMPLITUDES:
+        if (
+            _resolve_measurement_kind(self.measurement_strategy)
+            == MeasurementKind.AMPLITUDES
+        ):
             return list(self._raw_output_keys)
         if self._detector_is_identity:
             return list(self._photon_loss_keys)
@@ -903,11 +957,34 @@ class QuantumLayer(MerlinModule):
         self._photon_loss_is_identity = self._photon_loss_transform.is_identity
 
     def _initialize_detector_transform(self) -> None:
+        detectors = self._detectors
+        partial = False
+        if (
+            _resolve_measurement_kind(self.measurement_strategy)
+            == MeasurementKind.PARTIAL
+        ):
+            if not isinstance(self.measurement_strategy, MeasurementStrategy):
+                raise TypeError(
+                    "MeasurementStrategy.partial() must be used for partial measurement."
+                )
+            if not self.measurement_strategy.measured_modes:
+                raise ValueError(
+                    "Partial measurement requires at least one measured mode."
+                )
+            n_modes = len(self._photon_loss_keys[0])
+            self.measurement_strategy.validate_modes(n_modes)
+            measured = set(self.measurement_strategy.measured_modes)
+            detectors = [
+                det if idx in measured else None
+                for idx, det in enumerate(self._detectors)
+            ]
+            partial = True
         detector_transform = DetectorTransform(
             self._photon_loss_keys,
-            self._detectors,
+            detectors,
             dtype=self.dtype,
             device=self.device,
+            partial_measurement=partial,
         )
         self._detector_transform = detector_transform
         self._detector_keys = detector_transform.output_keys
@@ -1108,7 +1185,7 @@ class QuantumLayer(MerlinModule):
             "input_size": input_size,
             "builder": builder,
             "n_photons": n_photons,
-            "measurement_strategy": MeasurementStrategy.PROBABILITIES,
+            "measurement_strategy": MeasurementKind["PROBABILITIES"],
             "device": device,
             "dtype": dtype,
             "computation_space": computation_space,

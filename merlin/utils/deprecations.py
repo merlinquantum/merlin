@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import warnings
 from collections.abc import Callable, Sequence
 from functools import wraps
@@ -34,6 +35,10 @@ def _convert_no_bunching_init(
     kwargs["computation_space"] = comp_value
     return kwargs
 
+
+# ---------------------------------------------------------------------------
+# Deprecation registry (parameter-based)
+# ---------------------------------------------------------------------------
 
 # Global deprecation registry: keys are "ClassName.method_name.param_name"
 # Values are tuples: (message, severity, converter)
@@ -78,25 +83,9 @@ DEPRECATION_REGISTRY: dict[
     ),
 }
 
-_MEASUREMENT_STRATEGY_ENUM_MIGRATIONS = {
-    "PROBABILITIES": "probs(computation_space)",
-    "MODE_EXPECTATIONS": "mode_expectations(computation_space)",
-    "AMPLITUDES": "amplitudes()",
-}
-
-
-def warn_deprecated_enum_access(owner: str, name: str) -> bool:
-    """Warn on deprecated enum-style attribute access and return True if handled."""
-    if owner == "MeasurementStrategy" and name in _MEASUREMENT_STRATEGY_ENUM_MIGRATIONS:
-        replacement = _MEASUREMENT_STRATEGY_ENUM_MIGRATIONS[name]
-        warnings.warn(
-            f"{owner}.{name} is deprecated. Use {owner}.{replacement} instead. "
-            "Will be removed in v0.4.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return True
-    return False
+# ---------------------------------------------------------------------------
+# Deprecation helpers (registry + converters)
+# ---------------------------------------------------------------------------
 
 
 def _collect_deprecations_and_converters(
@@ -142,6 +131,89 @@ def _collect_deprecations_and_converters(
 
     return warn_msgs, raise_msgs, converters
 
+
+# ---------------------------------------------------------------------------
+# MeasurementStrategy enum deprecations
+# ---------------------------------------------------------------------------
+
+_MEASUREMENT_STRATEGY_ENUM_MIGRATIONS = {
+    "PROBABILITIES": "probs(computation_space)",
+    "MODE_EXPECTATIONS": "mode_expectations(computation_space)",
+    "AMPLITUDES": "amplitudes()",
+}
+
+
+def warn_deprecated_enum_access(owner: str, name: str) -> bool:
+    """Warn on deprecated enum-style attribute access and return True if handled."""
+    if owner == "MeasurementStrategy" and name in _MEASUREMENT_STRATEGY_ENUM_MIGRATIONS:
+        replacement = _MEASUREMENT_STRATEGY_ENUM_MIGRATIONS[name]
+        warnings.warn(
+            f"{owner}.{name} is deprecated. Use {owner}.{replacement} instead. "
+            "Will be removed in v0.4.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return True
+    return False
+
+
+# ---------------------------------------------------------------------------
+# QuantumLayer.__init__ computation_space deprecations
+# ---------------------------------------------------------------------------
+
+
+def process_measurement_strategy_computation_space(
+    method_qualname: str,
+    kwargs: dict[str, Any] | None = None,
+    *_args: Any,
+    **_kw: Any,
+) -> dict[str, Any]:
+    """Warn on deprecated computation_space usage when measurement_strategy carries it."""
+    if kwargs is None:
+        return {}
+    if method_qualname != "QuantumLayer.__init__":
+        return kwargs
+
+    if "measurement_strategy" not in kwargs:
+        return kwargs
+
+    measurement_strategy = kwargs.get("measurement_strategy")
+    if isinstance(measurement_strategy, str):
+        warnings.warn(
+            "Passing measurement_strategy as a string is deprecated. "
+            "Use MeasurementStrategy.probs(...) instead. Will be removed in v0.4.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return kwargs
+
+    strategy_space = getattr(measurement_strategy, "computation_space", None)
+    if strategy_space is None:
+        return kwargs
+
+    if "computation_space" in kwargs and kwargs["computation_space"] is not None:
+        coerced_param = ComputationSpace.coerce(kwargs["computation_space"])
+        if strategy_space != coerced_param:
+            warnings.warn(
+                f"computation_space param '{coerced_param}' differs from "
+                f"strategy.computation_space '{strategy_space}'. Using strategy value.",
+                UserWarning,
+                stacklevel=2,
+            )
+        else:
+            warnings.warn(
+                "Passing computation_space as separate argument is deprecated when "
+                "using MeasurementStrategy.probs(...). Remove the parameter. "
+                "Will be required in v0.4.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+    return kwargs
+
+
+# ---------------------------------------------------------------------------
+# Decorator API
+# ---------------------------------------------------------------------------
 
 # (converter defined above and referenced inline in the registry)
 
@@ -215,7 +287,9 @@ def sanitize_parameters(*args: Any, **_kw: Any) -> Any:
     # Bare decorator usage: @sanitize_parameters
     if len(args) == 1 and callable(args[0]) and hasattr(args[0], "__qualname__"):
         func = cast(Callable[..., Any], args[0])
-        return _build_decorator([])(func)
+        params = list(inspect.signature(func).parameters.values())
+        if params and params[0].name in {"self", "cls"}:
+            return _build_decorator([])(func)
 
     # Factory usage: @sanitize_parameters(proc1, proc2, ...)
     processors = cast(Sequence[Callable[[str, dict[str, Any]], dict[str, Any]]], args)

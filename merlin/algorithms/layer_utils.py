@@ -49,7 +49,11 @@ from ..core.computation_space import ComputationSpace
 from ..core.generators import StateGenerator, StatePattern
 from ..measurement.detectors import resolve_detectors
 from ..measurement.photon_loss import resolve_photon_loss
-from ..measurement.strategies import MeasurementStrategy, MeasurementStrategyLike
+from ..measurement.strategies import (
+    MeasurementKind,
+    MeasurementStrategyLike,
+    _resolve_measurement_kind,
+)
 from ..pcvl_pytorch.utils import pcvl_to_tensor
 
 
@@ -368,7 +372,9 @@ def setup_noise_and_detectors(
             f"Detectors are ignored in favor of ComputationSpace: {computation_space}"
         )
 
-    amplitude_readout = measurement_strategy == MeasurementStrategy.AMPLITUDES
+    amplitude_readout = (
+        _resolve_measurement_kind(measurement_strategy) == MeasurementKind.AMPLITUDES
+    )
     if amplitude_readout and has_custom_noise:
         raise RuntimeError(
             "measurement_strategy=MeasurementStrategy.AMPLITUDES cannot be used when the experiment defines a NoiseModel."
