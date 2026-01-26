@@ -50,12 +50,11 @@ from ..measurement.strategies import (
     MeasurementKind,
     MeasurementStrategy,
     MeasurementStrategyLike,
-    _LegacyMeasurementStrategy,
     _resolve_measurement_kind,
     resolve_measurement_strategy,
 )
 from ..utils.deprecations import (
-    process_measurement_strategy_computation_space,
+    normalize_measurement_strategy,
     sanitize_parameters,
 )
 from ..utils.grouping import ModGrouping
@@ -83,7 +82,7 @@ class QuantumLayer(MerlinModule):
     or an :class:Experiment`.
     """
 
-    @sanitize_parameters(process_measurement_strategy_computation_space)
+    @sanitize_parameters
     def __init__(
         self,
         input_size: int | None = None,
@@ -201,37 +200,9 @@ class QuantumLayer(MerlinModule):
             device, dtype
         )
         # Phase 2: computation space resolution (legacy vs strategy-driven)
-        if isinstance(measurement_strategy, str):
-            normalized = measurement_strategy.upper()
-            try:
-                measurement_strategy = MeasurementKind[normalized]
-            except KeyError as exc:
-                raise TypeError(
-                    f"Unknown measurement_strategy: {measurement_strategy}"
-                ) from exc
-
-        if isinstance(measurement_strategy, MeasurementStrategy):
-            if measurement_strategy.computation_space is None:
-                raise ValueError(
-                    "MeasurementStrategy must define computation_space. "
-                    "Use MeasurementStrategy.probs(computation_space) instead."
-                )
-            computation_space = measurement_strategy.computation_space
-        else:
-            if computation_space is None:
-                computation_space = ComputationSpace.UNBUNCHED
-
-        computation_space = ComputationSpace.coerce(computation_space)
-
-        if isinstance(measurement_strategy, _LegacyMeasurementStrategy):
-            if measurement_strategy == _LegacyMeasurementStrategy.PROBABILITIES:
-                measurement_strategy = MeasurementStrategy.probs(computation_space)
-            elif measurement_strategy == _LegacyMeasurementStrategy.MODE_EXPECTATIONS:
-                measurement_strategy = MeasurementStrategy.mode_expectations(
-                    computation_space
-                )
-            elif measurement_strategy == _LegacyMeasurementStrategy.AMPLITUDES:
-                measurement_strategy = MeasurementStrategy.amplitudes()
+        measurement_strategy, computation_space = normalize_measurement_strategy(
+            measurement_strategy, computation_space
+        )
 
         # Phase 3: circuit source resolution (builder/circuit/experiment)
         circuit_source = validate_and_resolve_circuit_source(

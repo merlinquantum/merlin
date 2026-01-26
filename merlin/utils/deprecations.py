@@ -4,9 +4,20 @@ import inspect
 import warnings
 from collections.abc import Callable, Sequence
 from functools import wraps
-from typing import Any, TypeVar, cast, overload
+from typing import TYPE_CHECKING, Any, TypeVar, cast, overload
 
 from ..core.computation_space import ComputationSpace
+
+if TYPE_CHECKING:
+    from ..measurement.strategies import (
+        MeasurementStrategyLike,
+    )
+
+_MEASUREMENT_STRATEGY_ENUM_MIGRATIONS = {
+    "PROBABILITIES": "probs(computation_space)",
+    "MODE_EXPECTATIONS": "mode_expectations(computation_space)",
+    "AMPLITUDES": "amplitudes()",
+}
 
 
 def _convert_no_bunching_init(
@@ -133,14 +144,77 @@ def _collect_deprecations_and_converters(
 
 
 # ---------------------------------------------------------------------------
-# MeasurementStrategy enum deprecations
+# MeasurementStrategy normalization + deprecations
 # ---------------------------------------------------------------------------
 
-_MEASUREMENT_STRATEGY_ENUM_MIGRATIONS = {
-    "PROBABILITIES": "probs(computation_space)",
-    "MODE_EXPECTATIONS": "mode_expectations(computation_space)",
-    "AMPLITUDES": "amplitudes()",
-}
+
+def normalize_measurement_strategy(
+    measurement_strategy: MeasurementStrategyLike | str,
+    computation_space: ComputationSpace | str | None,
+) -> tuple[MeasurementStrategyLike, ComputationSpace]:
+    """Normalize measurement strategy + computation space with deprecation warnings."""
+    from ..measurement.strategies import (
+        MeasurementKind,
+        MeasurementStrategy,
+        _LegacyMeasurementStrategy,
+    )
+
+    if isinstance(measurement_strategy, str):
+        warnings.warn(
+            "Passing measurement_strategy as a string is deprecated. "
+            "Use MeasurementStrategy.probs(...) instead. Will be removed in v0.4.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        normalized = measurement_strategy.upper()
+        try:
+            measurement_strategy = MeasurementKind[normalized]
+        except KeyError as exc:
+            raise TypeError(
+                f"Unknown measurement_strategy: {measurement_strategy}"
+            ) from exc
+
+    if isinstance(measurement_strategy, MeasurementStrategy):
+        strategy_space = measurement_strategy.computation_space
+        if strategy_space is None:
+            raise ValueError(
+                "MeasurementStrategy must define computation_space. "
+                "Use MeasurementStrategy.probs(computation_space) instead."
+            )
+        if computation_space is not None:
+            coerced_param = ComputationSpace.coerce(computation_space)
+            if strategy_space != coerced_param:
+                warnings.warn(
+                    f"computation_space param '{coerced_param}' differs from "
+                    f"strategy.computation_space '{strategy_space}'. Using strategy value.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+            else:
+                warnings.warn(
+                    "Passing computation_space as separate argument is deprecated when "
+                    "using MeasurementStrategy.probs(...). Remove the parameter. "
+                    "Will be required in v0.4.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+        return measurement_strategy, strategy_space
+
+    if computation_space is None:
+        computation_space = ComputationSpace.UNBUNCHED
+    computation_space = ComputationSpace.coerce(computation_space)
+
+    if isinstance(measurement_strategy, _LegacyMeasurementStrategy):
+        if measurement_strategy == _LegacyMeasurementStrategy.PROBABILITIES:
+            measurement_strategy = MeasurementStrategy.probs(computation_space)
+        elif measurement_strategy == _LegacyMeasurementStrategy.MODE_EXPECTATIONS:
+            measurement_strategy = MeasurementStrategy.mode_expectations(
+                computation_space
+            )
+        elif measurement_strategy == _LegacyMeasurementStrategy.AMPLITUDES:
+            measurement_strategy = MeasurementStrategy.amplitudes()
+
+    return measurement_strategy, computation_space
 
 
 def warn_deprecated_enum_access(owner: str, name: str) -> bool:
@@ -155,60 +229,6 @@ def warn_deprecated_enum_access(owner: str, name: str) -> bool:
         )
         return True
     return False
-
-
-# ---------------------------------------------------------------------------
-# QuantumLayer.__init__ computation_space deprecations
-# ---------------------------------------------------------------------------
-
-
-def process_measurement_strategy_computation_space(
-    method_qualname: str,
-    kwargs: dict[str, Any] | None = None,
-    *_args: Any,
-    **_kw: Any,
-) -> dict[str, Any]:
-    """Warn on deprecated computation_space usage when measurement_strategy carries it."""
-    if kwargs is None:
-        return {}
-    if method_qualname != "QuantumLayer.__init__":
-        return kwargs
-
-    if "measurement_strategy" not in kwargs:
-        return kwargs
-
-    measurement_strategy = kwargs.get("measurement_strategy")
-    if isinstance(measurement_strategy, str):
-        warnings.warn(
-            "Passing measurement_strategy as a string is deprecated. "
-            "Use MeasurementStrategy.probs(...) instead. Will be removed in v0.4.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return kwargs
-
-    strategy_space = getattr(measurement_strategy, "computation_space", None)
-    if strategy_space is None:
-        return kwargs
-
-    if "computation_space" in kwargs and kwargs["computation_space"] is not None:
-        coerced_param = ComputationSpace.coerce(kwargs["computation_space"])
-        if strategy_space != coerced_param:
-            warnings.warn(
-                f"computation_space param '{coerced_param}' differs from "
-                f"strategy.computation_space '{strategy_space}'. Using strategy value.",
-                UserWarning,
-                stacklevel=2,
-            )
-        else:
-            warnings.warn(
-                "Passing computation_space as separate argument is deprecated when "
-                "using MeasurementStrategy.probs(...). Remove the parameter. "
-                "Will be required in v0.4.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-    return kwargs
 
 
 # ---------------------------------------------------------------------------
