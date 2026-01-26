@@ -47,8 +47,6 @@ The simple quantum layer above implements a circuit of (input_size) modes and (i
 - A full input encoding layer spanning all encoded features;
 - A fully trainable entangling layer acting on all modes.
 
-Additional trainable budget must therefore increase in multiples of two beyond the base interferometer (90 parameters).
-
 Example: Declarative builder API
 --------------------------------
 
