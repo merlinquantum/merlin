@@ -47,7 +47,10 @@ from ..measurement.autodiff import AutoDiffProcess
 from ..measurement.detectors import DetectorTransform
 from ..measurement.photon_loss import PhotonLossTransform
 from ..measurement.strategies import (
+    MeasurementKind,
     MeasurementStrategy,
+    MeasurementStrategyLike,
+    _resolve_measurement_kind,
     resolve_measurement_strategy,
 )
 from ..utils.deprecations import sanitize_parameters
@@ -95,7 +98,7 @@ class QuantumLayer(MerlinModule):
         # Common parameters
         amplitude_encoding: bool = False,
         computation_space: ComputationSpace | str = ComputationSpace.UNBUNCHED,
-        measurement_strategy: MeasurementStrategy = MeasurementStrategy.PROBABILITIES,
+        measurement_strategy: MeasurementStrategyLike = MeasurementStrategy.PROBABILITIES,
         # device and dtype
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
@@ -424,7 +427,7 @@ class QuantumLayer(MerlinModule):
                 self.thetas.append(parameter)
 
     def _setup_measurement_strategy_from_custom(
-        self, measurement_strategy: MeasurementStrategy
+        self, measurement_strategy: MeasurementStrategyLike
     ):
         """Setup output mapping for custom circuit construction."""
         if self._photon_loss_transform is None:
@@ -434,7 +437,9 @@ class QuantumLayer(MerlinModule):
         if self._detector_transform is None:
             raise RuntimeError("Detector transform must be initialised before sizing.")
 
-        if measurement_strategy == MeasurementStrategy.AMPLITUDES:
+        kind = _resolve_measurement_kind(measurement_strategy)
+
+        if kind == MeasurementKind.AMPLITUDES:
             keys = list(self._raw_output_keys)
         else:
             keys = (
@@ -446,15 +451,15 @@ class QuantumLayer(MerlinModule):
         dist_size = len(keys)
 
         # Determine output size (upstream model)
-        if measurement_strategy == MeasurementStrategy.PROBABILITIES:
+        if kind == MeasurementKind.PROBABILITIES:
             self._output_size = dist_size
-        elif measurement_strategy == MeasurementStrategy.MODE_EXPECTATIONS:
+        elif kind == MeasurementKind.MODE_EXPECTATIONS:
             # be defensive: `self.circuit` may be None or an untyped external object
             if self.circuit is not None and hasattr(self.circuit, "m"):
                 self._output_size = self.circuit.m
             else:
                 raise TypeError(f"Unknown circuit type: {type(self.circuit)}")
-        elif measurement_strategy == MeasurementStrategy.AMPLITUDES:
+        elif kind == MeasurementKind.AMPLITUDES:
             self._output_size = dist_size
         else:
             raise TypeError(f"Unknown measurement_strategy: {measurement_strategy}")

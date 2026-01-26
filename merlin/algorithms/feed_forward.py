@@ -34,7 +34,7 @@ from perceval.utils import NoiseModel
 from ..core.computation_space import ComputationSpace
 from ..measurement.detectors import DetectorTransform
 from ..measurement.mappers import OutputMapper
-from ..measurement.strategies import MeasurementStrategy
+from ..measurement.strategies import MeasurementStrategy, MeasurementStrategyLike
 from ..pcvl_pytorch.utils import pcvl_to_tensor
 from .layer import QuantumLayer
 from .module import MerlinModule
@@ -140,7 +140,7 @@ class FeedForwardBlock(MerlinModule):
         trainable_parameters: list[str] | None = None,
         input_parameters: list[str] | None = None,
         computation_space: ComputationSpace = ComputationSpace.FOCK,
-        measurement_strategy: MeasurementStrategy = MeasurementStrategy.PROBABILITIES,
+        measurement_strategy: MeasurementStrategyLike = MeasurementStrategy.PROBABILITIES,
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
@@ -179,7 +179,7 @@ class FeedForwardBlock(MerlinModule):
         self._output_keys: list[tuple[int, ...]] | None = None
         self._output_state_sizes: dict[tuple[int, ...], int] | None = None
         self._output_mapper_cache: dict[
-            tuple[tuple[tuple[int, ...], ...], MeasurementStrategy], torch.nn.Module
+            tuple[tuple[tuple[int, ...], ...], MeasurementStrategyLike], torch.nn.Module
         ] = {}
         self._layer_registry_counter = 0
         self._basis_cache: dict[tuple[int, int], tuple[tuple[int, ...], ...]] = {}

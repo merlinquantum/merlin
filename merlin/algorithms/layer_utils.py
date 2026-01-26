@@ -49,7 +49,7 @@ from ..core.computation_space import ComputationSpace
 from ..core.generators import StateGenerator, StatePattern
 from ..measurement.detectors import resolve_detectors
 from ..measurement.photon_loss import resolve_photon_loss
-from ..measurement.strategies import MeasurementStrategy
+from ..measurement.strategies import MeasurementStrategy, MeasurementStrategyLike
 from ..pcvl_pytorch.utils import pcvl_to_tensor
 
 
@@ -119,7 +119,7 @@ class InitializationContext:
     detectors: list[pcvl.Detector]
     has_custom_detectors: bool
     computation_space: ComputationSpace
-    measurement_strategy: MeasurementStrategy
+    measurement_strategy: MeasurementStrategyLike
     warnings: list[str]
 
 
@@ -350,7 +350,7 @@ def setup_noise_and_detectors(
     experiment: pcvl.Experiment,
     circuit: pcvl.Circuit,
     computation_space: ComputationSpace,
-    measurement_strategy: MeasurementStrategy,
+    measurement_strategy: MeasurementStrategyLike,
 ) -> NoiseAndDetectorConfig:
     """Extract and validate noise/detectors."""
     photon_survival_probs, empty_noise_model = resolve_photon_loss(

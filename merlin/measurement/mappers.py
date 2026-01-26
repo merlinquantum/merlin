@@ -33,7 +33,11 @@ import torch.nn as nn
 
 from merlin.core import ComputationSpace
 
-from .strategies import MeasurementStrategy
+from .strategies import (
+    MeasurementKind,
+    MeasurementStrategyLike,
+    _resolve_measurement_kind,
+)
 
 
 class OutputMapper:
@@ -46,7 +50,7 @@ class OutputMapper:
 
     @staticmethod
     def create_mapping(
-        strategy: MeasurementStrategy,
+        strategy: MeasurementStrategyLike,
         computation_space: ComputationSpace = ComputationSpace.FOCK,
         keys: list[tuple[int, ...]] | None = None,
         dtype: torch.dtype | None = None,
@@ -67,15 +71,19 @@ class OutputMapper:
         Raises:
             ValueError: If strategy is unknown
         """
-        if strategy == MeasurementStrategy.PROBABILITIES:
+        try:
+            kind = _resolve_measurement_kind(strategy)
+        except TypeError as exc:
+            raise ValueError(f"Unknown measurement strategy: {strategy}") from exc
+        if kind == MeasurementKind.PROBABILITIES:
             return Probabilities()
-        elif strategy == MeasurementStrategy.MODE_EXPECTATIONS:
+        elif kind == MeasurementKind.MODE_EXPECTATIONS:
             if keys is None:
                 raise ValueError(
                     "When using ModeExpectations measurement strategy, keys must be provided."
                 )
             return ModeExpectations(computation_space, keys, dtype=dtype)
-        elif strategy == MeasurementStrategy.AMPLITUDES:
+        elif kind == MeasurementKind.AMPLITUDES:
             return Amplitudes()
         else:
             raise ValueError(f"Unknown measurement strategy: {strategy}")

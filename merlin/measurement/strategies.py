@@ -22,9 +22,13 @@
 
 """Measurement strategy definitions for quantum-to-classical conversion."""
 
+from __future__ import annotations
+
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
+from typing import ClassVar, TypeAlias
 
 import torch
 
@@ -32,8 +36,8 @@ from merlin.core.computation_space import ComputationSpace
 from merlin.utils.grouping import LexGrouping, ModGrouping
 
 
-class MeasurementStrategy(Enum):
-    """Strategy for measuring quantum states or counts and possibly apply mapping to classical outputs."""
+class _LegacyMeasurementStrategy(Enum):
+    """Legacy enum kept for backward compatibility with MeasurementStrategy.PROBABILITIES-style usage."""
 
     PROBABILITIES = "probabilities"
     MODE_EXPECTATIONS = "mode_expectations"
@@ -122,40 +126,67 @@ class AmplitudesStrategy(BaseMeasurementStrategy):
         return amplitudes
 
 
-def resolve_measurement_strategy(
-    measurement_strategy: MeasurementStrategy,
-) -> BaseMeasurementStrategy:
-    """Return the concrete strategy implementation for the enum value."""
-    if measurement_strategy == MeasurementStrategy.PROBABILITIES:
-        return ProbabilitiesStrategy()
-    if measurement_strategy == MeasurementStrategy.MODE_EXPECTATIONS:
-        return ModeExpectationsStrategy()
-    if measurement_strategy == MeasurementStrategy.AMPLITUDES:
-        return AmplitudesStrategy()
-    raise TypeError(f"Unknown measurement_strategy: {measurement_strategy}")
+class MeasurementKind(Enum):
+    """High-level measurement kinds used by MeasurementStrategy."""
 
-
-class MeasurementType(Enum):
-    """Low-level measurement type used by strategy implementations."""
-
-    PARTIAL = "partial"
+    PROBABILITIES = "PROBABILITIES"
+    MODE_EXPECTATIONS = "MODE_EXPECTATIONS"
+    AMPLITUDES = "AMPLITUDES"
+    PARTIAL = "PARTIAL"
 
 
 @dataclass(frozen=True, slots=True)
-class MeasurementStrategyV3:
+class MeasurementStrategy:
     """Immutable definition of a measurement strategy for output post-processing."""
 
-    type: MeasurementType
-    measured_modes: tuple[int, ...]
+    kind: MeasurementKind
+    measured_modes: tuple[int, ...] = ()
     computation_space: ComputationSpace | None = None
     grouping: LexGrouping | ModGrouping | None = None
+
+    PROBABILITIES: ClassVar[_LegacyMeasurementStrategy] = (
+        _LegacyMeasurementStrategy.PROBABILITIES
+    )
+    MODE_EXPECTATIONS: ClassVar[_LegacyMeasurementStrategy] = (
+        _LegacyMeasurementStrategy.MODE_EXPECTATIONS
+    )
+    AMPLITUDES: ClassVar[_LegacyMeasurementStrategy] = (
+        _LegacyMeasurementStrategy.AMPLITUDES
+    )
+
+    @staticmethod
+    def probs(
+        computation_space: ComputationSpace,
+        grouping: LexGrouping | ModGrouping | None = None,
+    ) -> MeasurementStrategy:
+        return MeasurementStrategy(
+            kind=MeasurementKind.PROBABILITIES,
+            computation_space=computation_space,
+            grouping=grouping,
+        )
+
+    @staticmethod
+    def mode_expectations(
+        computation_space: ComputationSpace,
+    ) -> MeasurementStrategy:
+        return MeasurementStrategy(
+            kind=MeasurementKind.MODE_EXPECTATIONS,
+            computation_space=computation_space,
+        )
+
+    @staticmethod
+    def amplitudes() -> MeasurementStrategy:
+        return MeasurementStrategy(
+            kind=MeasurementKind.AMPLITUDES,
+            computation_space=ComputationSpace.UNBUNCHED,
+        )
 
     @staticmethod
     def partial(
         modes: list[int],
         computation_space: ComputationSpace,
         grouping: LexGrouping | ModGrouping | None = None,
-    ) -> "MeasurementStrategyV3":
+    ) -> MeasurementStrategy:
         """Create a partial measurement on the given mode indices."""
 
         if len(modes) == 0:
@@ -165,12 +196,36 @@ class MeasurementStrategyV3:
         if any(m < 0 for m in modes):
             raise ValueError("Negative mode index")
 
-        return MeasurementStrategyV3(
-            type=MeasurementType.PARTIAL,
+        return MeasurementStrategy(
+            kind=MeasurementKind.PARTIAL,
             measured_modes=tuple(modes),
             grouping=grouping,
             computation_space=computation_space,
         )
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, MeasurementStrategy):
+            return (
+                self.kind == other.kind
+                and self.measured_modes == other.measured_modes
+                and self.computation_space == other.computation_space
+                and self.grouping == other.grouping
+            )
+        if isinstance(other, _LegacyMeasurementStrategy):
+            return self.kind.name == other.name
+        if isinstance(other, MeasurementKind):
+            return self.kind == other
+        if isinstance(other, str):
+            return self.kind.name == other or self.kind.value == other
+        return NotImplemented
+
+    def __hash__(self) -> int:
+        return hash((
+            self.kind,
+            self.measured_modes,
+            self.computation_space,
+            self.grouping,
+        ))
 
     def validate_modes(self, n_modes: int) -> None:
         """Validate mode indices and warn when the selection covers all modes."""
@@ -180,11 +235,46 @@ class MeasurementStrategyV3:
                     f"Invalid mode indices {self.measured_modes} for circuit with {n_modes} modes"
                 )
         if len(self.measured_modes) == n_modes:
-            raise Warning(
-                "All modes are measured; consider using .probs() instead of .partial()"
+            warnings.warn(
+                "All modes are measured; consider using .probs() instead of .partial()",
+                UserWarning,
+                stacklevel=2,
             )
 
     def get_unmeasured_modes(self, n_modes: int) -> tuple[int, ...]:
         """Return the complement of the measured modes after validation."""
         self.validate_modes(n_modes)
         return tuple(m for m in range(n_modes) if m not in self.measured_modes)
+
+
+MeasurementType = MeasurementKind
+
+MeasurementStrategyLike: TypeAlias = (
+    MeasurementStrategy | _LegacyMeasurementStrategy | MeasurementKind
+)
+
+
+def _resolve_measurement_kind(
+    measurement_strategy: MeasurementStrategyLike,
+) -> MeasurementKind:
+    if isinstance(measurement_strategy, MeasurementStrategy):
+        return measurement_strategy.kind
+    if isinstance(measurement_strategy, _LegacyMeasurementStrategy):
+        return MeasurementKind[measurement_strategy.name]
+    if isinstance(measurement_strategy, MeasurementKind):
+        return measurement_strategy
+    raise TypeError(f"Unknown measurement_strategy: {measurement_strategy}")
+
+
+def resolve_measurement_strategy(
+    measurement_strategy: MeasurementStrategyLike,
+) -> BaseMeasurementStrategy:
+    """Return the concrete strategy implementation for the enum value."""
+    kind = _resolve_measurement_kind(measurement_strategy)
+    if kind == MeasurementKind.PROBABILITIES:
+        return ProbabilitiesStrategy()
+    if kind == MeasurementKind.MODE_EXPECTATIONS:
+        return ModeExpectationsStrategy()
+    if kind == MeasurementKind.AMPLITUDES:
+        return AmplitudesStrategy()
+    raise TypeError(f"Unknown measurement_strategy: {measurement_strategy}")
