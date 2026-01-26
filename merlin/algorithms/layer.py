@@ -166,9 +166,9 @@ class QuantumLayer(MerlinModule):
             false, a torch.Tensor will be returned. Here are the objects to be returned
             |   measurement_strategy   |  return_object=False   | return_object=True |
             | :-------  | :--------  | :----------: |
-            | None | torch.Tensor |  StateVector  |
+            | AMPLTITUDES | torch.Tensor |  StateVector  |
             | PROBABILITIES  | torch.Tensor  |  ProbabilityDistribution  |
-            | PARTIALMEASUREMENT | torch.Tensor   |  PartialMeasurement  |
+            | PARTIAL_MEASUREMENT | torch.Tensor   |  PartialMeasurement  |
             | MODE_EXPECTATIONS  | torch.Tensor   |  torch.Tensor    |
         device : torch.device | None, optional
             Target device for internal tensors (e.g., ``torch.device("cuda")``).
@@ -744,11 +744,15 @@ class QuantumLayer(MerlinModule):
         #         ],
         #     )
 
-        if self.return_object is True:
+        if (
+            self.return_object is True
+            and not self.measurement_strategy == MeasurementStrategy.MODE_EXPECTATIONS
+        ):
             if self.measurement_strategy == MeasurementStrategy.PROBABILITIES:
                 return ProbabilityDistribution(
                     results,
                     n_modes=len(self.input_state),
+                    n_photons=self.n_photons,
                     computation_space=self.computation_space,
                 )
             return StateVector(
@@ -757,7 +761,6 @@ class QuantumLayer(MerlinModule):
                 n_photons=self.n_photons,
             )
 
-        # All other cases go to this one
         # Apply measurement mapping (returns tensor of shape [B, output_size])
         return self.measurement_mapping(results)
 

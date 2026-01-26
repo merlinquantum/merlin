@@ -989,6 +989,7 @@ class TestQuantumLayer:
                 input_state=bs_annot,
             )
 
+    # TODO Change the default returns when the default measurement strategy will be changed. Also, uncomment the partial_measurment tests when it is ready
     def test_forward_output_objects(self):
         # MS:None, ro:false
         builder = ML.CircuitBuilder(5)
@@ -998,20 +999,42 @@ class TestQuantumLayer:
             builder=builder,
             input_state=[0, 1, 0, 1, 0],
         )
+        res_no_obj = qlayer()
 
-        assert isinstance(qlayer(), torch.Tensor)
+        assert isinstance(res_no_obj, torch.Tensor)
 
         # MS:None, ro:true
+        qlayer.return_object = True
+        res_obj = qlayer()
+        assert isinstance(res_obj, ProbabilityDistribution)
+        assert isinstance(res_obj.tensor, torch.Tensor)
+        assert np.allclose(res_no_obj.detach().numpy(), res_obj.tensor.detach().numpy())
+
+        # -------------------------------------------------------------------------------#
+
+        # MS:amplitudes, ro:false
         builder = ML.CircuitBuilder(5)
         builder.add_entangling_layer()
         qlayer = ML.QuantumLayer(
             input_size=0,
             builder=builder,
             input_state=[0, 1, 0, 1, 0],
-            return_object=True,
+            measurement_strategy=ML.MeasurementStrategy.AMPLITUDES,
         )
 
+        res_no_obj = qlayer()
+
+        assert isinstance(qlayer(), torch.Tensor)
+
+        # MS:amplitudes, ro:true
+        qlayer.return_object = True
+        res_obj = qlayer()
+
         assert isinstance(qlayer(), StateVector)
+        assert isinstance(res_obj.tensor, torch.Tensor)
+        assert np.allclose(res_no_obj.detach().numpy(), res_obj.tensor.detach().numpy())
+
+        # -------------------------------------------------------------------------------#
 
         # MS:probs, ro:false
         builder = ML.CircuitBuilder(5)
@@ -1022,21 +1045,19 @@ class TestQuantumLayer:
             input_state=[0, 1, 0, 1, 0],
             measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
         )
+        res_no_obj = qlayer()
 
-        assert isinstance(qlayer(), torch.Tensor)
+        assert isinstance(res_no_obj, torch.Tensor)
 
         # MS:probs, ro:true
-        builder = ML.CircuitBuilder(5)
-        builder.add_entangling_layer()
-        qlayer = ML.QuantumLayer(
-            input_size=0,
-            builder=builder,
-            input_state=[0, 1, 0, 1, 0],
-            measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
-            return_object=True,
-        )
+        qlayer.return_object = True
+        res_obj = qlayer()
 
-        assert isinstance(qlayer(), ProbabilityDistribution)
+        assert isinstance(res_obj, ProbabilityDistribution)
+        assert isinstance(res_obj.tensor, torch.Tensor)
+        assert np.allclose(res_no_obj.detach().numpy(), res_obj.tensor.detach().numpy())
+
+        # -------------------------------------------------------------------------------#
 
         # MS:mode_expectation, ro:false
         builder = ML.CircuitBuilder(5)
@@ -1048,22 +1069,20 @@ class TestQuantumLayer:
             measurement_strategy=ML.MeasurementStrategy.MODE_EXPECTATIONS,
         )
 
-        assert isinstance(qlayer(), torch.Tensor)
+        res_no_obj = qlayer()
+
+        assert isinstance(res_no_obj, torch.Tensor)
 
         # MS:mode_expectation, ro:true
-        builder = ML.CircuitBuilder(5)
-        builder.add_entangling_layer()
-        qlayer = ML.QuantumLayer(
-            input_size=0,
-            builder=builder,
-            input_state=[0, 1, 0, 1, 0],
-            measurement_strategy=ML.MeasurementStrategy.MODE_EXPECTATIONS,
-            return_object=True,
-        )
+        qlayer.return_object = True
+        res_obj = qlayer()
 
-        assert isinstance(qlayer(), torch.Tensor)
+        assert isinstance(res_obj, torch.Tensor)
+        assert np.allclose(res_obj.detach().numpy(), res_obj.detach().numpy())
 
-        # # TODO uncomment when partial is ready
+        # -------------------------------------------------------------------------------#
+
+        # TODO uncomment when partial is ready
         # # MS:partial, ro:false
         # builder = ML.CircuitBuilder(5)
         # builder.add_entangling_layer()
@@ -1074,17 +1093,16 @@ class TestQuantumLayer:
         #     measurement_strategy=ML.MeasurementStrategy.PARTIAL,
         # )
 
-        # assert isinstance(qlayer(), PartialMeasurement)
+        # res_no_obj = qlayer()
+
+        # assert isinstance(res_no_obj, PartialMeasurement)
 
         # # MS:mode_expectpartial, ro:true
-        # builder = ML.CircuitBuilder(5)
-        # builder.add_entangling_layer()
-        # qlayer = ML.QuantumLayer(
-        #     input_size=0,
-        #     builder=builder,
-        #     input_state=[0, 1, 0, 1, 0],
-        #     measurement_strategy=ML.MeasurementStrategy.PARTIAL,
-        #     return_object=True,
-        # )
+        # qlayer.return_object = True
+        # res_obj = qlayer()
 
-        assert isinstance(qlayer(), PartialMeasurement)
+        # assert isinstance(res_obj, PartialMeasurement)
+        # assert isinstance(res_obj.tensor, torch.Tensor)
+        # assert np.allclose(
+        #     res_no_obj.tensor.detach().numpy(), res_obj.tensor.detach().numpy()
+        # )
