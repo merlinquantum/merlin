@@ -160,7 +160,8 @@ class QuantumLayer(MerlinModule):
             ``n_photons`` must be provided.
         computation_space : ComputationSpace | str, optional
             Logical computation subspace to use: one of ``{"fock", "unbunched",
-            "dual_rail"}``. If omitted, defaults to ``UNBUNCHED``.
+            "dual_rail"}``. If omitted, defaults to ``UNBUNCHED``. This argument
+            is deprecated; move it into ``MeasurementStrategy.probs(...)``.
         measurement_strategy : MeasurementStrategy, default: PROBABILITIES
             Output mapping strategy. Supported values include ``PROBABILITIES``,
             ``MODE_EXPECTATIONS`` and ``AMPLITUDES``.
@@ -739,7 +740,7 @@ class QuantumLayer(MerlinModule):
             apply_photon_loss=self._apply_photon_loss_transform,
             apply_detectors=self._apply_detector_transform,
         )
-
+        # If partial measurement, return raw results
         if (
             _resolve_measurement_kind(self.measurement_strategy)
             == MeasurementKind.PARTIAL

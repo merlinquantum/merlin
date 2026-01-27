@@ -75,11 +75,21 @@ DEPRECATION_REGISTRY: dict[
         False,
         _convert_no_bunching_init,
     ),
+    "QuantumLayer.__init__.computation_space": (
+        "The 'computation_space' keyword is deprecated; move it into MeasurementStrategy.probs(computation_space).",
+        False,
+        None,
+    ),
     # QuantumLayer.simple deprecations
     "QuantumLayer.simple.no_bunching": (
         "The 'no_bunching' keyword is deprecated; prefer selecting the computation_space instead.",
         False,
         _convert_no_bunching_init,
+    ),
+    "QuantumLayer.simple.computation_space": (
+        "The 'computation_space' keyword is deprecated; move it into MeasurementStrategy.probs(computation_space).",
+        False,
+        None,
     ),
     "QuantumLayer.simple.reservoir_mode": (
         "The 'reservoir_mode' argument is no longer supported in the 'simple' method. Use torch tooling to freeze weights when needed, e.g., call layer.requires_grad_(False).",
@@ -149,7 +159,7 @@ def _collect_deprecations_and_converters(
 
 
 def normalize_measurement_strategy(
-    measurement_strategy: MeasurementStrategyLike | str,
+    measurement_strategy: MeasurementStrategyLike | str | None,
     computation_space: ComputationSpace | str | None,
 ) -> tuple[MeasurementStrategyLike, ComputationSpace]:
     """Normalize measurement strategy + computation space with deprecation warnings."""
@@ -158,6 +168,14 @@ def normalize_measurement_strategy(
         MeasurementStrategy,
         _LegacyMeasurementStrategy,
     )
+
+    if measurement_strategy is None:
+        if computation_space is None:
+            computation_space = ComputationSpace.UNBUNCHED
+        else:
+            computation_space = ComputationSpace.coerce(computation_space)
+        measurement_strategy = MeasurementStrategy.probs(computation_space)
+        return measurement_strategy, computation_space
 
     if isinstance(measurement_strategy, str):
         warnings.warn(

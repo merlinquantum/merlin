@@ -117,9 +117,9 @@ class FeedForwardBlock(MerlinModule):
     computation_space:
         Currently restricted to :attr:`~merlin.core.computation_space.ComputationSpace.FOCK`.
     measurement_strategy:
-        Controls how classical outputs are produced:
+        Controls how classical outputs are produced.
 
-        - ``MeasurementStrategy.PROBABILITIES`` (default) returns a tensor of
+        - ``MeasurementStrategy.PROBABILITIES`` returns a tensor of
           shape ``(batch_size, num_output_keys)`` whose columns match the fully
           specified Fock states stored in :pyattr:`output_keys`.
         - ``MeasurementStrategy.MODE_EXPECTATIONS`` collapses every branch into

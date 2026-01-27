@@ -1,10 +1,10 @@
-import torch
 import perceval as pcvl
 import pytest
+import torch
 
+from merlin.core.computation_space import ComputationSpace
 from merlin.core.probability_distribution import ProbabilityDistribution
 from merlin.core.state_vector import StateVector
-from merlin.core.computation_space import ComputationSpace
 
 
 def test_from_tensor_and_normalize_dense():
@@ -17,14 +17,20 @@ def test_from_tensor_and_normalize_dense():
 
 def test_from_state_vector_builds_probabilities():
     coef = 1 / torch.sqrt(torch.tensor(2.0))
-    sv = StateVector.from_tensor(torch.tensor([coef, coef], dtype=torch.complex64), n_modes=2, n_photons=1)
+    sv = StateVector.from_tensor(
+        torch.tensor([coef, coef], dtype=torch.complex64), n_modes=2, n_photons=1
+    )
     pd = ProbabilityDistribution.from_state_vector(sv)
     dense = pd.to_dense()
     assert torch.allclose(dense, torch.tensor([0.5, 0.5]))
 
 
 def test_filter_unbunched_dense_performance():
-    probs = torch.tensor([0.5, 0.25, 0.25])  # basis size for (n_modes=2, n_photons=2) is 3
+    probs = torch.tensor([
+        0.5,
+        0.25,
+        0.25,
+    ])  # basis size for (n_modes=2, n_photons=2) is 3
     pd = ProbabilityDistribution.from_tensor(probs, n_modes=2, n_photons=2)
     filtered = pd.filter(ComputationSpace.UNBUNCHED)
     # states are (2,0),(1,1),(0,2); unbunched keeps only (1,1)
@@ -57,7 +63,9 @@ def test_filter_outputs_are_normalized_dense_and_sparse():
     indices = torch.tensor([[0, 1, 2]])
     values = torch.tensor([0.1, 0.3, 0.6], dtype=torch.float32)
     sparse_probs = torch.sparse_coo_tensor(indices, values, (3,))
-    pd_sparse = ProbabilityDistribution.from_tensor(sparse_probs, n_modes=2, n_photons=2)
+    pd_sparse = ProbabilityDistribution.from_tensor(
+        sparse_probs, n_modes=2, n_photons=2
+    )
     filtered_sparse = pd_sparse.filter([(2, 0), (0, 2)])
     assert torch.isclose(filtered_sparse.to_dense().sum(), torch.tensor(1.0))
 
@@ -82,7 +90,11 @@ def test_filter_dual_rail_dense_shrinks_basis_and_tracks_perf():
 
 
 def test_filter_dual_rail_invalid_geometry_raises():
-    probs = torch.tensor([0.5, 0.25, 0.25])  # basis size for (n_modes=3, n_photons=1) is 3
+    probs = torch.tensor([
+        0.5,
+        0.25,
+        0.25,
+    ])  # basis size for (n_modes=3, n_photons=1) is 3
     pd = ProbabilityDistribution.from_tensor(probs, n_modes=3, n_photons=1)
     with pytest.raises(ValueError):
         _ = pd.filter(ComputationSpace.DUAL_RAIL)
@@ -161,7 +173,9 @@ def test_getitem_returns_probability():
 
 
 def test_probability_distribution_to_propagates_metadata_and_lp():
-    pd = ProbabilityDistribution.from_tensor(torch.tensor([0.5, 0.5]), n_modes=2, n_photons=1)
+    pd = ProbabilityDistribution.from_tensor(
+        torch.tensor([0.5, 0.5]), n_modes=2, n_photons=1
+    )
     pd.logical_performance = torch.tensor(0.25, dtype=torch.float32)
     converted = pd.to(dtype=torch.float64)
     assert converted is not pd
@@ -173,7 +187,9 @@ def test_probability_distribution_to_propagates_metadata_and_lp():
 
 
 def test_probability_distribution_view_and_reshape_not_supported():
-    pd = ProbabilityDistribution.from_tensor(torch.tensor([0.5, 0.5]), n_modes=2, n_photons=1)
+    pd = ProbabilityDistribution.from_tensor(
+        torch.tensor([0.5, 0.5]), n_modes=2, n_photons=1
+    )
     with pytest.raises(AttributeError):
         _ = pd.view
     with pytest.raises(AttributeError):

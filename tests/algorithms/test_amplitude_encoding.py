@@ -310,6 +310,11 @@ def test_computation_space_selector(make_layer):
             message="MeasurementStrategy\\..*deprecated",
             category=DeprecationWarning,
         )
+        warnings.filterwarnings(
+            "ignore",
+            message="The 'computation_space' keyword is deprecated",
+            category=DeprecationWarning,
+        )
         with pytest.raises(
             ValueError,
             match="Incompatible 'no_bunching' value with selected 'computation_space'.",
