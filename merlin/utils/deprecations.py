@@ -162,12 +162,27 @@ def normalize_measurement_strategy(
     measurement_strategy: MeasurementStrategyLike | str | None,
     computation_space: ComputationSpace | str | None,
 ) -> tuple[MeasurementStrategyLike, ComputationSpace]:
-    """Normalize measurement strategy + computation space with deprecation warnings."""
+    """Normalize measurement strategy + computation space with deprecation warnings.
+
+    Enforces the v0.3 requirement that computation_space must live inside MeasurementStrategy
+    when using the new factory methods (probs, mode_expectations, partial).
+
+    Rules:
+    1. If MeasurementStrategy instance (new API) + constructor computation_space provided
+       → ERROR: user must move computation_space into the factory method
+    2. If legacy enum (PROBABILITIES, etc) + constructor computation_space
+       → OK with deprecation warning (backward compat)
+    3. If MeasurementStrategy instance only → use its computation_space
+    4. If legacy enum only → wrap with computation_space param
+    """
     from ..measurement.strategies import (
         MeasurementKind,
         MeasurementStrategy,
         _LegacyMeasurementStrategy,
     )
+
+    # Track whether computation_space was explicitly provided by user
+    computation_space_provided = computation_space is not None
 
     if measurement_strategy is None:
         if computation_space is None:
@@ -193,36 +208,45 @@ def normalize_measurement_strategy(
             ) from exc
 
     if isinstance(measurement_strategy, MeasurementStrategy):
+        # NEW API: MeasurementStrategy instance (e.g., from .probs(), .partial(), etc)
         strategy_space = measurement_strategy.computation_space
         if strategy_space is None:
             raise ValueError(
                 "MeasurementStrategy must define computation_space. "
                 "Use MeasurementStrategy.probs(computation_space) instead."
             )
-        if computation_space is not None:
-            coerced_param = ComputationSpace.coerce(computation_space)
-            if strategy_space != coerced_param:
-                warnings.warn(
-                    f"computation_space param '{coerced_param}' differs from "
-                    f"strategy.computation_space '{strategy_space}'. Using strategy value.",
-                    UserWarning,
-                    stacklevel=2,
-                )
-            else:
-                warnings.warn(
-                    "Passing computation_space as separate argument is deprecated when "
-                    "using MeasurementStrategy.probs(...). Remove the parameter. "
-                    "Will be required in v0.4.",
-                    DeprecationWarning,
-                    stacklevel=2,
-                )
+
+        # CONFLICT CHECK: Constructor computation_space + new factory method
+        if computation_space_provided:
+            raise TypeError(
+                "Cannot specify 'computation_space' in QuantumLayer constructor "
+                "when using MeasurementStrategy.probs(), .mode_expectations(), or .partial(). "
+                "Move 'computation_space' into the factory method instead. "
+                "For example: MeasurementStrategy.probs(computation_space=ComputationSpace.FOCK) "
+                "instead of QuantumLayer(..., computation_space=..., measurement_strategy=...)."
+            )
+
         return measurement_strategy, strategy_space
 
+    # Only set default if not explicitly provided
     if computation_space is None:
         computation_space = ComputationSpace.UNBUNCHED
-    computation_space = ComputationSpace.coerce(computation_space)
+    else:
+        computation_space = ComputationSpace.coerce(computation_space)
 
     if isinstance(measurement_strategy, _LegacyMeasurementStrategy):
+        # LEGACY API: Enum-style access (PROBABILITIES, MODE_EXPECTATIONS, AMPLITUDES)
+        # These are allowed with constructor computation_space for backward compat
+        if computation_space_provided:
+            warnings.warn(
+                "Passing 'computation_space' as a separate argument with legacy "
+                "MeasurementStrategy enum values is deprecated. "
+                "Use MeasurementStrategy.probs(computation_space=...) instead. "
+                "Will be required in v0.4.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
         if measurement_strategy == _LegacyMeasurementStrategy.PROBABILITIES:
             measurement_strategy = MeasurementStrategy.probs(computation_space)
         elif measurement_strategy == _LegacyMeasurementStrategy.MODE_EXPECTATIONS:

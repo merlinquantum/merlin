@@ -731,6 +731,12 @@ class QuantumLayer(MerlinModule):
         )
         # Phase 6: Measurement strategy dispatch and output mapping.
         strategy = resolve_measurement_strategy(self.measurement_strategy)
+        # Handle backward compatibility for backpropagation - will be removed in future
+        grouping = None
+        if isinstance(self.measurement_strategy, MeasurementStrategy):
+            if self.measurement_strategy.type == MeasurementKind.PROBABILITIES:
+                grouping = self.measurement_strategy.grouping
+
         results = strategy.process(
             distribution=distribution,
             amplitudes=amplitudes,
@@ -739,6 +745,7 @@ class QuantumLayer(MerlinModule):
             sample_fn=adp.sampling_noise.pcvl_sampler,
             apply_photon_loss=self._apply_photon_loss_transform,
             apply_detectors=self._apply_detector_transform,
+            grouping=grouping,
         )
         # If partial measurement, return raw results
         if (

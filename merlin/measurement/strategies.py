@@ -64,6 +64,7 @@ class BaseMeasurementStrategy:
         sample_fn: Callable[[torch.Tensor, int], torch.Tensor],
         apply_photon_loss: Callable[[torch.Tensor], torch.Tensor],
         apply_detectors: Callable[[torch.Tensor], torch.Tensor],
+        grouping: Callable[[torch.Tensor], torch.Tensor] | None = None,
     ) -> torch.Tensor:
         """Return the processed result for the selected measurement strategy."""
         raise NotImplementedError
@@ -85,13 +86,16 @@ class DistributionStrategy(BaseMeasurementStrategy):
         sample_fn: Callable[[torch.Tensor, int], torch.Tensor],
         apply_photon_loss: Callable[[torch.Tensor], torch.Tensor],
         apply_detectors: Callable[[torch.Tensor], torch.Tensor],
+        grouping: Callable[[torch.Tensor], torch.Tensor] | None = None,
     ) -> torch.Tensor:
         # Distribution strategies apply detector/noise transforms before sampling.
         distribution = apply_photon_loss(distribution)
         distribution = apply_detectors(distribution)
 
         if apply_sampling and effective_shots > 0:
-            return sample_fn(distribution, effective_shots)
+            distribution = sample_fn(distribution, effective_shots)
+        if grouping is not None:
+            return grouping(distribution)
         return distribution
 
 
@@ -110,18 +114,9 @@ class ModeExpectationsStrategy(DistributionStrategy):
 class AmplitudesStrategy(BaseMeasurementStrategy):
     """Return raw amplitudes (sampling is not supported)."""
 
-    def process(
-        self,
-        *,
-        distribution: torch.Tensor,
-        amplitudes: torch.Tensor,
-        apply_sampling: bool,
-        effective_shots: int,
-        sample_fn: Callable[[torch.Tensor, int], torch.Tensor],
-        apply_photon_loss: Callable[[torch.Tensor], torch.Tensor],
-        apply_detectors: Callable[[torch.Tensor], torch.Tensor],
-    ) -> torch.Tensor:
+    def process(self, *, amplitudes: torch.Tensor, **kwargs: object) -> torch.Tensor:
         # Amplitudes bypass detectors, photon loss, and sampling.
+        apply_sampling = bool(kwargs.get("apply_sampling", False))
         if apply_sampling:
             raise RuntimeError(
                 "Sampling cannot be applied when measurement_strategy=MeasurementStrategy.AMPLITUDES."
@@ -145,6 +140,7 @@ class PartialMeasurementStrategy(BaseMeasurementStrategy):
         sample_fn: Callable[[torch.Tensor, int], torch.Tensor],
         apply_photon_loss: Callable[[torch.Tensor], torch.Tensor],
         apply_detectors: Callable[[torch.Tensor], torch.Tensor],
+        grouping: Callable[[torch.Tensor], torch.Tensor] | None = None,
     ) -> PartialMeasurement:
         if apply_sampling and effective_shots > 0:
             raise RuntimeError(
