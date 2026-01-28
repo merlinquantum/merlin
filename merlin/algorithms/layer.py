@@ -41,17 +41,16 @@ from ..builder.circuit_builder import (
 )
 from ..core.computation_space import ComputationSpace
 from ..core.generators import StateGenerator, StatePattern
+from ..core.partial_measurement import PartialMeasurement
+from ..core.probability_distribution import ProbabilityDistribution
 from ..core.process import ComputationProcessFactory
 from ..core.state_vector import StateVector
-from ..core.probability_distribution import ProbabilityDistribution
-from ..core.partial_measurement import PartialMeasurement, PartialMeasurementBranch
-from ..measurement import OutputMapper, ModeExpectations
+from ..measurement import OutputMapper
 from ..measurement.autodiff import AutoDiffProcess
 from ..measurement.detectors import DetectorTransform
 from ..measurement.photon_loss import PhotonLossTransform
 from ..measurement.strategies import (
     MeasurementStrategy,
-    MeasurementType,
     resolve_measurement_strategy,
 )
 from ..utils.deprecations import sanitize_parameters
@@ -168,7 +167,7 @@ class QuantumLayer(MerlinModule):
             | :-------  | :--------  | :----------: |
             | AMPLTITUDES | torch.Tensor |  StateVector  |
             | PROBABILITIES  | torch.Tensor  |  ProbabilityDistribution  |
-            | PARTIAL_MEASUREMENT | torch.Tensor   |  PartialMeasurement  |
+            | PARTIAL_MEASUREMENT | PartialMeasurement   |  PartialMeasurement  |
             | MODE_EXPECTATIONS  | torch.Tensor   |  torch.Tensor    |
         device : torch.device | None, optional
             Target device for internal tensors (e.g., ``torch.device("cuda")``).
@@ -646,13 +645,22 @@ class QuantumLayer(MerlinModule):
         shots: int | None = None,
         sampling_method: str | None = None,
         simultaneous_processes: int | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor] | torch.Tensor:
+    ) -> (
+        tuple[torch.Tensor, torch.Tensor]
+        | torch.Tensor
+        | PartialMeasurement
+        | StateVector
+        | ProbabilityDistribution
+    ):
         """Forward pass through the quantum layer.
 
         When ``self.amplitude_encoding`` is ``True`` the first positional argument
         must contain the amplitude-encoded input state (either ``[num_states]`` or
         ``[batch_size, num_states]``). Remaining positional arguments are treated
         as classical inputs and processed via the standard encoding pipeline.
+
+        Depending on the return_object argument and measurement strategy defined in the input, the output
+        will be different. Check the constructor for more details.
 
         Sampling is controlled by:
             - shots (int): number of samples; if 0 or None, return exact amplitudes/probabilities.

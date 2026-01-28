@@ -272,6 +272,7 @@ Next steps
 
 - Swap out ``builder.add_superpositions`` or introduce additional entangling layers to
   explore deeper circuits.
+- Set ``return_object`` to True to get a more detailed object as a result of a forward call. Take a look at :doc:`../api_reference/api/merlin.algorithms.layer` for more details about returned typed objects.
 - Combine :class:`~merlin.utils.grouping.LexGrouping` or :class:`~merlin.utils.grouping.ModGrouping` modules to tailor the classical feature
   count to your downstream model.
 - Re-run the experiments with alternative computation spaces to benchmark accuracy vs.
