@@ -42,6 +42,7 @@ from merlin.utils.grouping import LexGrouping, ModGrouping
 class _LegacyMeasurementStrategy(Enum):
     """Legacy enum kept for backward compatibility with MeasurementStrategy.PROBABILITIES-style usage."""
 
+    NONE = "none"
     PROBABILITIES = "probabilities"
     MODE_EXPECTATIONS = "mode_expectations"
     AMPLITUDES = "amplitudes"
@@ -181,6 +182,7 @@ class MeasurementStrategy(metaclass=_MeasurementStrategyMeta):
     computation_space: ComputationSpace | None = None
     grouping: LexGrouping | ModGrouping | None = None
     if TYPE_CHECKING:
+        NONE: ClassVar[_LegacyMeasurementStrategy]
         PROBABILITIES: ClassVar[_LegacyMeasurementStrategy]
         MODE_EXPECTATIONS: ClassVar[_LegacyMeasurementStrategy]
         AMPLITUDES: ClassVar[_LegacyMeasurementStrategy]
@@ -291,6 +293,8 @@ def _resolve_measurement_kind(
     if isinstance(measurement_strategy, MeasurementStrategy):
         return measurement_strategy.type
     if isinstance(measurement_strategy, _LegacyMeasurementStrategy):
+        if measurement_strategy == _LegacyMeasurementStrategy.NONE:
+            return MeasurementKind.AMPLITUDES
         return MeasurementKind[measurement_strategy.name]
     if isinstance(measurement_strategy, MeasurementKind):
         return measurement_strategy

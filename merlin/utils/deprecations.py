@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     )
 
 _MEASUREMENT_STRATEGY_ENUM_MIGRATIONS = {
+    "NONE": "amplitudes()",
     "PROBABILITIES": "probs(computation_space)",
     "MODE_EXPECTATIONS": "mode_expectations(computation_space)",
     "AMPLITUDES": "amplitudes()",
@@ -330,6 +331,8 @@ def normalize_measurement_strategy(
                 computation_space
             )
         elif measurement_strategy == _LegacyMeasurementStrategy.AMPLITUDES:
+            measurement_strategy = MeasurementStrategy.amplitudes()
+        elif measurement_strategy == _LegacyMeasurementStrategy.NONE:
             measurement_strategy = MeasurementStrategy.amplitudes()
 
     return measurement_strategy, computation_space
