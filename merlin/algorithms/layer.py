@@ -820,6 +820,12 @@ class QuantumLayer(MerlinModule):
         # Float tensor(s) → angle encoding
         else:
             tensor_inputs = [x for x in input_parameters if isinstance(x, torch.Tensor)]
+            if any(isinstance(x, StateVector) for x in input_parameters):
+                raise TypeError(
+                    "Cannot mix torch.Tensor and StateVector inputs in the same forward() call. "
+                    "Use either tensor inputs (angle encoding) or StateVector (amplitude encoding). "
+                    "To use a custom input state with angle encoding, set it via the constructor or set_input_state()."
+                )
 
         # Phase 2: Parameter assembly for circuit execution
         params, parameter_batch_dim = self._prepare_classical_parameters(tensor_inputs)
