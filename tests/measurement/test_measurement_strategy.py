@@ -21,6 +21,7 @@
 # SOFTWARE.
 
 
+import warnings
 from typing import Any
 
 import perceval as pcvl
@@ -456,6 +457,98 @@ def test_resolve_measurement_strategy():
         resolve_measurement_strategy(MeasurementStrategy.AMPLITUDES),
         AmplitudesStrategy,
     )
+
+
+def test_legacy_none_maps_to_amplitudes():
+    legacy_none = MeasurementStrategy.NONE
+    assert isinstance(
+        resolve_measurement_strategy(legacy_none),
+        AmplitudesStrategy,
+    )
+
+    builder = ML.CircuitBuilder(n_modes=3)
+    builder.add_entangling_layer(trainable=True, name="U1")
+    builder.add_angle_encoding(modes=[0, 1], name="input")
+    builder.add_entangling_layer(trainable=True, name="U2")
+
+    layer = ML.QuantumLayer(
+        input_size=2,
+        n_photons=1,
+        builder=builder,
+        measurement_strategy=legacy_none,
+    )
+    x = torch.rand(2, 2, requires_grad=True)
+    output = layer(x)
+    loss = output.abs().pow(2).sum()
+    loss.backward()
+    assert x.grad is not None
+
+
+def test_none_measurement_strategy_defaults_to_probabilities():
+    builder = ML.CircuitBuilder(n_modes=3)
+    builder.add_entangling_layer(trainable=True, name="U1")
+    builder.add_angle_encoding(modes=[0, 1], name="input")
+    builder.add_entangling_layer(trainable=True, name="U2")
+
+    with warnings.catch_warnings(record=True) as rec:
+        warnings.simplefilter("always")
+        layer = ML.QuantumLayer(
+            input_size=2,
+            n_photons=1,
+            builder=builder,
+            measurement_strategy=None,
+        )
+
+    assert not any(
+        isinstance(w.message, DeprecationWarning) or w.category is DeprecationWarning
+        for w in rec
+    )
+    assert layer.measurement_strategy.type == MeasurementKind.PROBABILITIES
+
+    x = torch.rand(2, 2, requires_grad=True)
+    output = layer(x)
+    output.sum().backward()
+    assert x.grad is not None
+
+
+def test_new_api_probabilities_backprop():
+    builder = ML.CircuitBuilder(n_modes=3)
+    builder.add_entangling_layer(trainable=True, name="U1")
+    builder.add_angle_encoding(modes=[0, 1], name="input")
+    builder.add_entangling_layer(trainable=True, name="U2")
+
+    layer = ML.QuantumLayer(
+        input_size=2,
+        n_photons=1,
+        builder=builder,
+        measurement_strategy=MeasurementStrategy.probs(
+            computation_space=ComputationSpace.UNBUNCHED
+        ),
+    )
+    x = torch.rand(2, 2, requires_grad=True)
+    output = layer(x)
+    output.sum().backward()
+    assert x.grad is not None
+
+
+def test_new_api_mode_expectations_backprop():
+    builder = ML.CircuitBuilder(n_modes=3)
+    builder.add_entangling_layer(trainable=True, name="U1")
+    builder.add_angle_encoding(modes=[0, 1], name="input")
+    builder.add_entangling_layer(trainable=True, name="U2")
+
+    layer = ML.QuantumLayer(
+        input_size=2,
+        n_photons=1,
+        builder=builder,
+        measurement_strategy=MeasurementStrategy.mode_expectations(
+            computation_space=ComputationSpace.UNBUNCHED
+        ),
+    )
+    x = torch.rand(2, 2, requires_grad=True)
+    output = layer(x)
+    output.sum().backward()
+    assert x.grad is not None
 
 
 def test_probabilities_strategy_applies_transforms_and_sampling():

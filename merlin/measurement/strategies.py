@@ -166,6 +166,8 @@ class MeasurementKind(Enum):
 
 class _MeasurementStrategyMeta(type):
     def __getattr__(cls, name: str) -> _LegacyMeasurementStrategy:
+        if name == "NONE":
+            return _LegacyMeasurementStrategy.NONE
         if warn_deprecated_enum_access("MeasurementStrategy", name):
             return _LegacyMeasurementStrategy[name]
         raise AttributeError(

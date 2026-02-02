@@ -14,10 +14,9 @@ if TYPE_CHECKING:
     )
 
 _MEASUREMENT_STRATEGY_ENUM_MIGRATIONS = {
-    "NONE": "amplitudes()",
     "PROBABILITIES": "probs(computation_space)",
     "MODE_EXPECTATIONS": "mode_expectations(computation_space)",
-    "AMPLITUDES": "amplitudes()",
+    "AMPLITUDES": "NONE (amplitudes)",
 }
 
 
@@ -318,8 +317,8 @@ def normalize_measurement_strategy(
             warnings.warn(
                 "Passing 'computation_space' as a separate argument with legacy "
                 "MeasurementStrategy enum values is deprecated. "
-                "Use MeasurementStrategy.probs(computation_space=...) instead. "
-                "Will be required in v0.4.",
+                "Move computation_space into MeasurementStrategy.probs(computation_space=...) instead. "
+                "Will be removed in 0.4 (v0.4).",
                 DeprecationWarning,
                 stacklevel=2,
             )
@@ -344,7 +343,7 @@ def warn_deprecated_enum_access(owner: str, name: str) -> bool:
         replacement = _MEASUREMENT_STRATEGY_ENUM_MIGRATIONS[name]
         warnings.warn(
             f"{owner}.{name} is deprecated. Use {owner}.{replacement} instead. "
-            "Will be removed in v0.4.",
+            "Will be removed in 0.4 (v0.4).",
             DeprecationWarning,
             stacklevel=2,
         )
