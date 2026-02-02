@@ -144,11 +144,15 @@ class TestConstructorInputTypes:
             )
 
             # Check if any DeprecationWarning was raised
-            deprecation_warnings = [x for x in w if issubclass(x.category, DeprecationWarning)]
+            deprecation_warnings = [
+                x for x in w if issubclass(x.category, DeprecationWarning)
+            ]
             # With modified code, we expect 2 warnings: one for tensor input_state, one for amplitude_encoding=True
             # With old code, we expect 0 warnings
             if deprecation_warnings:
-                assert any("0.4" in str(warning.message) for warning in deprecation_warnings)
+                assert any(
+                    "0.4" in str(warning.message) for warning in deprecation_warnings
+                )
 
         assert layer is not None
 
@@ -172,7 +176,9 @@ class TestDeprecationWarnings:
                 measurement_strategy=ML.MeasurementStrategy.AMPLITUDES,
             )
 
-            deprecation_warnings = [x for x in w if issubclass(x.category, DeprecationWarning)]
+            deprecation_warnings = [
+                x for x in w if issubclass(x.category, DeprecationWarning)
+            ]
             # With modified code, expect warning about amplitude_encoding
             if deprecation_warnings:
                 messages = [str(warning.message) for warning in deprecation_warnings]
@@ -193,10 +199,14 @@ class TestDeprecationWarnings:
                 measurement_strategy=ML.MeasurementStrategy.AMPLITUDES,
             )
 
-            deprecation_warnings = [x for x in w if issubclass(x.category, DeprecationWarning)]
+            deprecation_warnings = [
+                x for x in w if issubclass(x.category, DeprecationWarning)
+            ]
             if deprecation_warnings:
                 for warning in deprecation_warnings:
-                    assert "0.4" in str(warning.message), f"Warning missing '0.4': {warning.message}"
+                    assert "0.4" in str(warning.message), (
+                        f"Warning missing '0.4': {warning.message}"
+                    )
 
 
 class TestForwardDispatch:
@@ -255,7 +265,9 @@ class TestForwardDispatch:
 
         # Create normalized complex amplitudes
         amplitudes = torch.randn(2, n_states, dtype=torch.complex64)
-        amplitudes = amplitudes / amplitudes.abs().pow(2).sum(dim=-1, keepdim=True).sqrt()
+        amplitudes = (
+            amplitudes / amplitudes.abs().pow(2).sum(dim=-1, keepdim=True).sqrt()
+        )
 
         try:
             output = layer(amplitudes)
@@ -284,7 +296,9 @@ class TestForwardDispatch:
             assert output.shape[0] == 1  # Single state
             assert torch.all(torch.isfinite(output))
         except (AttributeError, TypeError) as e:
-            pytest.skip(f"StateVector forward dispatch not supported in current code: {e}")
+            pytest.skip(
+                f"StateVector forward dispatch not supported in current code: {e}"
+            )
 
     def test_forward_mixed_inputs_raises_type_error(self, angle_encoding_layer):
         """Mixing tensor and StateVector inputs should raise TypeError.
@@ -318,7 +332,9 @@ class TestForwardDispatch:
             # Either our new TypeError or old code's AttributeError is acceptable
             pass
 
-    def test_forward_multiple_statevectors_raises_value_error(self, amplitude_layer_fock):
+    def test_forward_multiple_statevectors_raises_value_error(
+        self, amplitude_layer_fock
+    ):
         """Multiple StateVector inputs should raise ValueError.
 
         NOTE: This test requires the modified layer.py with forward() dispatch.
@@ -329,7 +345,9 @@ class TestForwardDispatch:
 
         try:
             layer(sv1, sv2)
-            pytest.skip("Multiple StateVector validation not implemented in current code")
+            pytest.skip(
+                "Multiple StateVector validation not implemented in current code"
+            )
         except (ValueError, AttributeError) as e:
             if isinstance(e, ValueError):
                 assert "one" in str(e).lower() or "StateVector" in str(e)
@@ -417,7 +435,9 @@ class TestLegacyAmplitudeEncodingCompatibility:
         # Create amplitude input matching layer's output_size
         n_states = layer.output_size
         amplitude_input = torch.randn(2, n_states, dtype=torch.float32)
-        amplitude_input = amplitude_input / amplitude_input.pow(2).sum(dim=-1, keepdim=True).sqrt()
+        amplitude_input = (
+            amplitude_input / amplitude_input.pow(2).sum(dim=-1, keepdim=True).sqrt()
+        )
 
         output = layer(amplitude_input)
 
@@ -631,7 +651,9 @@ class TestComplexTensorForwardPath:
         batch_size = 5
         n_states = layer.output_size
         amplitudes = torch.randn(batch_size, n_states, dtype=torch.complex64)
-        amplitudes = amplitudes / amplitudes.abs().pow(2).sum(dim=-1, keepdim=True).sqrt()
+        amplitudes = (
+            amplitudes / amplitudes.abs().pow(2).sum(dim=-1, keepdim=True).sqrt()
+        )
 
         try:
             output = layer(amplitudes)
@@ -711,7 +733,10 @@ class TestAmplitudeEncodingRealInputDeprecation:
         # Create real-valued amplitude input (not complex)
         n_states = layer.output_size
         real_amplitude_input = torch.randn(2, n_states, dtype=torch.float32)
-        real_amplitude_input = real_amplitude_input / real_amplitude_input.pow(2).sum(dim=-1, keepdim=True).sqrt()
+        real_amplitude_input = (
+            real_amplitude_input
+            / real_amplitude_input.pow(2).sum(dim=-1, keepdim=True).sqrt()
+        )
 
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
@@ -722,11 +747,16 @@ class TestAmplitudeEncodingRealInputDeprecation:
 
             # Check for deprecation warning about real input
             deprecation_warnings = [
-                warning for warning in w
+                warning
+                for warning in w
                 if issubclass(warning.category, DeprecationWarning)
-                   and "real" in str(warning.message).lower()
+                and "real" in str(warning.message).lower()
             ]
             if not deprecation_warnings:
-                pytest.skip("Real input deprecation warning not implemented in current code")
+                pytest.skip(
+                    "Real input deprecation warning not implemented in current code"
+                )
 
-            assert any("0.4" in str(warning.message) for warning in deprecation_warnings)
+            assert any(
+                "0.4" in str(warning.message) for warning in deprecation_warnings
+            )

@@ -40,7 +40,6 @@ from merlin.core.state_vector import StateVector
 # TODO Uncomment when partial measurement is ready
 # from merlin.core.partial_measurement import (
 #     PartialMeasurement,
-#     PartialMeasurementBranch,
 # )
 
 
@@ -768,8 +767,8 @@ class TestQuantumLayer:
                 measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
             )
 
-        with pytest.raises(TypeError):
-            ML.QuantumLayer.simple(n_params=0)
+        with pytest.raises(ValueError):
+            ML.QuantumLayer.simple(input_size=21)
 
     def test_subset_combinations_respected(self):
         """Ensure subset combinations expose more parameters without breaking input size checks."""
@@ -1095,7 +1094,7 @@ class TestQuantumLayer:
 
         # assert isinstance(res_no_obj, PartialMeasurement)
 
-        # # MS:mode_expectpartial, ro:true
+        # # MS:partial, ro:true
         # qlayer.return_object = True
         # res_obj = qlayer()
 
@@ -1195,64 +1194,7 @@ class TestQuantumLayer:
 
         assert has_trainable_params, "Model should have trainable parameters"
 
-    # TODO Uncomment when partial is ready, check probability
-    # def test_gradient_through_typed_objects_PartialMeasurement(self):
-    #     """Test that gradients flow through the layer."""
-
-    #     builder = ML.CircuitBuilder(n_modes=4)
-    #     builder.add_entangling_layer(trainable=True, name="U1")
-    #     builder.add_angle_encoding(modes=[0, 1], name="input")
-    #     builder.add_entangling_layer(trainable=True, name="U2")
-    #     to_do = [
-    #         [False, False],
-    #         [False, True],
-    #         [True, False],
-    #         [True, True],
-    #     ]
-    #     for return_object, use_amplitude in to_do:
-
-    #         class custom_layer(nn.Module):
-    #             def __init__(self, *args, **kwargs):
-    #                 super().__init__(*args, **kwargs)
-    #                 self.qlayer = ML.QuantumLayer(
-    #                     input_size=2,
-    #                     input_state=[1, 1, 0, 0],
-    #                     builder=builder,
-    #                     measurement_strategy=ML.MeasurementStrategy.PARTIAL,
-    #                     return_object=return_object,
-    #                 )
-    #                 self.clayer = torch.nn.Linear(
-    #                     self.qlayer.output_size,
-    #                     3,
-    #                 )
-
-    #             def forward(self, x):
-    #                 output_q = self.qlayer(x)
-    #                 if use_amplitude is True:
-    #                     return self.clayer(output_q.branches[0].amplitudes.tensor.abs())
-    #                 else:
-    #                     self.clayer = torch.nn.Linear(
-    #                         self.qlayer.output_size.branches[0].probability,
-    #                         3,
-    #                     )
-
-    #         model = custom_layer()
-    #         x = torch.rand(5, 2, requires_grad=True)
-    #         output = model(x)
-    #         loss = output.sum()
-    #         loss.backward()
-
-    #         # Check that input gradients exist
-    #         assert x.grad is not None
-
-    #         # Check that layer parameters have gradients
-    #         has_trainable_params = False
-    #         for param in model.parameters():
-    #             if param.requires_grad:
-    #                 has_trainable_params = True
-    #                 assert param.grad is not None
-
-    #         assert has_trainable_params, "Model should have trainable parameters"
+    # TODO Define test_gradient_through_typed_objects_PartialMeasurement when MeasurementStrategy is completed.
 
     def test_gradient_through_typed_objects_outputs_tensor(self):
         """Test that gradients flow through the layer."""
@@ -1312,3 +1254,40 @@ class TestQuantumLayer:
                     assert param.grad is not None
 
             assert has_trainable_params, "Model should have trainable parameters"
+
+
+def test_simple_num_photons_modes_and_input_state():
+    for i in range(1, 15):
+        ql = ML.QuantumLayer.simple(input_size=i)
+        if i < 2:
+            assert ql.quantum_layer.n_photons == 1
+            assert ql.quantum_layer.input_state == [0, 1]
+        else:
+            assert ql.quantum_layer.n_photons == (i) // 2
+            assert np.sum(ql.quantum_layer.input_state) == (i) // 2
+            assert len(ql.quantum_layer.input_state) == i
+
+            input_state = [0] * (i)
+            for j in range(len(input_state)):
+                if j % 2 == 1:
+                    input_state[j] = 1
+            assert ql.quantum_layer.input_state == input_state
+
+
+def test_simple_parameters():
+    for i in range(1, 15):
+        ql = ML.QuantumLayer.simple(input_size=i)
+        params = list(ql.quantum_layer.parameters())
+        named_params = [k[0] for k in ql.quantum_layer.named_parameters()]
+        if i < 2:
+            assert params[0].numel() == 2
+            assert params[0].numel() == 2
+            assert len(params) == 2
+            assert "LI_simple" in named_params
+            assert "RI_simple" in named_params
+        else:
+            assert params[0].numel() == i * (i - 1)
+            assert params[1].numel() == i * (i - 1)
+            assert len(params) == 2
+            assert "LI_simple" in named_params
+            assert "RI_simple" in named_params
