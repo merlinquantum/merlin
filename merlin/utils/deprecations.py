@@ -1,11 +1,23 @@
 from __future__ import annotations
 
+import inspect
 import warnings
 from collections.abc import Callable, Sequence
 from functools import wraps
-from typing import Any, TypeVar, cast, overload
+from typing import TYPE_CHECKING, Any, TypeVar, cast, overload
 
 from ..core.computation_space import ComputationSpace
+
+if TYPE_CHECKING:
+    from ..measurement.strategies import (
+        MeasurementStrategyLike,
+    )
+
+_MEASUREMENT_STRATEGY_ENUM_MIGRATIONS = {
+    "PROBABILITIES": "probs(computation_space)",
+    "MODE_EXPECTATIONS": "mode_expectations(computation_space)",
+    "AMPLITUDES": "amplitudes()",
+}
 
 
 def _convert_no_bunching_init(
@@ -33,6 +45,11 @@ def _convert_no_bunching_init(
 
     kwargs["computation_space"] = comp_value
     return kwargs
+
+
+# ---------------------------------------------------------------------------
+# Deprecation registry (parameter-based)
+# ---------------------------------------------------------------------------
 
 
 def _remove_QuantumLayer_simple_n_params(
@@ -113,6 +130,11 @@ DEPRECATION_REGISTRY: dict[
         False,
         _convert_no_bunching_init,
     ),
+    "QuantumLayer.simple.computation_space": (
+        "The 'computation_space' keyword is deprecated; move it into MeasurementStrategy.probs(computation_space).",
+        False,
+        None,
+    ),
     "QuantumLayer.simple.n_params": (
         "Since merlin >= 0.3, input parameter allocation is automatically inferred from input dimensionality, following Gan et al. (2022) on Fock-space expressivity. Manual control of input/trainable parameters is deprecated.",
         False,
@@ -158,6 +180,10 @@ DEPRECATION_REGISTRY: dict[
     ),
 }
 
+# ---------------------------------------------------------------------------
+# Deprecation helpers (registry + converters)
+# ---------------------------------------------------------------------------
+
 
 def _collect_deprecations_and_converters(
     method_qualname: str, raw_kwargs: dict[str, Any]
@@ -202,6 +228,130 @@ def _collect_deprecations_and_converters(
 
     return warn_msgs, raise_msgs, converters
 
+
+# ---------------------------------------------------------------------------
+# MeasurementStrategy normalization + deprecations
+# ---------------------------------------------------------------------------
+
+
+def normalize_measurement_strategy(
+    measurement_strategy: MeasurementStrategyLike | str | None,
+    computation_space: ComputationSpace | str | None,
+) -> tuple[MeasurementStrategyLike, ComputationSpace]:
+    """Normalize measurement strategy + computation space with deprecation warnings.
+
+    Enforces the v0.3 requirement that computation_space must live inside MeasurementStrategy
+    when using the new factory methods (probs, mode_expectations, partial).
+
+    Rules:
+    1. If MeasurementStrategy instance (new API) + constructor computation_space provided
+       → ERROR: user must move computation_space into the factory method
+    2. If legacy enum (PROBABILITIES, etc) + constructor computation_space
+       → OK with deprecation warning (backward compat)
+    3. If MeasurementStrategy instance only → use its computation_space
+    4. If legacy enum only → wrap with computation_space param
+    """
+    from ..measurement.strategies import (
+        MeasurementKind,
+        MeasurementStrategy,
+        _LegacyMeasurementStrategy,
+    )
+
+    # Track whether computation_space was explicitly provided by user
+    computation_space_provided = computation_space is not None
+
+    if measurement_strategy is None:
+        if computation_space is None:
+            computation_space = ComputationSpace.UNBUNCHED
+        else:
+            computation_space = ComputationSpace.coerce(computation_space)
+        measurement_strategy = MeasurementStrategy.probs(computation_space)
+        return measurement_strategy, computation_space
+
+    if isinstance(measurement_strategy, str):
+        warnings.warn(
+            "Passing measurement_strategy as a string is deprecated. "
+            "Use MeasurementStrategy.probs(...) instead. Will be removed in v0.4.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        normalized = measurement_strategy.upper()
+        try:
+            measurement_strategy = MeasurementKind[normalized]
+        except KeyError as exc:
+            raise TypeError(
+                f"Unknown measurement_strategy: {measurement_strategy}"
+            ) from exc
+
+    if isinstance(measurement_strategy, MeasurementStrategy):
+        # NEW API: MeasurementStrategy instance (e.g., from .probs(), .partial(), etc)
+        strategy_space = measurement_strategy.computation_space
+        if strategy_space is None:
+            raise ValueError(
+                "MeasurementStrategy must define computation_space. "
+                "Use MeasurementStrategy.probs(computation_space) instead."
+            )
+
+        # CONFLICT CHECK: Constructor computation_space + new factory method
+        if computation_space_provided:
+            raise TypeError(
+                "Cannot specify 'computation_space' in QuantumLayer constructor "
+                "when using MeasurementStrategy.probs(), .mode_expectations(), or .partial(). "
+                "Move 'computation_space' into the factory method instead. "
+                "For example: MeasurementStrategy.probs(computation_space=ComputationSpace.FOCK) "
+                "instead of QuantumLayer(..., computation_space=..., measurement_strategy=...)."
+            )
+
+        return measurement_strategy, strategy_space
+
+    # Only set default if not explicitly provided
+    if computation_space is None:
+        computation_space = ComputationSpace.UNBUNCHED
+    else:
+        computation_space = ComputationSpace.coerce(computation_space)
+
+    if isinstance(measurement_strategy, _LegacyMeasurementStrategy):
+        # LEGACY API: Enum-style access (PROBABILITIES, MODE_EXPECTATIONS, AMPLITUDES)
+        # These are allowed with constructor computation_space for backward compat
+        if computation_space_provided:
+            warnings.warn(
+                "Passing 'computation_space' as a separate argument with legacy "
+                "MeasurementStrategy enum values is deprecated. "
+                "Use MeasurementStrategy.probs(computation_space=...) instead. "
+                "Will be required in v0.4.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
+        if measurement_strategy == _LegacyMeasurementStrategy.PROBABILITIES:
+            measurement_strategy = MeasurementStrategy.probs(computation_space)
+        elif measurement_strategy == _LegacyMeasurementStrategy.MODE_EXPECTATIONS:
+            measurement_strategy = MeasurementStrategy.mode_expectations(
+                computation_space
+            )
+        elif measurement_strategy == _LegacyMeasurementStrategy.AMPLITUDES:
+            measurement_strategy = MeasurementStrategy.amplitudes()
+
+    return measurement_strategy, computation_space
+
+
+def warn_deprecated_enum_access(owner: str, name: str) -> bool:
+    """Warn on deprecated enum-style attribute access and return True if handled."""
+    if owner == "MeasurementStrategy" and name in _MEASUREMENT_STRATEGY_ENUM_MIGRATIONS:
+        replacement = _MEASUREMENT_STRATEGY_ENUM_MIGRATIONS[name]
+        warnings.warn(
+            f"{owner}.{name} is deprecated. Use {owner}.{replacement} instead. "
+            "Will be removed in v0.4.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return True
+    return False
+
+
+# ---------------------------------------------------------------------------
+# Decorator API
+# ---------------------------------------------------------------------------
 
 # (converter defined above and referenced inline in the registry)
 
@@ -275,7 +425,9 @@ def sanitize_parameters(*args: Any, **_kw: Any) -> Any:
     # Bare decorator usage: @sanitize_parameters
     if len(args) == 1 and callable(args[0]) and hasattr(args[0], "__qualname__"):
         func = cast(Callable[..., Any], args[0])
-        return _build_decorator([])(func)
+        params = list(inspect.signature(func).parameters.values())
+        if params and params[0].name in {"self", "cls"}:
+            return _build_decorator([])(func)
 
     # Factory usage: @sanitize_parameters(proc1, proc2, ...)
     processors = cast(Sequence[Callable[[str, dict[str, Any]], dict[str, Any]]], args)
