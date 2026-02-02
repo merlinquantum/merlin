@@ -42,6 +42,54 @@ from merlin.utils.grouping import LexGrouping, ModGrouping
 
 
 class TestQuantumLayerMeasurementStrategy:
+    @pytest.mark.skipif(
+        not torch.cuda.is_available(),
+        reason="CUDA not available on test runner.",
+    )
+    def test_probabilities_on_cuda(self):
+        builder = ML.CircuitBuilder(n_modes=3)
+        builder.add_entangling_layer(trainable=True, name="U1")
+        builder.add_angle_encoding(modes=[0, 1], name="input")
+        builder.add_entangling_layer(trainable=True, name="U2")
+
+        layer = ML.QuantumLayer(
+            input_size=2,
+            n_photons=1,
+            builder=builder,
+            measurement_strategy=MeasurementStrategy.probs(
+                computation_space=ComputationSpace.UNBUNCHED
+            ),
+            device=torch.device("cuda"),
+        )
+        x = torch.rand(2, 2, device="cuda", requires_grad=True)
+        output = layer(x)
+        assert output.device.type == "cuda"
+        output.sum().backward()
+        assert x.grad is not None
+
+    @pytest.mark.skipif(
+        not torch.cuda.is_available(),
+        reason="CUDA not available on test runner.",
+    )
+    def test_none_strategy_on_cuda(self):
+        builder = ML.CircuitBuilder(n_modes=3)
+        builder.add_entangling_layer(trainable=True, name="U1")
+        builder.add_angle_encoding(modes=[0, 1], name="input")
+        builder.add_entangling_layer(trainable=True, name="U2")
+
+        layer = ML.QuantumLayer(
+            input_size=2,
+            n_photons=1,
+            builder=builder,
+            measurement_strategy=MeasurementStrategy.NONE,
+            device=torch.device("cuda"),
+        )
+        x = torch.rand(2, 2, device="cuda", requires_grad=True)
+        output = layer(x)
+        assert output.device.type == "cuda"
+        output.abs().pow(2).sum().backward()
+        assert x.grad is not None
+
     def test_measurement_distribution(self):
         # Probabilities is equivalent to OutputMappingStrategy.NONE
         builder = ML.CircuitBuilder(n_modes=3)
