@@ -166,8 +166,10 @@ class MeasurementKind(Enum):
 
 class _MeasurementStrategyMeta(type):
     def __getattr__(cls, name: str) -> _LegacyMeasurementStrategy:
+        # Special-case NONE as a non-deprecated alias for amplitudes behavior.
         if name == "NONE":
             return _LegacyMeasurementStrategy.NONE
+        # All other enum-style access is deprecated; warn and return legacy enum.
         if warn_deprecated_enum_access("MeasurementStrategy", name):
             return _LegacyMeasurementStrategy[name]
         raise AttributeError(
@@ -194,6 +196,7 @@ class MeasurementStrategy(metaclass=_MeasurementStrategyMeta):
         computation_space: ComputationSpace,
         grouping: LexGrouping | ModGrouping | None = None,
     ) -> MeasurementStrategy:
+        # Full measurement returning a probability distribution.
         return MeasurementStrategy(
             type=MeasurementKind["PROBABILITIES"],
             computation_space=computation_space,
@@ -204,6 +207,7 @@ class MeasurementStrategy(metaclass=_MeasurementStrategyMeta):
     def mode_expectations(
         computation_space: ComputationSpace,
     ) -> MeasurementStrategy:
+        # Per-mode expectation values from the measured distribution.
         return MeasurementStrategy(
             type=MeasurementKind.MODE_EXPECTATIONS,
             computation_space=computation_space,
@@ -211,6 +215,7 @@ class MeasurementStrategy(metaclass=_MeasurementStrategyMeta):
 
     @staticmethod
     def amplitudes() -> MeasurementStrategy:
+        # Raw amplitudes without detector/noise/sampling processing.
         return MeasurementStrategy(
             type=MeasurementKind.AMPLITUDES,
             computation_space=ComputationSpace.UNBUNCHED,
@@ -231,6 +236,7 @@ class MeasurementStrategy(metaclass=_MeasurementStrategyMeta):
         if any(m < 0 for m in modes):
             raise ValueError("Negative mode index")
 
+        # Partial measurement is explicit and validated; modes drive processing.
         return MeasurementStrategy(
             type=MeasurementKind.PARTIAL,
             measured_modes=tuple(modes),
@@ -264,6 +270,7 @@ class MeasurementStrategy(metaclass=_MeasurementStrategyMeta):
 
     def validate_modes(self, n_modes: int) -> None:
         """Validate mode indices and warn when the selection covers all modes."""
+        # Hard validation for out-of-range indices; warn if equivalent to full measurement.
         for m in self.measured_modes:
             if m < 0 or m >= n_modes:
                 raise ValueError(
@@ -292,10 +299,12 @@ MeasurementStrategyLike: TypeAlias = (
 def _resolve_measurement_kind(
     measurement_strategy: MeasurementStrategyLike,
 ) -> MeasurementKind:
+    # Accept new API objects, legacy enum aliases, or direct MeasurementKind.
     if isinstance(measurement_strategy, MeasurementStrategy):
         return measurement_strategy.type
     if isinstance(measurement_strategy, _LegacyMeasurementStrategy):
         if measurement_strategy == _LegacyMeasurementStrategy.NONE:
+            # Legacy NONE aliases amplitudes.
             return MeasurementKind.AMPLITUDES
         return MeasurementKind[measurement_strategy.name]
     if isinstance(measurement_strategy, MeasurementKind):
@@ -307,6 +316,7 @@ def resolve_measurement_strategy(
     measurement_strategy: MeasurementStrategyLike,
 ) -> BaseMeasurementStrategy:
     """Return the concrete strategy implementation for the enum value."""
+    # Map high-level kind to the concrete strategy implementation.
     kind = _resolve_measurement_kind(measurement_strategy)
     if kind == MeasurementKind["PROBABILITIES"]:
         return ProbabilitiesStrategy()
@@ -315,6 +325,7 @@ def resolve_measurement_strategy(
     if kind == MeasurementKind.AMPLITUDES:
         return AmplitudesStrategy()
     if kind == MeasurementKind.PARTIAL:
+        # Partial measurement requires the new API instance to carry modes.
         if not isinstance(measurement_strategy, MeasurementStrategy):
             raise TypeError(
                 "MeasurementStrategy.partial() must be used for partial measurement."
