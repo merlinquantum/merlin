@@ -277,7 +277,7 @@ def normalize_measurement_strategy(
         )
         normalized = measurement_strategy.upper()
         try:
-            measurement_strategy = MeasurementKind[normalized]
+            measurement_strategy = _LegacyMeasurementStrategy[normalized]
         except KeyError as exc:
             raise TypeError(
                 f"Unknown measurement_strategy: {measurement_strategy}"
@@ -303,6 +303,14 @@ def normalize_measurement_strategy(
             )
 
         return measurement_strategy, strategy_space
+
+    if isinstance(measurement_strategy, MeasurementKind):
+        raise TypeError(
+            "MeasurementKind is not a supported public measurement_strategy input. "
+            "Use MeasurementStrategy.probs(...), MeasurementStrategy.mode_expectations(...), "
+            "MeasurementStrategy.amplitudes(), or legacy MeasurementStrategy.PROBABILITIES-style "
+            "aliases instead."
+        )
 
     # Only set default if not explicitly provided
     if computation_space is None:
@@ -330,9 +338,9 @@ def normalize_measurement_strategy(
                 computation_space
             )
         elif measurement_strategy == _LegacyMeasurementStrategy.AMPLITUDES:
-            measurement_strategy = MeasurementStrategy.amplitudes()
+            measurement_strategy = MeasurementStrategy.amplitudes(computation_space)
         elif measurement_strategy == _LegacyMeasurementStrategy.NONE:
-            measurement_strategy = MeasurementStrategy.amplitudes()
+            measurement_strategy = MeasurementStrategy.amplitudes(computation_space)
 
     return measurement_strategy, computation_space
 

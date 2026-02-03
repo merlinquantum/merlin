@@ -36,6 +36,7 @@ from ..measurement.detectors import DetectorTransform
 from ..measurement.mappers import OutputMapper
 from ..measurement.strategies import (
     MeasurementKind,
+    MeasurementStrategy,
     MeasurementStrategyLike,
     _resolve_measurement_kind,
 )
@@ -144,9 +145,9 @@ class FeedForwardBlock(MerlinModule):
         trainable_parameters: list[str] | None = None,
         input_parameters: list[str] | None = None,
         computation_space: ComputationSpace = ComputationSpace.FOCK,
-        measurement_strategy: MeasurementStrategyLike = MeasurementKind[
-            "PROBABILITIES"
-        ],
+        measurement_strategy: MeasurementStrategyLike = MeasurementStrategy.probs(
+            ComputationSpace.FOCK
+        ),
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
@@ -503,9 +504,10 @@ class FeedForwardBlock(MerlinModule):
                 n_photons=self.n_photons,
                 trainable_parameters=trainable_parameters,
                 input_parameters=input_parameters,
-                measurement_strategy=MeasurementKind.AMPLITUDES,
+                measurement_strategy=MeasurementStrategy.amplitudes(
+                    self.computation_space
+                ),
                 amplitude_encoding=amplitude_encoding,
-                computation_space=self.computation_space,
                 device=self.device,
                 dtype=self.dtype,
             )
@@ -563,8 +565,9 @@ class FeedForwardBlock(MerlinModule):
                 circuit=stage.unitary.copy(),
                 amplitude_encoding=True,
                 n_photons=remaining,
-                measurement_strategy=MeasurementKind.AMPLITUDES,
-                computation_space=self.computation_space,
+                measurement_strategy=MeasurementStrategy.amplitudes(
+                    self.computation_space
+                ),
                 device=self.device,
                 dtype=self.dtype,
                 trainable_parameters=trainable_parameters,
@@ -928,8 +931,9 @@ class FeedForwardBlock(MerlinModule):
                 circuit=runtime.circuit.copy(),
                 amplitude_encoding=True,
                 n_photons=remaining_n,
-                measurement_strategy=MeasurementKind.AMPLITUDES,
-                computation_space=self.computation_space,
+                measurement_strategy=MeasurementStrategy.amplitudes(
+                    self.computation_space
+                ),
                 device=self.device,
                 dtype=self.dtype,
                 trainable_parameters=runtime.trainable_parameters,
@@ -1027,8 +1031,9 @@ class FeedForwardBlock(MerlinModule):
                 circuit=circuit.copy(),
                 amplitude_encoding=True,
                 n_photons=remaining_n,
-                measurement_strategy=MeasurementKind.AMPLITUDES,
-                computation_space=self.computation_space,
+                measurement_strategy=MeasurementStrategy.amplitudes(
+                    self.computation_space
+                ),
                 device=self.device,
                 dtype=self.dtype,
                 trainable_parameters=runtime.trainable_parameters,

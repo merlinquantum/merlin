@@ -175,7 +175,10 @@ class QuantumLayer(MerlinModule):
         measurement_strategy : MeasurementStrategy | None, default: None
             Output mapping strategy. When omitted, defaults to
             ``MeasurementStrategy.probs(computation_space)``. Supported values
-            include ``PROBABILITIES``, ``MODE_EXPECTATIONS`` and ``AMPLITUDES``.
+            include the new factory methods ``MeasurementStrategy.probs(...)``,
+            ``MeasurementStrategy.mode_expectations(...)``, and
+            ``MeasurementStrategy.amplitudes()``, plus legacy enum aliases
+            ``PROBABILITIES``, ``MODE_EXPECTATIONS`` and ``AMPLITUDES`` (deprecated).
         return_object: bool, default: False
             When True, a typed object related to the measurement_strategy will be returned by forward(). If
             false, a torch.Tensor will be returned. Here are the objects to be returned
@@ -1121,6 +1124,11 @@ class QuantumLayer(MerlinModule):
             _resolve_measurement_kind(self.measurement_strategy)
             == MeasurementKind.PARTIAL
         ):
+            if not getattr(self, "_photon_loss_is_identity", True):
+                raise RuntimeError(
+                    "Partial measurement does not support photon loss transforms. "
+                    "Disable photon loss or use a full measurement strategy."
+                )
             if not isinstance(self.measurement_strategy, MeasurementStrategy):
                 raise TypeError(
                     "MeasurementStrategy.partial() must be used for partial measurement."

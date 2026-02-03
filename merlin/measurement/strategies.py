@@ -40,7 +40,7 @@ from merlin.utils.grouping import LexGrouping, ModGrouping
 
 
 class _LegacyMeasurementStrategy(Enum):
-    """Legacy enum kept for backward compatibility with MeasurementStrategy.PROBABILITIES-style usage."""
+    """Legacy enum kept only for backward compatibility (deprecated API)."""
 
     NONE = "none"
     PROBABILITIES = "probabilities"
@@ -49,7 +49,7 @@ class _LegacyMeasurementStrategy(Enum):
 
 
 class BaseMeasurementStrategy:
-    """Base interface for measurement post-processing strategies."""
+    """New API: internal strategy interface for post-processing implementations."""
 
     def supports_sampling(self) -> bool:
         """Return whether the strategy can apply sampling to distributions."""
@@ -72,7 +72,7 @@ class BaseMeasurementStrategy:
 
 
 class DistributionStrategy(BaseMeasurementStrategy):
-    """Shared logic for distribution-based strategies."""
+    """New API: shared logic for distribution-based strategies."""
 
     def supports_sampling(self) -> bool:
         return True
@@ -101,19 +101,19 @@ class DistributionStrategy(BaseMeasurementStrategy):
 
 
 class ProbabilitiesStrategy(DistributionStrategy):
-    """Return output probabilities (optionally sampled)."""
+    """New API: return output probabilities (optionally sampled)."""
 
     pass
 
 
 class ModeExpectationsStrategy(DistributionStrategy):
-    """Return per-mode expectations (optionally sampled)."""
+    """New API: return per-mode expectations (optionally sampled)."""
 
     pass
 
 
 class AmplitudesStrategy(BaseMeasurementStrategy):
-    """Return raw amplitudes (sampling is not supported)."""
+    """New API: return raw amplitudes (sampling is not supported)."""
 
     def process(self, *, amplitudes: torch.Tensor, **kwargs: object) -> torch.Tensor:
         # Amplitudes bypass detectors, photon loss, and sampling.
@@ -126,7 +126,7 @@ class AmplitudesStrategy(BaseMeasurementStrategy):
 
 
 class PartialMeasurementStrategy(BaseMeasurementStrategy):
-    """Return a PartialMeasurement from detector partial-measurement output."""
+    """New API: return a PartialMeasurement from detector partial-measurement output."""
 
     def __init__(self, measured_modes: tuple[int, ...]) -> None:
         self._measured_modes = measured_modes
@@ -158,7 +158,7 @@ class PartialMeasurementStrategy(BaseMeasurementStrategy):
 
 
 class MeasurementKind(Enum):
-    """High-level measurement kinds used by MeasurementStrategy."""
+    """New API: internal measurement kinds used by MeasurementStrategy."""
 
     PROBABILITIES = "PROBABILITIES"
     MODE_EXPECTATIONS = "MODE_EXPECTATIONS"
@@ -168,7 +168,7 @@ class MeasurementKind(Enum):
 
 class _MeasurementStrategyMeta(type):
     def __getattr__(cls, name: str) -> _LegacyMeasurementStrategy:
-        # Special-case NONE as a non-deprecated alias for amplitudes behavior.
+        # Backward compatibility shim: allow MeasurementStrategy.NONE for amplitudes.
         if name == "NONE":
             return _LegacyMeasurementStrategy.NONE
         # All other enum-style access is deprecated; warn and return legacy enum.
@@ -181,7 +181,7 @@ class _MeasurementStrategyMeta(type):
 
 @dataclass(frozen=True, slots=True)
 class MeasurementStrategy(metaclass=_MeasurementStrategyMeta):
-    """Immutable definition of a measurement strategy for output post-processing."""
+    """New API: immutable definition of a measurement strategy for output post-processing."""
 
     type: MeasurementKind
     measured_modes: tuple[int, ...] = ()
@@ -216,11 +216,13 @@ class MeasurementStrategy(metaclass=_MeasurementStrategyMeta):
         )
 
     @staticmethod
-    def amplitudes() -> MeasurementStrategy:
+    def amplitudes(
+        computation_space: ComputationSpace = ComputationSpace.UNBUNCHED,
+    ) -> MeasurementStrategy:
         # Raw amplitudes without detector/noise/sampling processing.
         return MeasurementStrategy(
             type=MeasurementKind.AMPLITUDES,
-            computation_space=ComputationSpace.UNBUNCHED,
+            computation_space=computation_space,
         )
 
     @staticmethod
@@ -293,15 +295,13 @@ class MeasurementStrategy(metaclass=_MeasurementStrategyMeta):
 
 MeasurementType = MeasurementKind
 
-MeasurementStrategyLike: TypeAlias = (
-    MeasurementStrategy | _LegacyMeasurementStrategy | MeasurementKind
-)
+MeasurementStrategyLike: TypeAlias = MeasurementStrategy | _LegacyMeasurementStrategy
 
 
 def _resolve_measurement_kind(
     measurement_strategy: MeasurementStrategyLike,
 ) -> MeasurementKind:
-    # Accept new API objects, legacy enum aliases, or direct MeasurementKind.
+    # Accept new API objects or legacy enum aliases.
     if isinstance(measurement_strategy, MeasurementStrategy):
         return measurement_strategy.type
     if isinstance(measurement_strategy, _LegacyMeasurementStrategy):
@@ -309,8 +309,6 @@ def _resolve_measurement_kind(
             # Legacy NONE aliases amplitudes.
             return MeasurementKind.AMPLITUDES
         return MeasurementKind[measurement_strategy.name]
-    if isinstance(measurement_strategy, MeasurementKind):
-        return measurement_strategy
     raise TypeError(f"Unknown measurement_strategy: {measurement_strategy}")
 
 

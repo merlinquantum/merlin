@@ -28,7 +28,7 @@ from perceval.components import BS, PS
 
 from ..core.computation_space import ComputationSpace
 from ..core.generators import StateGenerator, StatePattern
-from ..measurement.strategies import MeasurementKind
+from ..measurement.strategies import MeasurementStrategy
 from .layer import QuantumLayer
 
 
@@ -84,9 +84,8 @@ def define_layer_no_input(n_modes, n_photons, circuit_type=None):
         circuit=circuit,
         n_photons=n_photons,
         input_state=input_state,  # Random Initial quantum state used only for initialization
-        measurement_strategy=MeasurementKind.AMPLITUDES,
+        measurement_strategy=MeasurementStrategy.amplitudes(ComputationSpace.UNBUNCHED),
         trainable_parameters=["phi"],
-        computation_space=ComputationSpace.UNBUNCHED,
     )
     return layer
 
@@ -111,10 +110,9 @@ def define_layer_with_input(M, N, input_size, circuit_type=None):
         circuit=circuit,
         n_photons=N,
         input_state=input_state,  # Random Initial quantum state used only for initialization
-        measurement_strategy=MeasurementKind.AMPLITUDES,
+        measurement_strategy=MeasurementStrategy.amplitudes(ComputationSpace.UNBUNCHED),
         input_parameters=["pl"],  # Optional: Specify device
         trainable_parameters=["phi"],
-        computation_space=ComputationSpace.UNBUNCHED,
     )
     return layer
 
