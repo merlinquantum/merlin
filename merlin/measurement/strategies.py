@@ -169,7 +169,9 @@ class PartialMeasurementStrategy(BaseMeasurementStrategy):
             raise TypeError(
                 "Partial measurement expects detector output in partial_measurement mode."
             )
-        return partial_measurement(cast(DetectorTransformOutput, detector_output))
+        return partial_measurement(
+            cast(DetectorTransformOutput, detector_output), grouping=grouping
+        )
 
 
 class MeasurementKind(Enum):

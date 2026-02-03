@@ -900,7 +900,10 @@ class QuantumLayer(MerlinModule):
         # Handle backward compatibility for backpropagation - will be removed in future
         grouping = None
         if isinstance(self.measurement_strategy, MeasurementStrategy):
-            if self.measurement_strategy.type == MeasurementKind.PROBABILITIES:
+            if self.measurement_strategy.type in (
+                MeasurementKind.PROBABILITIES,
+                MeasurementKind.PARTIAL,
+            ):
                 grouping = self.measurement_strategy.grouping
 
         results = strategy.process(

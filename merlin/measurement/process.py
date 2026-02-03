@@ -24,6 +24,8 @@
 Quantum measurement sampling utilities.
 """
 
+from collections.abc import Callable
+
 import torch
 
 from merlin.core.partial_measurement import DetectorTransformOutput, PartialMeasurement
@@ -116,6 +118,10 @@ class SamplingProcess:
 
 def partial_measurement(
     detector_output: DetectorTransformOutput,
+    *,
+    grouping: Callable[[torch.Tensor], torch.Tensor] | None = None,
 ) -> PartialMeasurement:
     """Build a PartialMeasurement from DetectorTransform(partial_measurement=True) output."""
-    return PartialMeasurement.from_detector_transform_output(detector_output)
+    return PartialMeasurement.from_detector_transform_output(
+        detector_output, grouping=grouping
+    )

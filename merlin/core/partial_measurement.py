@@ -20,6 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import torch
@@ -68,10 +69,12 @@ class PartialMeasurement:
         branches: tuple[PartialMeasurementBranch, ...],
         measured_modes: tuple[int, ...],
         unmeasured_modes: tuple[int, ...],
+        grouping: Callable[[torch.Tensor], torch.Tensor] | None = None,
     ) -> None:
         self.branches = branches
         self.measured_modes = measured_modes
         self.unmeasured_modes = unmeasured_modes
+        self._grouping = grouping
 
         self.verify_branches_order()
 
@@ -93,8 +96,8 @@ class PartialMeasurement:
     @property
     def probability_tensor_shape(self) -> tuple[int, int]:
         """Return the expected (batch, n_outcomes) shape for the probability tensor."""
-        batch = self._as_batch(self.branches[0].probability).shape[0]
-        return (batch, len(self.branches))
+        probas = self._probability_tensor()
+        return (probas.shape[0], probas.shape[1])
 
     @property
     def n_measured_modes(self) -> int:
@@ -112,12 +115,14 @@ class PartialMeasurement:
         This property assumes that all branches are ordered lexicographically by their outcomes
         so the stacking of probabilities follows the same order.
         """
+        return self._probability_tensor()
+
+    def _probability_tensor(self) -> torch.Tensor:
         probas = torch.stack(
             [self._as_batch(branch.probability) for branch in self.branches], dim=1
         )
-        assert self.probability_tensor_shape == probas.shape, (
-            "Inconsistent probability tensor shape."
-        )
+        if self._grouping is not None:
+            probas = self._grouping(probas)
         return probas
 
     @staticmethod
@@ -138,6 +143,8 @@ class PartialMeasurement:
     @staticmethod
     def from_detector_transform_output(
         detector_output: DetectorTransformOutput,
+        *,
+        grouping: Callable[[torch.Tensor], torch.Tensor] | None = None,
     ) -> "PartialMeasurement":
         """
         Branch-based `PartialMeasurement` wrapper from DetectorTransform(partial_measurement=True) output.
@@ -183,4 +190,5 @@ class PartialMeasurement:
             branches=tuple(branches),
             measured_modes=measured_modes,
             unmeasured_modes=unmeasured_modes,
+            grouping=grouping,
         )

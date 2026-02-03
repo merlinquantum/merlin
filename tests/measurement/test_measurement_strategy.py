@@ -30,6 +30,7 @@ import torch
 
 import merlin as ML
 from merlin.core.computation_space import ComputationSpace
+from merlin.core.partial_measurement import PartialMeasurement
 from merlin.measurement.strategies import (
     AmplitudesStrategy,
     MeasurementKind,
@@ -806,6 +807,36 @@ def test_partial_measurement_strategy_applies_photon_loss_before_detectors():
 
     assert calls == ["loss", "detectors"]
     assert result.measured_modes == (0,)
+
+
+def test_partial_measurement_strategy_applies_grouping_to_tensor():
+    strategy = PartialMeasurementStrategy(measured_modes=(0,))
+    grouping = ModGrouping(2, 1)
+
+    def apply_detectors(
+        amps: torch.Tensor,
+    ) -> list[dict[tuple[int | None, ...], list[tuple[torch.Tensor, torch.Tensor]]]]:
+        return [
+            {
+                (0, None): [(torch.tensor(0.25), torch.tensor([1.0]))],
+                (1, None): [(torch.tensor(0.75), torch.tensor([1.0]))],
+            }
+        ]
+
+    result = strategy.process(
+        distribution=torch.tensor([1.0]),
+        amplitudes=torch.tensor([0.25]),
+        apply_sampling=False,
+        effective_shots=0,
+        sample_fn=lambda dist, shots: dist,
+        apply_photon_loss=lambda amps: amps,
+        apply_detectors=apply_detectors,
+        grouping=grouping,
+    )
+
+    assert isinstance(result, PartialMeasurement)
+    assert result.tensor.shape == (1, 1)
+    assert torch.allclose(result.tensor, torch.tensor([[1.0]]))
 
 
 class _DummyComputationProcess:

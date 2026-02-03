@@ -730,7 +730,6 @@ class TestQuantumLayer:
         assert layer.output_size == 6
         x = torch.rand(3, 2)
         output = layer(x)
-        print(f"Output = {output}")
         assert isinstance(output, ProbabilityDistribution)
         assert output.tensor.shape == (3, 4)
 
@@ -1115,13 +1114,12 @@ class TestQuantumLayer:
         )
 
         res_no_obj = qlayer()
-
         assert isinstance(res_no_obj, PartialMeasurement)
 
         # MS:partial, ro:true
         qlayer.return_object = True
-        res_obj = qlayer()
 
+        res_obj = qlayer()
         assert isinstance(res_obj, PartialMeasurement)
         assert isinstance(res_obj.tensor, torch.Tensor)
         assert np.allclose(
