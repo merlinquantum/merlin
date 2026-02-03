@@ -147,6 +147,8 @@ class PartialMeasurementStrategy(BaseMeasurementStrategy):
             raise RuntimeError(
                 "Sampling cannot be applied when measurement_strategy=MeasurementStrategy.partial()."
             )
+        # Apply photon loss before detectors to match detector basis configuration.
+        amplitudes = apply_photon_loss(amplitudes)
         detector_output = apply_detectors(amplitudes)
         if not isinstance(detector_output, list):
             raise TypeError(

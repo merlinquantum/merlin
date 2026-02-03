@@ -35,6 +35,7 @@ from merlin.measurement.strategies import (
     MeasurementKind,
     MeasurementStrategy,
     ModeExpectationsStrategy,
+    PartialMeasurementStrategy,
     ProbabilitiesStrategy,
     resolve_measurement_strategy,
 )
@@ -743,6 +744,43 @@ def test_amplitudes_strategy_rejects_sampling_in_layer():
 
     with pytest.raises(RuntimeError, match="Sampling cannot be applied"):
         layer(x, shots=5)
+
+
+def test_partial_measurement_strategy_applies_photon_loss_before_detectors():
+    strategy = PartialMeasurementStrategy(measured_modes=(0,))
+    distribution = torch.tensor([1.0])
+    amplitudes = torch.tensor([0.25])
+    calls: list[str] = []
+
+    def apply_photon_loss(amps: torch.Tensor) -> torch.Tensor:
+        calls.append("loss")
+        return amps + 1.0
+
+    def apply_detectors(
+        amps: torch.Tensor,
+    ) -> list[dict[tuple[int | None, ...], list[tuple[torch.Tensor, torch.Tensor]]]]:
+        calls.append("detectors")
+        assert torch.allclose(amps, torch.tensor([1.25]))
+        return [
+            {
+                (0, None): [
+                    (torch.tensor(1.0), torch.tensor([1.0])),
+                ]
+            }
+        ]
+
+    result = strategy.process(
+        distribution=distribution,
+        amplitudes=amplitudes,
+        apply_sampling=False,
+        effective_shots=0,
+        sample_fn=lambda dist, shots: dist,
+        apply_photon_loss=apply_photon_loss,
+        apply_detectors=apply_detectors,
+    )
+
+    assert calls == ["loss", "detectors"]
+    assert result.measured_modes == (0,)
 
 
 class _DummyComputationProcess:
