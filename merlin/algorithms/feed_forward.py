@@ -119,11 +119,10 @@ class FeedForwardBlock(MerlinModule):
         Currently restricted to :attr:`~merlin.core.computation_space.ComputationSpace.FOCK`.
     measurement_strategy:
         Controls how classical outputs are produced.
-
-        - ``MeasurementStrategy.PROBABILITIES`` returns a tensor of
+        - ``MeasurementStrategy.probs(computation_space)`` (default) returns a tensor of
           shape ``(batch_size, num_output_keys)`` whose columns match the fully
           specified Fock states stored in :pyattr:`output_keys`.
-        - ``MeasurementStrategy.MODE_EXPECTATIONS`` collapses every branch into
+        - ``MeasurementStrategy.mode_expectations(computation_space)`` collapses every branch into
           a single tensor of shape ``(batch_size, num_modes)`` that contains the
           per-mode photon expectations aggregated across all measurement keys.
           The :pyattr:`output_keys` attribute is retained for metadata while
@@ -1138,7 +1137,7 @@ class FeedForwardBlock(MerlinModule):
             return torch.zeros(0, device=self.device)
 
         strategy = self.measurement_strategy
-        if _resolve_measurement_kind(strategy) == MeasurementKind["PROBABILITIES"]:
+        if _resolve_measurement_kind(strategy) == MeasurementKind.PROBABILITIES:
             return self._build_probability_tensor(entries)
         if _resolve_measurement_kind(strategy) == MeasurementKind.MODE_EXPECTATIONS:
             return self._build_mode_expectations(entries)

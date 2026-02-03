@@ -209,7 +209,7 @@ class MeasurementStrategy(metaclass=_MeasurementStrategyMeta):
         # Type-checker-only legacy/compat attributes. At runtime, the metaclass
         # resolves these names to either a new API instance (NONE) or legacy enums.
         NONE: ClassVar[MeasurementStrategy]
-        # verify if we want NONE or method none()
+        # TODO: verify if we want NONE or method none()
         PROBABILITIES: ClassVar[_LegacyMeasurementStrategy]
         MODE_EXPECTATIONS: ClassVar[_LegacyMeasurementStrategy]
         AMPLITUDES: ClassVar[_LegacyMeasurementStrategy]

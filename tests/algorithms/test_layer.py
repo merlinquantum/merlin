@@ -35,11 +35,11 @@ from perceval import FFCircuitProvider
 
 import merlin as ML
 from merlin.core.computation_space import ComputationSpace
+from merlin.core.partial_measurement import (
+    PartialMeasurement,
+)
 from merlin.core.probability_distribution import ProbabilityDistribution
 from merlin.core.state_vector import StateVector
-
-from merlin.core.partial_measurement import (
-    PartialMeasurement,)
 
 
 class TestQuantumLayer:
@@ -711,6 +711,29 @@ class TestQuantumLayer:
                 assert output.shape == (3, 4)
                 assert torch.all(torch.isfinite(output))
 
+    def test_probabilities_grouping_return_object(self):
+        """Grouped probabilities with return_object should yield ProbabilityDistribution of grouped size."""
+        builder = ML.CircuitBuilder(n_modes=4)
+        builder.add_entangling_layer(trainable=True, name="U1")
+        builder.add_angle_encoding(modes=[0, 1], name="input")
+        builder.add_entangling_layer(trainable=True, name="U2")
+
+        layer = ML.QuantumLayer(
+            input_size=2,
+            input_state=[1, 0, 1, 0],
+            builder=builder,
+            measurement_strategy=ML.MeasurementStrategy.probs(
+                ComputationSpace.UNBUNCHED, grouping=ML.ModGrouping(6, 4)
+            ),
+            return_object=True,
+        )
+        assert layer.output_size == 6
+        x = torch.rand(3, 2)
+        output = layer(x)
+        print(f"Output = {output}")
+        assert isinstance(output, ProbabilityDistribution)
+        assert output.tensor.shape == (3, 4)
+
     def test_string_representation(self):
         """Test string representation of the layer."""
         builder = ML.CircuitBuilder(n_modes=4)
@@ -1079,7 +1102,7 @@ class TestQuantumLayer:
         # -------------------------------------------------------------------------------#
 
         # TODO uncomment when partial is ready
-        #MS:partial, ro:false
+        # MS:partial, ro:false
         builder = ML.CircuitBuilder(5)
         builder.add_entangling_layer()
         qlayer = ML.QuantumLayer(
@@ -1087,7 +1110,7 @@ class TestQuantumLayer:
             builder=builder,
             input_state=[0, 1, 0, 1, 0],
             measurement_strategy=ML.MeasurementStrategy.partial(
-                modes = [0,1],
+                modes=[0, 1],
             ),
         )
 

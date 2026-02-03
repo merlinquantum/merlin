@@ -529,7 +529,7 @@ class QuantumLayer(MerlinModule):
         dist_size = len(keys)
 
         # Determine output size (upstream model)
-        if kind == MeasurementKind["PROBABILITIES"]:
+        if kind == MeasurementKind.PROBABILITIES:
             self._output_size = dist_size
         elif kind == MeasurementKind.MODE_EXPECTATIONS:
             # be defensive: `self.circuit` may be None or an untyped external object
