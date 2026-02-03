@@ -38,33 +38,16 @@ from merlin.measurement.process import partial_measurement
 from merlin.utils.deprecations import warn_deprecated_enum_access
 from merlin.utils.grouping import LexGrouping, ModGrouping
 
-# ---------------------------------------------------------------------------
-# Legacy compatibility layer (deprecated, kept for transition period)
-# ---------------------------------------------------------------------------
 
-
-# _LegacyMeasurementStrategy exists only to support enum-style access
-# (MeasurementStrategy.PROBABILITIES, etc.) in older user code and tests.
-# It is intentionally separate from the new MeasurementStrategy dataclass so we can
-# emit deprecation warnings and remove this shim in v0.4 without touching core logic.
 class _LegacyMeasurementStrategy(Enum):
     """Legacy enum kept only for backward compatibility (deprecated API)."""
 
     NONE = "none"
     PROBABILITIES = "probabilities"
-    MODE_EXPECTATIONS = "mode_expectations"
+    MODE_EXPECTATIONS = "mode_expectations"  # TODO: verify that it is easy to deprecate with new mode_expectations
     AMPLITUDES = "amplitudes"
 
 
-# ---------------------------------------------------------------------------
-# New API: concrete processing implementations (internal runtime layer)
-# ---------------------------------------------------------------------------
-
-
-# BaseMeasurementStrategy provides the minimal interface for execution-time
-# post-processing. It is kept separate from MeasurementStrategy (the user-facing
-# config object) so that the runtime logic can stay small and focused, while
-# the configuration object remains immutable and easy to validate/serialize.
 class BaseMeasurementStrategy:
     """New API: internal strategy interface for post-processing implementations."""
 
@@ -88,11 +71,6 @@ class BaseMeasurementStrategy:
         raise NotImplementedError
 
 
-# DistributionStrategy centralizes shared behavior for any strategy that starts
-# from a probability distribution (photon loss, detectors, sampling, grouping).
-# Keeping this logic in one class avoids duplicated ordering/behavior across
-# probabilities and mode expectations, which are semantically different but
-# operationally identical at this stage.
 class DistributionStrategy(BaseMeasurementStrategy):
     """New API: shared logic for distribution-based strategies."""
 
@@ -122,27 +100,18 @@ class DistributionStrategy(BaseMeasurementStrategy):
         return distribution
 
 
-# ProbabilitiesStrategy exists as a distinct type to make the dispatch explicit
-# and future-proof (e.g., if probability-specific post-processing is added later).
-# It is intentionally a thin subclass to keep the runtime routing readable.
 class ProbabilitiesStrategy(DistributionStrategy):
     """New API: return output probabilities (optionally sampled)."""
 
     pass
 
 
-# ModeExpectationsStrategy remains separate from ProbabilitiesStrategy to clarify
-# the intended semantics at call sites even though the current implementation
-# is the same. This keeps the API intention visible and avoids boolean flags.
 class ModeExpectationsStrategy(DistributionStrategy):
     """New API: return per-mode expectations (optionally sampled)."""
 
     pass
 
 
-# AmplitudesStrategy is intentionally separate because amplitudes bypass the
-# distribution workflow (no detectors/noise/sampling). Keeping it distinct
-# prevents accidental reuse of distribution logic and enforces the sampling guard.
 class AmplitudesStrategy(BaseMeasurementStrategy):
     """New API: return raw amplitudes (sampling is not supported)."""
 
@@ -156,10 +125,6 @@ class AmplitudesStrategy(BaseMeasurementStrategy):
         return amplitudes
 
 
-# PartialMeasurementStrategy handles the special case where detectors return a
-# structured partial-measurement output (list of branches). It must live apart
-# from distribution-based strategies because the data type and processing
-# pipeline are different.
 class PartialMeasurementStrategy(BaseMeasurementStrategy):
     """New API: return a PartialMeasurement from detector partial-measurement output."""
 
@@ -192,11 +157,11 @@ class PartialMeasurementStrategy(BaseMeasurementStrategy):
         return partial_measurement(cast(DetectorTransformOutput, detector_output))
 
 
-# MeasurementKind is an internal discriminator used for fast routing between
-# runtime strategies. It is not a public input and avoids string-based switches,
-# while keeping MeasurementStrategy instances lightweight and immutable.
 class MeasurementKind(Enum):
     """New API: internal measurement kinds used by MeasurementStrategy."""
+
+    # This is an internal discriminator so runtime can route to the correct strategy.
+    # Not meant to be user-facing
 
     PROBABILITIES = "PROBABILITIES"
     MODE_EXPECTATIONS = "MODE_EXPECTATIONS"
@@ -208,7 +173,7 @@ class _MeasurementStrategyMeta(type):
     def __getattr__(cls, name: str) -> _LegacyMeasurementStrategy:
         # Backward compatibility shim: allow MeasurementStrategy.NONE for amplitudes.
         if name == "NONE":
-            return _LegacyMeasurementStrategy.NONE
+            return _LegacyMeasurementStrategy.NONE  # TODO: NONE should call new API
         # All other enum-style access is deprecated; warn and return legacy enum.
         if warn_deprecated_enum_access("MeasurementStrategy", name):
             return _LegacyMeasurementStrategy[name]
@@ -217,10 +182,6 @@ class _MeasurementStrategyMeta(type):
         )
 
 
-# MeasurementStrategy is the user-facing configuration object. It is deliberately
-# decoupled from BaseMeasurementStrategy (runtime execution) so we can keep
-# configuration immutable, validated, and easily serializable, while still
-# allowing multiple runtime implementations to evolve independently.
 @dataclass(frozen=True, slots=True)
 class MeasurementStrategy(metaclass=_MeasurementStrategyMeta):
     """New API: immutable definition of a measurement strategy for output post-processing."""
@@ -230,7 +191,7 @@ class MeasurementStrategy(metaclass=_MeasurementStrategyMeta):
     computation_space: ComputationSpace | None = None
     grouping: LexGrouping | ModGrouping | None = None
     if TYPE_CHECKING:
-        NONE: ClassVar[_LegacyMeasurementStrategy]
+        NONE: ClassVar[_LegacyMeasurementStrategy]  # NONE should call new API
         PROBABILITIES: ClassVar[_LegacyMeasurementStrategy]
         MODE_EXPECTATIONS: ClassVar[_LegacyMeasurementStrategy]
         AMPLITUDES: ClassVar[_LegacyMeasurementStrategy]
@@ -251,6 +212,7 @@ class MeasurementStrategy(metaclass=_MeasurementStrategyMeta):
     def mode_expectations(
         computation_space: ComputationSpace,
     ) -> MeasurementStrategy:
+        # Mode_expectations
         # Per-mode expectation values from the measured distribution.
         return MeasurementStrategy(
             type=MeasurementKind.MODE_EXPECTATIONS,
@@ -334,8 +296,6 @@ class MeasurementStrategy(metaclass=_MeasurementStrategyMeta):
         self.validate_modes(n_modes)
         return tuple(m for m in range(n_modes) if m not in self.measured_modes)
 
-
-MeasurementType = MeasurementKind
 
 MeasurementStrategyLike: TypeAlias = MeasurementStrategy | _LegacyMeasurementStrategy
 
