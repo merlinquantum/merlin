@@ -38,13 +38,28 @@ from merlin.measurement.process import partial_measurement
 from merlin.utils.deprecations import warn_deprecated_enum_access
 from merlin.utils.grouping import LexGrouping, ModGrouping
 
+# Deprecation guide (target: v0.4):
+# - Remove `_LegacyMeasurementStrategy`, `_MeasurementStrategyMeta`, and any
+#   enum-style attribute access (`MeasurementStrategy.PROBABILITIES`, etc.).
+# - Delete compatibility paths in `resolve_measurement_strategy` and
+#   `_resolve_measurement_kind` that accept `_LegacyMeasurementStrategy`.
+# - Drop `MeasurementStrategyLike` alias and any tests that rely on legacy enums.
+# - Update all call sites to use the new factories (lots of tetsts to update!):
+#     - `MeasurementStrategy.probs(computation_space)`
+#     - `MeasurementStrategy.mode_expectations(computation_space)`
+#     - `MeasurementStrategy.amplitudes()`
+#     - `MeasurementStrategy.partial(...)`
+# - Remove related deprecations in `merlin/utils/deprecations.py` that map legacy
+#   enums to new factories, and update docs/examples accordingly.
+# - If external compatibility is still needed, provide a separate shim module.
+
 
 class _LegacyMeasurementStrategy(Enum):
     """Legacy enum kept only for backward compatibility (deprecated API)."""
 
     NONE = "none"
     PROBABILITIES = "probabilities"
-    MODE_EXPECTATIONS = "mode_expectations"  # TODO: verify that it is easy to deprecate with new mode_expectations
+    MODE_EXPECTATIONS = "mode_expectations"
     AMPLITUDES = "amplitudes"
 
 
