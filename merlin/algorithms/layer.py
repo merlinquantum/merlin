@@ -49,10 +49,16 @@ from ..measurement.autodiff import AutoDiffProcess
 from ..measurement.detectors import DetectorTransform
 from ..measurement.photon_loss import PhotonLossTransform
 from ..measurement.strategies import (
+    MeasurementKind,
     MeasurementStrategy,
+    MeasurementStrategyLike,
+    _resolve_measurement_kind,
     resolve_measurement_strategy,
 )
-from ..utils.deprecations import sanitize_parameters
+from ..utils.deprecations import (
+    normalize_measurement_strategy,
+    sanitize_parameters,
+)
 from ..utils.grouping import ModGrouping
 from .layer_utils import (
     InitializationContext,
@@ -104,8 +110,8 @@ class QuantumLayer(MerlinModule):
         input_parameters: list[str] | None = None,
         # Common parameters
         amplitude_encoding: bool = False,
-        computation_space: ComputationSpace | str = ComputationSpace.UNBUNCHED,
-        measurement_strategy: MeasurementStrategy = MeasurementStrategy.PROBABILITIES,
+        computation_space: ComputationSpace | str | None = None,
+        measurement_strategy: MeasurementStrategyLike | None = None,
         return_object: bool = False,
         # device and dtype
         device: torch.device | None = None,
@@ -162,12 +168,14 @@ class QuantumLayer(MerlinModule):
             the first positional argument and propagates it through the quantum
             layer; ``input_size`` must not be set in this mode and
             ``n_photons`` must be provided.
-        computation_space : ComputationSpace | str, optional
+        computation_space : ComputationSpace | str | None, optional
             Logical computation subspace to use: one of ``{"fock", "unbunched",
-            "dual_rail"}``. If omitted, defaults to ``UNBUNCHED``.
-        measurement_strategy : MeasurementStrategy, default: PROBABILITIES
-            Output mapping strategy. Supported values include ``PROBABILITIES``,
-            ``MODE_EXPECTATIONS`` and ``AMPLITUDES``.
+            "dual_rail"}``. If omitted, defaults to ``UNBUNCHED``. This argument
+            is deprecated; move it into ``MeasurementStrategy.probs(...)``.
+        measurement_strategy : MeasurementStrategy | None, default: None
+            Output mapping strategy. When omitted, defaults to
+            ``MeasurementStrategy.probs(computation_space)``. Supported values
+            include ``PROBABILITIES``, ``MODE_EXPECTATIONS`` and ``AMPLITUDES``.
         return_object: bool, default: False
             When True, a typed object related to the measurement_strategy will be returned by forward(). If
             false, a torch.Tensor will be returned. Here are the objects to be returned
@@ -226,8 +234,10 @@ class QuantumLayer(MerlinModule):
         device, dtype, complex_dtype = MerlinModule.setup_device_and_dtype(
             device, dtype
         )
-        # Phase 2: computation space coercion
-        computation_space = ComputationSpace.coerce(computation_space)
+        # Phase 2: computation space resolution (legacy vs strategy-driven)
+        measurement_strategy, computation_space = normalize_measurement_strategy(
+            measurement_strategy, computation_space
+        )
 
         # Phase 3: circuit source resolution (builder/circuit/experiment)
         circuit_source = validate_and_resolve_circuit_source(
@@ -492,7 +502,7 @@ class QuantumLayer(MerlinModule):
                 self.thetas.append(parameter)
 
     def _setup_measurement_strategy_from_custom(
-        self, measurement_strategy: MeasurementStrategy
+        self, measurement_strategy: MeasurementStrategyLike
     ):
         """Setup output mapping for custom circuit construction."""
         if self._photon_loss_transform is None:
@@ -502,7 +512,9 @@ class QuantumLayer(MerlinModule):
         if self._detector_transform is None:
             raise RuntimeError("Detector transform must be initialised before sizing.")
 
-        if measurement_strategy == MeasurementStrategy.AMPLITUDES:
+        kind = _resolve_measurement_kind(measurement_strategy)
+
+        if kind == MeasurementKind.AMPLITUDES:
             keys = list(self._raw_output_keys)
         else:
             keys = (
@@ -514,26 +526,35 @@ class QuantumLayer(MerlinModule):
         dist_size = len(keys)
 
         # Determine output size (upstream model)
-        if measurement_strategy == MeasurementStrategy.PROBABILITIES:
+        if kind == MeasurementKind["PROBABILITIES"]:
             self._output_size = dist_size
-        elif measurement_strategy == MeasurementStrategy.MODE_EXPECTATIONS:
+        elif kind == MeasurementKind.MODE_EXPECTATIONS:
             # be defensive: `self.circuit` may be None or an untyped external object
             if self.circuit is not None and hasattr(self.circuit, "m"):
                 self._output_size = self.circuit.m
             else:
                 raise TypeError(f"Unknown circuit type: {type(self.circuit)}")
-        elif measurement_strategy == MeasurementStrategy.AMPLITUDES:
+        elif kind == MeasurementKind.AMPLITUDES:
             self._output_size = dist_size
+        elif kind == MeasurementKind.PARTIAL:
+            if self._detector_transform is None:
+                raise RuntimeError(
+                    "Detector transform must be initialised before sizing."
+                )
+            self._output_size = self._detector_transform.output_size
         else:
             raise TypeError(f"Unknown measurement_strategy: {measurement_strategy}")
 
         # Create measurement mapping
-        self.measurement_mapping: nn.Module = OutputMapper.create_mapping(
-            measurement_strategy,
-            self.computation_process.computation_space,
-            keys,
-            dtype=self.dtype,
-        )
+        if kind == MeasurementKind.PARTIAL:
+            self.measurement_mapping = nn.Identity()
+        else:
+            self.measurement_mapping = OutputMapper.create_mapping(
+                measurement_strategy,
+                self.computation_process.computation_space,
+                keys,
+                dtype=self.dtype,
+            )
 
     def _init_amplitude_metadata(self) -> None:
         logical_keys = getattr(
@@ -873,6 +894,12 @@ class QuantumLayer(MerlinModule):
 
         # Phase 6: Measurement strategy dispatch and output mapping
         strategy = resolve_measurement_strategy(self.measurement_strategy)
+        # Handle backward compatibility for backpropagation - will be removed in future
+        grouping = None
+        if isinstance(self.measurement_strategy, MeasurementStrategy):
+            if self.measurement_strategy.type == MeasurementKind.PROBABILITIES:
+                grouping = self.measurement_strategy.grouping
+
         results = strategy.process(
             distribution=distribution,
             amplitudes=amplitudes,
@@ -881,7 +908,14 @@ class QuantumLayer(MerlinModule):
             sample_fn=adp.sampling_noise.pcvl_sampler,
             apply_photon_loss=self._apply_photon_loss_transform,
             apply_detectors=self._apply_detector_transform,
+            grouping=grouping,
         )
+        # If partial measurement, return raw results
+        if (
+            _resolve_measurement_kind(self.measurement_strategy)
+            == MeasurementKind.PARTIAL
+        ):
+            return results
 
         if (
             self.return_object is True
@@ -1053,7 +1087,10 @@ class QuantumLayer(MerlinModule):
             or getattr(self, "_detector_transform", None) is None
         ):
             return [self._normalize_output_key(key) for key in self._raw_output_keys]
-        if self.measurement_strategy == MeasurementStrategy.AMPLITUDES:
+        if (
+            _resolve_measurement_kind(self.measurement_strategy)
+            == MeasurementKind.AMPLITUDES
+        ):
             return list(self._raw_output_keys)
         if self._detector_is_identity:
             return list(self._photon_loss_keys)
@@ -1078,11 +1115,34 @@ class QuantumLayer(MerlinModule):
         self._photon_loss_is_identity = self._photon_loss_transform.is_identity
 
     def _initialize_detector_transform(self) -> None:
+        detectors = self._detectors
+        partial = False
+        if (
+            _resolve_measurement_kind(self.measurement_strategy)
+            == MeasurementKind.PARTIAL
+        ):
+            if not isinstance(self.measurement_strategy, MeasurementStrategy):
+                raise TypeError(
+                    "MeasurementStrategy.partial() must be used for partial measurement."
+                )
+            if not self.measurement_strategy.measured_modes:
+                raise ValueError(
+                    "Partial measurement requires at least one measured mode."
+                )
+            n_modes = len(self._photon_loss_keys[0])
+            self.measurement_strategy.validate_modes(n_modes)
+            measured = set(self.measurement_strategy.measured_modes)
+            detectors = [
+                det if idx in measured else None
+                for idx, det in enumerate(self._detectors)
+            ]
+            partial = True
         detector_transform = DetectorTransform(
             self._photon_loss_keys,
-            self._detectors,
+            detectors,
             dtype=self.dtype,
             device=self.device,
+            partial_measurement=partial,
         )
         self._detector_transform = detector_transform
         self._detector_keys = detector_transform.output_keys
@@ -1253,7 +1313,6 @@ class QuantumLayer(MerlinModule):
             "input_state": input_state,
             "builder": builder,
             "n_photons": n_photons,
-            "measurement_strategy": MeasurementStrategy.PROBABILITIES,
             "device": device,
             "dtype": dtype,
             "computation_space": computation_space,
