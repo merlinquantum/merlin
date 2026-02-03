@@ -170,10 +170,10 @@ class MeasurementKind(Enum):
 
 
 class _MeasurementStrategyMeta(type):
-    def __getattr__(cls, name: str) -> _LegacyMeasurementStrategy:
+    def __getattr__(cls, name: str) -> MeasurementStrategy | _LegacyMeasurementStrategy:
         # Backward compatibility shim: allow MeasurementStrategy.NONE for amplitudes.
         if name == "NONE":
-            return _LegacyMeasurementStrategy.NONE  # TODO: NONE should call new API
+            return MeasurementStrategy.amplitudes()
         # All other enum-style access is deprecated; warn and return legacy enum.
         if warn_deprecated_enum_access("MeasurementStrategy", name):
             return _LegacyMeasurementStrategy[name]
@@ -191,7 +191,10 @@ class MeasurementStrategy(metaclass=_MeasurementStrategyMeta):
     computation_space: ComputationSpace | None = None
     grouping: LexGrouping | ModGrouping | None = None
     if TYPE_CHECKING:
-        NONE: ClassVar[_LegacyMeasurementStrategy]  # NONE should call new API
+        # Type-checker-only legacy/compat attributes. At runtime, the metaclass
+        # resolves these names to either a new API instance (NONE) or legacy enums.
+        NONE: ClassVar[MeasurementStrategy]
+        # verify if we want NONE or method none()
         PROBABILITIES: ClassVar[_LegacyMeasurementStrategy]
         MODE_EXPECTATIONS: ClassVar[_LegacyMeasurementStrategy]
         AMPLITUDES: ClassVar[_LegacyMeasurementStrategy]
