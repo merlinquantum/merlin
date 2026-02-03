@@ -34,13 +34,12 @@ import torch.nn as nn
 from perceval import FFCircuitProvider
 
 import merlin as ML
+from merlin.core.computation_space import ComputationSpace
 from merlin.core.probability_distribution import ProbabilityDistribution
 from merlin.core.state_vector import StateVector
 
-# TODO Uncomment when partial measurement is ready
-# from merlin.core.partial_measurement import (
-#     PartialMeasurement,
-# )
+from merlin.core.partial_measurement import (
+    PartialMeasurement,)
 
 
 class TestQuantumLayer:
@@ -1080,29 +1079,90 @@ class TestQuantumLayer:
         # -------------------------------------------------------------------------------#
 
         # TODO uncomment when partial is ready
-        # # MS:partial, ro:false
-        # builder = ML.CircuitBuilder(5)
-        # builder.add_entangling_layer()
-        # qlayer = ML.QuantumLayer(
-        #     input_size=0,
-        #     builder=builder,
-        #     input_state=[0, 1, 0, 1, 0],
-        #     measurement_strategy=ML.MeasurementStrategy.PARTIAL,
-        # )
+        #MS:partial, ro:false
+        builder = ML.CircuitBuilder(5)
+        builder.add_entangling_layer()
+        qlayer = ML.QuantumLayer(
+            input_size=0,
+            builder=builder,
+            input_state=[0, 1, 0, 1, 0],
+            measurement_strategy=ML.MeasurementStrategy.partial(
+                modes = [0,1],
+            ),
+        )
 
-        # res_no_obj = qlayer()
+        res_no_obj = qlayer()
 
-        # assert isinstance(res_no_obj, PartialMeasurement)
+        assert isinstance(res_no_obj, PartialMeasurement)
 
-        # # MS:partial, ro:true
-        # qlayer.return_object = True
-        # res_obj = qlayer()
+        # MS:partial, ro:true
+        qlayer.return_object = True
+        res_obj = qlayer()
 
-        # assert isinstance(res_obj, PartialMeasurement)
-        # assert isinstance(res_obj.tensor, torch.Tensor)
-        # assert np.allclose(
-        #     res_no_obj.tensor.detach().numpy(), res_obj.tensor.detach().numpy()
-        # )
+        assert isinstance(res_obj, PartialMeasurement)
+        assert isinstance(res_obj.tensor, torch.Tensor)
+        assert np.allclose(
+            res_no_obj.tensor.detach().numpy(), res_obj.tensor.detach().numpy()
+        )
+
+    def test_forward_output_objects_new_api(self):
+        builder = ML.CircuitBuilder(4)
+        builder.add_entangling_layer()
+        input_state = [0, 1, 0, 1]
+
+        # PROBABILITIES, return_object=False
+        qlayer = ML.QuantumLayer(
+            input_size=0,
+            builder=builder,
+            input_state=input_state,
+            measurement_strategy=ML.MeasurementStrategy.probs(
+                ComputationSpace.UNBUNCHED
+            ),
+        )
+        res_no_obj = qlayer()
+        assert isinstance(res_no_obj, torch.Tensor)
+
+        # PROBABILITIES, return_object=True
+        qlayer.return_object = True
+        res_obj = qlayer()
+        assert isinstance(res_obj, ProbabilityDistribution)
+        assert isinstance(res_obj.tensor, torch.Tensor)
+        assert np.allclose(res_no_obj.detach().numpy(), res_obj.tensor.detach().numpy())
+
+        # AMPLITUDES, return_object=False
+        qlayer = ML.QuantumLayer(
+            input_size=0,
+            builder=builder,
+            input_state=input_state,
+            measurement_strategy=ML.MeasurementStrategy.amplitudes(),
+        )
+        res_no_obj = qlayer()
+        assert isinstance(res_no_obj, torch.Tensor)
+
+        # AMPLITUDES, return_object=True
+        qlayer.return_object = True
+        res_obj = qlayer()
+        assert isinstance(res_obj, StateVector)
+        assert isinstance(res_obj.tensor, torch.Tensor)
+        assert np.allclose(res_no_obj.detach().numpy(), res_obj.tensor.detach().numpy())
+
+        # MODE_EXPECTATIONS, return_object=False
+        qlayer = ML.QuantumLayer(
+            input_size=0,
+            builder=builder,
+            input_state=input_state,
+            measurement_strategy=ML.MeasurementStrategy.mode_expectations(
+                ComputationSpace.UNBUNCHED
+            ),
+        )
+        res_no_obj = qlayer()
+        assert isinstance(res_no_obj, torch.Tensor)
+
+        # MODE_EXPECTATIONS, return_object=True (still a tensor)
+        qlayer.return_object = True
+        res_obj = qlayer()
+        assert isinstance(res_obj, torch.Tensor)
+        assert np.allclose(res_no_obj.detach().numpy(), res_obj.detach().numpy())
 
     def test_gradient_through_typed_objects_ProbabilityDistribution(self):
         """Test that gradients flow through the layer."""

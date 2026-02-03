@@ -235,7 +235,7 @@ class MeasurementStrategy(metaclass=_MeasurementStrategyMeta):
     @staticmethod
     def partial(
         modes: list[int],
-        computation_space: ComputationSpace,
+        computation_space: ComputationSpace = ComputationSpace.UNBUNCHED,
         grouping: LexGrouping | ModGrouping | None = None,
     ) -> MeasurementStrategy:
         """Create a partial measurement on the given mode indices."""

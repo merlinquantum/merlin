@@ -287,6 +287,31 @@ class TestQuantumLayerMeasurementStrategy:
         output.sum().backward()
         assert x.grad is not None
 
+    def test_new_api_mode_expectations_output_size(self):
+        n_modes = 4
+        n_photons = 2
+
+        builder = ML.CircuitBuilder(n_modes=n_modes)
+        builder.add_entangling_layer(trainable=True, name="U1")
+        builder.add_angle_encoding(modes=[0, 1], name="input")
+        builder.add_entangling_layer(trainable=True, name="U2")
+
+        layer = ML.QuantumLayer(
+            input_size=2,
+            n_photons=n_photons,
+            builder=builder,
+            measurement_strategy=MeasurementStrategy.mode_expectations(
+                ComputationSpace.UNBUNCHED
+            ),
+        )
+        x = torch.rand(2, 2, requires_grad=True)
+        output = layer(x)
+
+        assert layer.output_size == n_modes
+        assert output.shape == (2, n_modes)
+        output.sum().backward()
+        assert x.grad is not None
+
         # By default, no_bunching=True so output values cannot surpass 1
         assert torch.all(output <= 1.0 + 1e-6)
         assert torch.all(output >= -1e-6)  # No negative values
