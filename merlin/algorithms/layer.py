@@ -40,6 +40,7 @@ from ..builder.circuit_builder import (
 )
 from ..core.computation_space import ComputationSpace
 from ..core.generators import StateGenerator, StatePattern
+from ..core.partial_measurement import PartialMeasurement
 from ..core.process import ComputationProcessFactory
 from ..core.state_vector import StateVector
 from ..measurement import OutputMapper
@@ -704,7 +705,7 @@ class QuantumLayer(MerlinModule):
         shots: int | None = None,
         sampling_method: str | None = None,
         simultaneous_processes: int | None = None,
-    ) -> torch.Tensor:
+    ) -> torch.Tensor | PartialMeasurement:
         """Forward pass through the quantum layer.
 
         Encoding is inferred from the input type:
@@ -727,8 +728,9 @@ class QuantumLayer(MerlinModule):
 
         Returns
         -------
-        torch.Tensor
-            Output tensor after measurement mapping.
+        torch.Tensor | PartialMeasurement
+            Output tensor after measurement mapping, or a ``PartialMeasurement``
+            when using ``MeasurementStrategy.partial()``.
 
         Raises
         ------
