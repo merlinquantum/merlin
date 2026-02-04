@@ -327,7 +327,12 @@ class TestQuantumLayerMeasurementStrategy:
         output.sum().backward()
         assert x.grad is not None
 
-    def test_amplitude_vector(self):
+    @pytest.mark.parametrize(
+        "measurement_strategy",
+        (MeasurementStrategy.amplitudes(), MeasurementStrategy.NONE),
+        ids=("amplitudes", "none"),
+    )
+    def test_amplitude_vector(self, measurement_strategy):
         # Amplitudes is equivalent to return_amplitudes=True
         builder = ML.CircuitBuilder(n_modes=3)
         builder.add_entangling_layer(trainable=True, name="U1")
@@ -338,7 +343,7 @@ class TestQuantumLayerMeasurementStrategy:
             input_size=2,
             n_photons=1,
             builder=builder,
-            measurement_strategy=ML.MeasurementStrategy.NONE,
+            measurement_strategy=measurement_strategy,
         )
         x = torch.rand(2, 2, requires_grad=True)
         output = layer(x)
@@ -372,7 +377,7 @@ class TestQuantumLayerMeasurementStrategy:
             input_state=input_state,
             trainable_parameters=[],
             input_parameters=["px"],
-            measurement_strategy=MeasurementStrategy.NONE,
+            measurement_strategy=measurement_strategy,
         )
         x = torch.rand(2, 2, requires_grad=True)
         output = layer(x)
@@ -447,6 +452,18 @@ def test_resolve_measurement_strategy():
     )
     assert isinstance(
         resolve_measurement_strategy(MeasurementStrategy.AMPLITUDES),
+        AmplitudesStrategy,
+    )
+    assert isinstance(
+        resolve_measurement_strategy(MeasurementStrategy.probs()),
+        ProbabilitiesStrategy,
+    )
+    assert isinstance(
+        resolve_measurement_strategy(MeasurementStrategy.mode_expectations()),
+        ModeExpectationsStrategy,
+    )
+    assert isinstance(
+        resolve_measurement_strategy(MeasurementStrategy.amplitudes()),
         AmplitudesStrategy,
     )
 
@@ -668,9 +685,13 @@ def test_amplitudes_strategy_returns_amplitudes_and_blocks_sampling():
         )
 
 
-def test_amplitudes_strategy_rejects_sampling_in_layer():
+@pytest.mark.parametrize(
+    "measurement_strategy",
+    (MeasurementStrategy.amplitudes(), MeasurementStrategy.NONE),
+    ids=("amplitudes", "none"),
+)
+def test_amplitudes_strategy_rejects_sampling_in_layer(measurement_strategy):
     """AMPLITUDES strategy should reject sampling at the layer level."""
-    # TODO: this test should be updated when MeasurementStrategy.AMPLITUDES will be deprecated
     builder = ML.CircuitBuilder(n_modes=3)
     builder.add_entangling_layer(trainable=True, name="U1")
     builder.add_angle_encoding(modes=[0, 1], name="input")
@@ -680,7 +701,7 @@ def test_amplitudes_strategy_rejects_sampling_in_layer():
         input_size=2,
         n_photons=1,
         builder=builder,
-        measurement_strategy=ML.MeasurementStrategy.NONE,
+        measurement_strategy=measurement_strategy,
     )
     layer.eval()
     x = torch.rand(2, 2)
