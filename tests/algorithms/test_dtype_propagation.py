@@ -293,7 +293,7 @@ class TestQuantumLayerDtypePropagation:
             circuit=circuit_2mode_no_params,
             n_photons=1,
             amplitude_encoding=True,
-            measurement_strategy=MeasurementStrategy.AMPLITUDES,
+            measurement_strategy=MeasurementStrategy.NONE,
             dtype=torch.float32,
         )
 
@@ -319,7 +319,7 @@ class TestQuantumLayerDtypePropagation:
             circuit=circuit_2mode_no_params,
             n_photons=1,
             amplitude_encoding=True,
-            measurement_strategy=MeasurementStrategy.AMPLITUDES,
+            measurement_strategy=MeasurementStrategy.NONE,
             dtype=torch.float64,
         )
 

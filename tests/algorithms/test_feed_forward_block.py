@@ -193,7 +193,7 @@ def test_feedforward_block2_amplitude_strategy_matches_probabilities():
     block_amp = FeedForwardBlock(
         exp,
         input_state=input_state,
-        measurement_strategy=MeasurementStrategy.AMPLITUDES,
+        measurement_strategy=MeasurementStrategy.NONE,
     )
 
     prob_outputs = block_prob()

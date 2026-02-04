@@ -217,8 +217,9 @@ class TestQuantumLayer:
                 input_size=0,
                 experiment=experiment,
                 input_state=[1, 0],
-                computation_space=ML.ComputationSpace.FOCK,
-                measurement_strategy=ML.MeasurementStrategy.AMPLITUDES,
+                measurement_strategy=ML.MeasurementStrategy.amplitudes(
+                    computation_space=ML.ComputationSpace.FOCK
+                ),
             )
 
     def test_builder_based_layer_creation(self):
@@ -291,7 +292,7 @@ class TestQuantumLayer:
             circuit=circuit,
             n_photons=1,
             amplitude_encoding=True,
-            measurement_strategy=ML.MeasurementStrategy.AMPLITUDES,
+            measurement_strategy=ML.MeasurementStrategy.NONE,
             trainable_parameters=[],
             input_parameters=[],
         )
@@ -367,7 +368,7 @@ class TestQuantumLayer:
                 amplitude_encoding=True,
                 input_parameters=["px"],
                 trainable_parameters=[],
-                measurement_strategy=ML.MeasurementStrategy.AMPLITUDES,
+                measurement_strategy=ML.MeasurementStrategy.NONE,
             )
 
     def test_amplitude_encoding_requires_amplitude_input(self):
@@ -377,7 +378,7 @@ class TestQuantumLayer:
             circuit=circuit,
             n_photons=1,
             amplitude_encoding=True,
-            measurement_strategy=ML.MeasurementStrategy.AMPLITUDES,
+            measurement_strategy=ML.MeasurementStrategy.NONE,
             trainable_parameters=[],
             input_parameters=[],
         )
@@ -822,7 +823,7 @@ class TestQuantumLayer:
             input_size=2,
             input_state=[1, 0, 1, 0],
             builder=builder,
-            measurement_strategy=ML.MeasurementStrategy.AMPLITUDES,
+            measurement_strategy=ML.MeasurementStrategy.NONE,
         )
 
         # Get actual distribution size
@@ -835,7 +836,7 @@ class TestQuantumLayer:
             input_size=2,
             input_state=[1, 0, 1, 0],
             builder=builder,
-            measurement_strategy=ML.MeasurementStrategy.AMPLITUDES,
+            measurement_strategy=ML.MeasurementStrategy.NONE,
         )
 
         x = torch.rand(2, 2)
@@ -983,8 +984,9 @@ class TestQuantumLayer:
             n_photons=n,
             circuit=circuit,
             input_parameters=["phi"],  # No input parameters
-            measurement_strategy=ML.MeasurementStrategy.AMPLITUDES,
-            computation_space=computation_space,
+            measurement_strategy=ML.MeasurementStrategy.amplitudes(
+                computation_space=computation_space
+            ),
         )
 
         o = layer.forward(torch.rand(batch_size, m))
@@ -1039,7 +1041,7 @@ class TestQuantumLayer:
             input_size=0,
             builder=builder,
             input_state=[0, 1, 0, 1, 0],
-            measurement_strategy=ML.MeasurementStrategy.AMPLITUDES,
+            measurement_strategy=ML.MeasurementStrategy.NONE,
         )
 
         res_no_obj = qlayer()
@@ -1247,7 +1249,7 @@ class TestQuantumLayer:
                     input_size=2,
                     input_state=[1, 1, 0, 0],
                     builder=builder,
-                    measurement_strategy=ML.MeasurementStrategy.AMPLITUDES,
+                    measurement_strategy=ML.MeasurementStrategy.NONE,
                     return_object=True,
                 )
                 self.clayer = torch.nn.Linear(
@@ -1291,7 +1293,7 @@ class TestQuantumLayer:
             [ML.MeasurementStrategy.MODE_EXPECTATIONS, False],
             [ML.MeasurementStrategy.MODE_EXPECTATIONS, True],
             [ML.MeasurementStrategy.probs(), False],
-            [ML.MeasurementStrategy.AMPLITUDES, False],
+            [ML.MeasurementStrategy.NONE, False],
         ]
         for strategy, typed_object in to_test:
 

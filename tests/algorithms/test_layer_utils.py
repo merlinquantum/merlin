@@ -192,7 +192,7 @@ def test_setup_noise_and_detectors_amplitudes_rejects_detectors():
             resolved.experiment,
             resolved.circuit,
             ComputationSpace.FOCK,
-            MeasurementStrategy.AMPLITUDES,
+            MeasurementStrategy.amplitudes(computation_space=ComputationSpace.FOCK),
         )
 
 

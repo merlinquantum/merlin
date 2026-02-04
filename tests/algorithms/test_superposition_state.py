@@ -339,12 +339,13 @@ class TestOutputSuperposedState:
         amplitude_layer = QuantumLayer(
             circuit=circuit,
             n_photons=n_photons,
-            measurement_strategy=MeasurementStrategy.AMPLITUDES,
+            measurement_strategy=MeasurementStrategy.amplitudes(
+                computation_space=computation_space
+            ),
             input_state=input_state,
             input_parameters=["theta"],
             trainable_parameters=["phi"],
             dtype=torch.float64,
-            computation_space=computation_space,
         )
 
         classical_dim = amplitude_layer.input_size or n_modes
@@ -382,12 +383,13 @@ class TestOutputSuperposedState:
             basis_layer = QuantumLayer(
                 circuit=copy.deepcopy(circuit),
                 n_photons=n_photons,
-                measurement_strategy=MeasurementStrategy.AMPLITUDES,
+                measurement_strategy=MeasurementStrategy.amplitudes(
+                    computation_space=computation_space
+                ),
                 input_state=list(state),
                 input_parameters=["theta"],
                 trainable_parameters=["phi"],
                 dtype=torch.float64,
-                computation_space=computation_space,
             )
 
             load_result = basis_layer.load_state_dict(shared_state, strict=False)

@@ -140,7 +140,7 @@ class TestConstructorInputTypes:
                 input_state=tensor_state,
                 n_photons=1,
                 amplitude_encoding=True,
-                measurement_strategy=ML.MeasurementStrategy.AMPLITUDES,
+                measurement_strategy=ML.MeasurementStrategy.NONE,
             )
 
             # Check if any DeprecationWarning was raised
@@ -173,7 +173,7 @@ class TestDeprecationWarnings:
                 circuit=circuit,
                 n_photons=1,
                 amplitude_encoding=True,
-                measurement_strategy=ML.MeasurementStrategy.AMPLITUDES,
+                measurement_strategy=ML.MeasurementStrategy.NONE,
             )
 
             deprecation_warnings = [
@@ -196,7 +196,7 @@ class TestDeprecationWarnings:
                 circuit=circuit,
                 n_photons=1,
                 amplitude_encoding=True,
-                measurement_strategy=ML.MeasurementStrategy.AMPLITUDES,
+                measurement_strategy=ML.MeasurementStrategy.NONE,
             )
 
             deprecation_warnings = [
@@ -241,8 +241,9 @@ class TestForwardDispatch:
         return ML.QuantumLayer(
             circuit=circuit,
             n_photons=2,
-            computation_space=ML.ComputationSpace.FOCK,
-            measurement_strategy=ML.MeasurementStrategy.AMPLITUDES,
+            measurement_strategy=ML.MeasurementStrategy.amplitudes(
+                computation_space=ML.ComputationSpace.FOCK
+            ),
         )
 
     def test_forward_float_tensor_uses_angle_encoding(self, angle_encoding_layer):
@@ -429,7 +430,7 @@ class TestLegacyAmplitudeEncodingCompatibility:
                 circuit=circuit,
                 n_photons=2,
                 amplitude_encoding=True,
-                measurement_strategy=ML.MeasurementStrategy.AMPLITUDES,
+                measurement_strategy=ML.MeasurementStrategy.NONE,
             )
 
         # Create amplitude input matching layer's output_size
@@ -454,7 +455,7 @@ class TestLegacyAmplitudeEncodingCompatibility:
                 circuit=circuit,
                 n_photons=1,
                 amplitude_encoding=True,
-                measurement_strategy=ML.MeasurementStrategy.AMPLITUDES,
+                measurement_strategy=ML.MeasurementStrategy.NONE,
             )
 
         with pytest.raises(ValueError, match="expects an amplitude tensor input"):
@@ -543,8 +544,9 @@ class TestStateVectorForwardPath:
         layer = ML.QuantumLayer(
             circuit=circuit,
             n_photons=2,
-            computation_space=ML.ComputationSpace.FOCK,
-            measurement_strategy=ML.MeasurementStrategy.AMPLITUDES,
+            measurement_strategy=ML.MeasurementStrategy.amplitudes(
+                computation_space=ML.ComputationSpace.FOCK
+            ),
         )
 
         sv = StateVector.from_basic_state(
@@ -570,8 +572,9 @@ class TestStateVectorForwardPath:
         layer = ML.QuantumLayer(
             circuit=circuit,
             n_photons=2,
-            computation_space=ML.ComputationSpace.FOCK,
-            measurement_strategy=ML.MeasurementStrategy.AMPLITUDES,
+            measurement_strategy=ML.MeasurementStrategy.amplitudes(
+                computation_space=ML.ComputationSpace.FOCK
+            ),
         )
 
         # Create a superposition state
@@ -593,8 +596,9 @@ class TestStateVectorForwardPath:
         layer = ML.QuantumLayer(
             circuit=circuit,
             n_photons=2,
-            computation_space=ML.ComputationSpace.FOCK,
-            measurement_strategy=ML.MeasurementStrategy.AMPLITUDES,
+            measurement_strategy=ML.MeasurementStrategy.amplitudes(
+                computation_space=ML.ComputationSpace.FOCK
+            ),
             dtype=torch.float64,
         )
 
@@ -623,8 +627,9 @@ class TestComplexTensorForwardPath:
         layer = ML.QuantumLayer(
             circuit=circuit,
             n_photons=2,
-            computation_space=ML.ComputationSpace.FOCK,
-            measurement_strategy=ML.MeasurementStrategy.AMPLITUDES,
+            measurement_strategy=ML.MeasurementStrategy.amplitudes(
+                computation_space=ML.ComputationSpace.FOCK
+            ),
         )
 
         n_states = layer.output_size
@@ -644,8 +649,9 @@ class TestComplexTensorForwardPath:
         layer = ML.QuantumLayer(
             circuit=circuit,
             n_photons=2,
-            computation_space=ML.ComputationSpace.FOCK,
-            measurement_strategy=ML.MeasurementStrategy.AMPLITUDES,
+            measurement_strategy=ML.MeasurementStrategy.amplitudes(
+                computation_space=ML.ComputationSpace.FOCK
+            ),
         )
 
         batch_size = 5
@@ -727,7 +733,7 @@ class TestAmplitudeEncodingRealInputDeprecation:
                 circuit=circuit,
                 n_photons=2,
                 amplitude_encoding=True,
-                measurement_strategy=ML.MeasurementStrategy.AMPLITUDES,
+                measurement_strategy=ML.MeasurementStrategy.NONE,
             )
 
         # Create real-valued amplitude input (not complex)
