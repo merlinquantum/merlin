@@ -256,6 +256,8 @@ class MeasurementStrategy(metaclass=_MeasurementStrategyMeta):
         grouping: LexGrouping | ModGrouping | None = None,
     ) -> MeasurementStrategy:
         """Create a partial measurement on the given mode indices."""
+        # TODO: the partial implementation is not end-to-end yet - to be completed in PML-146
+        # TODO: this implementation is partially tested (for instance, lack of backprop testing)
 
         if len(modes) == 0:
             raise ValueError("modes cannot be empty")
