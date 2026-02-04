@@ -160,8 +160,9 @@ def test_partial_detector_transform_mixed_pnr_case(
 
     ql = QuantumLayer(
         experiment=exp,
-        measurement_strategy=MeasurementStrategy.PROBABILITIES,
-        computation_space=ComputationSpace.FOCK,
+        measurement_strategy=MeasurementStrategy.probs(
+            computation_space=ComputationSpace.FOCK
+        ),
     )
     probabilities = ql().squeeze(0)
 
@@ -180,8 +181,9 @@ def test_partial_detector_transform_mixed_pnr_case(
 
     ql_nodetect = QuantumLayer(
         experiment=exp_nodetect,
-        measurement_strategy=MeasurementStrategy.AMPLITUDES,
-        computation_space=ComputationSpace.FOCK,
+        measurement_strategy=MeasurementStrategy.amplitudes(
+            computation_space=ComputationSpace.FOCK
+        ),
     )
     amplitudes = ql_nodetect().squeeze(0)
 

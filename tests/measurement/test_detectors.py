@@ -167,8 +167,9 @@ class TestDetectorsWithQuantumLayer:
                 input_size=0,
                 experiment=experiment,
                 input_state=[1, 0],
-                measurement_strategy=ML.MeasurementStrategy.AMPLITUDES,
-                computation_space=ComputationSpace.FOCK,
+                measurement_strategy=ML.MeasurementStrategy.amplitudes(
+                    computation_space=ComputationSpace.FOCK
+                ),
             )
 
         # No error with MeasurementStrategy PROBABILITIES or MODE_EXPECTATIONS
@@ -176,15 +177,17 @@ class TestDetectorsWithQuantumLayer:
             input_size=0,
             experiment=experiment,
             input_state=[1, 0],
-            measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
-            computation_space=ComputationSpace.FOCK,
+            measurement_strategy=ML.MeasurementStrategy.probs(
+                computation_space=ComputationSpace.FOCK
+            ),
         )
         ML.QuantumLayer(
             input_size=0,
             experiment=experiment,
             input_state=[1, 0],
-            measurement_strategy=ML.MeasurementStrategy.MODE_EXPECTATIONS,
-            computation_space=ComputationSpace.FOCK,
+            measurement_strategy=ML.MeasurementStrategy.mode_expectations(
+                computation_space=ComputationSpace.FOCK
+            ),
         )
 
     def test_pnr_detectors_match_default_distribution(self):
@@ -736,8 +739,9 @@ class TestDetectorsWithQuantumLayer:
             input_size=0,
             experiment=_build_experiment(detector_specs),
             input_state=INPUT_STATE,
-            measurement_strategy=ML.MeasurementStrategy.MODE_EXPECTATIONS,
-            computation_space=ComputationSpace.FOCK,
+            measurement_strategy=ML.MeasurementStrategy.mode_expectations(
+                computation_space=ComputationSpace.FOCK
+            ),
         )
         expectations = expectation_layer().squeeze(0)
         assert [_normalize_key(key) for key in expectation_layer.output_keys] == keys

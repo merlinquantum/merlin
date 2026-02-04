@@ -117,20 +117,22 @@ class TestPhotonLossWithQuantumLayer:
                 input_size=0,
                 experiment=experiment,
                 input_state=[1, 0],
-                measurement_strategy=ML.MeasurementStrategy.AMPLITUDES,
+                measurement_strategy=ML.MeasurementStrategy.amplitudes(),
             )
 
         prob_layer = ML.QuantumLayer(
             input_size=0,
             experiment=experiment,
             input_state=[1, 0],
-            measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+            measurement_strategy=ML.MeasurementStrategy.probs(),
         )
         expectation_layer = ML.QuantumLayer(
             input_size=0,
             experiment=experiment,
             input_state=[1, 0],
-            measurement_strategy=ML.MeasurementStrategy.MODE_EXPECTATIONS,
+            measurement_strategy=ML.MeasurementStrategy.mode_expectations(
+                computation_space=ComputationSpace.UNBUNCHED
+            ),
         )
         prob_output = prob_layer()
         expectation_output = expectation_layer()
@@ -145,7 +147,7 @@ class TestPhotonLossWithQuantumLayer:
             input_size=0,
             experiment=experiment_no_noise,
             input_state=[1, 0],
-            measurement_strategy=ML.MeasurementStrategy.AMPLITUDES,
+            measurement_strategy=ML.MeasurementStrategy.amplitudes(),
         )
 
         keys_amplitudes = amplitude_layer.output_keys

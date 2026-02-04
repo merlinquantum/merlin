@@ -32,7 +32,7 @@ class TestOutputMapper:
     def test_linear_mapping_creation(self):
         """Test creation of linear output mapping."""
         fock_distribution = ML.OutputMapper.create_mapping(
-            ML.MeasurementStrategy.PROBABILITIES
+            ML.MeasurementStrategy.probs()
         )
         mapping = torch.nn.Sequential(fock_distribution, nn.Linear(6, 3))
         assert isinstance(mapping[0], ML.Probabilities)
@@ -42,13 +42,13 @@ class TestOutputMapper:
 
     def test_fock_distribution_mapping_creation(self):
         fock_distribution = ML.OutputMapper.create_mapping(
-            ML.MeasurementStrategy.PROBABILITIES
+            ML.MeasurementStrategy.probs()
         )
         assert isinstance(fock_distribution, ML.Probabilities)
 
     def test_state_vector_mapping_creation_valid(self):
         """Test creation of state vector mapping with matching sizes."""
-        mapping = ML.OutputMapper.create_mapping(ML.MeasurementStrategy.AMPLITUDES)
+        mapping = ML.OutputMapper.create_mapping(ML.MeasurementStrategy.amplitudes())
         batch_size = 4
         input_amps = torch.rand(batch_size, 5)
         output_amps = mapping(input_amps)
@@ -70,7 +70,11 @@ class TestOutputMapper:
             ValueError,
             match="When using ModeExpectations measurement strategy, keys must be provided.",
         ):
-            ML.OutputMapper.create_mapping(ML.MeasurementStrategy.MODE_EXPECTATIONS)
+            ML.OutputMapper.create_mapping(
+                ML.MeasurementStrategy.mode_expectations(
+                    computation_space=ML.ComputationSpace.UNBUNCHED
+                )
+            )
 
 
 class TestOutputMappingIntegration:
@@ -88,7 +92,7 @@ class TestOutputMappingIntegration:
             input_size=2,
             n_photons=2,
             builder=builder,
-            measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+            measurement_strategy=ML.MeasurementStrategy.probs(),
         )
 
         model = torch.nn.Sequential(layer, torch.nn.Linear(layer.output_size, 3))
@@ -103,9 +107,11 @@ class TestOutputMappingIntegration:
         """Test gradient flow through different mapping strategies."""
 
         strategies = [
-            ML.MeasurementStrategy.PROBABILITIES,
-            ML.MeasurementStrategy.MODE_EXPECTATIONS,
-            ML.MeasurementStrategy.AMPLITUDES,
+            ML.MeasurementStrategy.probs(),
+            ML.MeasurementStrategy.mode_expectations(
+                computation_space=ML.ComputationSpace.UNBUNCHED
+            ),
+            ML.MeasurementStrategy.amplitudes(),
         ]
 
         builder = ML.CircuitBuilder(n_modes=6)
@@ -162,7 +168,7 @@ class TestOutputMappingIntegration:
             input_size=2,
             n_photons=2,
             builder=builder,
-            measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+            measurement_strategy=ML.MeasurementStrategy.probs(),
         )
         model = torch.nn.Sequential(layer, torch.nn.Linear(layer.output_size, 3))
         output_linear = model(x)
@@ -180,7 +186,7 @@ class TestOutputMappingIntegration:
                 input_size=2,
                 n_photons=2,
                 builder=builder,
-                measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+                measurement_strategy=ML.MeasurementStrategy.probs(),
                 dtype=dtype,
             )
             model = torch.nn.Sequential(
@@ -205,7 +211,7 @@ class TestOutputMappingIntegration:
             input_size=1,
             n_photons=1,
             builder=builder,
-            measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+            measurement_strategy=ML.MeasurementStrategy.probs(),
         )
         model = torch.nn.Sequential(layer, torch.nn.Linear(layer.output_size, 1))
 
