@@ -895,8 +895,6 @@ class QuantumLayer(MerlinModule):
         )
 
         # Phase 6: Measurement strategy dispatch and output mapping
-        # TODO: The implementation of partial measurement here is a temporary solution for backward compatibility.
-        # PML-146 will introduce a more robust end-to-end approach to partial measurements
         strategy = resolve_measurement_strategy(self.measurement_strategy)
         # Handle backward compatibility for backpropagation - will be removed in future
         grouping = None
@@ -906,7 +904,7 @@ class QuantumLayer(MerlinModule):
                 MeasurementKind.PARTIAL,
             ):
                 grouping = self.measurement_strategy.grouping
-        # TODO: here, for partial measurement, I do not use the set_grouping that should be introduced in PML-146
+
         results = strategy.process(
             distribution=distribution,
             amplitudes=amplitudes,
@@ -917,8 +915,7 @@ class QuantumLayer(MerlinModule):
             apply_detectors=self._apply_detector_transform,
             grouping=grouping,
         )
-        # TODO: this is an imcomplete implementation for partial measurement - to be fully implemented in PML-146
-        # If partial measurement, return raw results
+
         if (
             _resolve_measurement_kind(self.measurement_strategy)
             == MeasurementKind.PARTIAL

@@ -22,30 +22,49 @@
 
 """Measurement strategy definitions for quantum-to-classical conversion."""
 
+from __future__ import annotations
+
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
+from typing import TYPE_CHECKING, ClassVar, TypeAlias
 
-import perceval as pcvl
 import torch
 
 from merlin.core.computation_space import ComputationSpace
 from merlin.core.partial_measurement import PartialMeasurement
-from merlin.core.state_vector import StateVector
-from merlin.measurement.detectors import DetectorTransform
+from merlin.measurement.process import partial_measurement
+from merlin.utils.deprecations import warn_deprecated_enum_access
 from merlin.utils.grouping import LexGrouping, ModGrouping
 
+# Deprecation guide (target: v0.4):
+# - Remove `_LegacyMeasurementStrategy`, `_MeasurementStrategyMeta`, and any
+#   enum-style attribute access (`MeasurementStrategy.PROBABILITIES`, etc.).
+# - Delete compatibility paths in `resolve_measurement_strategy` and
+#   `_resolve_measurement_kind` that accept `_LegacyMeasurementStrategy`.
+# - Drop `MeasurementStrategyLike` alias and any tests that rely on legacy enums.
+# - Update all call sites to use the new factories (lots of tetsts to update!):
+#     - `MeasurementStrategy.probs(computation_space)`
+#     - `MeasurementStrategy.mode_expectations(computation_space)`
+#     - `MeasurementStrategy.amplitudes()`
+#     - `MeasurementStrategy.partial(...)`
+# - Remove related deprecations in `merlin/utils/deprecations.py` that map legacy
+#   enums to new factories, and update docs/examples accordingly.
+# - If external compatibility is still needed, provide a separate shim module.
 
-class MeasurementStrategy(Enum):
-    """Strategy for measuring quantum states or counts and possibly apply mapping to classical outputs."""
 
+class _LegacyMeasurementStrategy(Enum):
+    """Legacy enum kept only for backward compatibility (deprecated API)."""
+
+    NONE = "none"
     PROBABILITIES = "probabilities"
     MODE_EXPECTATIONS = "mode_expectations"
     AMPLITUDES = "amplitudes"
 
 
 class BaseMeasurementStrategy:
-    """Base interface for measurement post-processing strategies."""
+    """New API: internal strategy interface for post-processing implementations."""
 
     def supports_sampling(self) -> bool:
         """Return whether the strategy can apply sampling to distributions."""
@@ -61,13 +80,14 @@ class BaseMeasurementStrategy:
         sample_fn: Callable[[torch.Tensor, int], torch.Tensor],
         apply_photon_loss: Callable[[torch.Tensor], torch.Tensor],
         apply_detectors: Callable[[torch.Tensor], torch.Tensor],
-    ) -> torch.Tensor:
+        grouping: Callable[[torch.Tensor], torch.Tensor] | None = None,
+    ) -> torch.Tensor | PartialMeasurement:
         """Return the processed result for the selected measurement strategy."""
         raise NotImplementedError
 
 
 class DistributionStrategy(BaseMeasurementStrategy):
-    """Shared logic for distribution-based strategies."""
+    """New API: shared logic for distribution-based strategies."""
 
     def supports_sampling(self) -> bool:
         return True
@@ -82,30 +102,49 @@ class DistributionStrategy(BaseMeasurementStrategy):
         sample_fn: Callable[[torch.Tensor, int], torch.Tensor],
         apply_photon_loss: Callable[[torch.Tensor], torch.Tensor],
         apply_detectors: Callable[[torch.Tensor], torch.Tensor],
+        grouping: Callable[[torch.Tensor], torch.Tensor] | None = None,
     ) -> torch.Tensor:
         # Distribution strategies apply detector/noise transforms before sampling.
         distribution = apply_photon_loss(distribution)
         distribution = apply_detectors(distribution)
 
         if apply_sampling and effective_shots > 0:
-            return sample_fn(distribution, effective_shots)
+            distribution = sample_fn(distribution, effective_shots)
+        if grouping is not None:
+            return grouping(distribution)
         return distribution
 
 
 class ProbabilitiesStrategy(DistributionStrategy):
-    """Return output probabilities (optionally sampled)."""
+    """New API: return output probabilities (optionally sampled)."""
 
     pass
 
 
 class ModeExpectationsStrategy(DistributionStrategy):
-    """Return per-mode expectations (optionally sampled)."""
+    """New API: return per-mode expectations (optionally sampled)."""
 
     pass
 
 
 class AmplitudesStrategy(BaseMeasurementStrategy):
-    """Return raw amplitudes (sampling is not supported)."""
+    """New API: return raw amplitudes (sampling is not supported)."""
+
+    def process(self, *, amplitudes: torch.Tensor, **kwargs: object) -> torch.Tensor:
+        # Amplitudes bypass detectors, photon loss, and sampling.
+        apply_sampling = bool(kwargs.get("apply_sampling", False))
+        if apply_sampling:
+            raise RuntimeError(
+                "Sampling cannot be applied when measurement_strategy=MeasurementStrategy.AMPLITUDES."
+            )
+        return amplitudes
+
+
+class PartialMeasurementStrategy(BaseMeasurementStrategy):
+    """New API: return a PartialMeasurement from detector partial-measurement output."""
+
+    def __init__(self, measured_modes: tuple[int, ...]) -> None:
+        self._measured_modes = measured_modes
 
     def process(
         self,
@@ -117,50 +156,110 @@ class AmplitudesStrategy(BaseMeasurementStrategy):
         sample_fn: Callable[[torch.Tensor, int], torch.Tensor],
         apply_photon_loss: Callable[[torch.Tensor], torch.Tensor],
         apply_detectors: Callable[[torch.Tensor], torch.Tensor],
-    ) -> torch.Tensor:
-        # Amplitudes bypass detectors, photon loss, and sampling.
-        if apply_sampling:
+        grouping: Callable[[torch.Tensor], torch.Tensor] | None = None,
+    ) -> PartialMeasurement:
+        if apply_sampling and effective_shots > 0:
             raise RuntimeError(
-                "Sampling cannot be applied when measurement_strategy=MeasurementStrategy.AMPLITUDES."
+                "Sampling cannot be applied when measurement_strategy=MeasurementStrategy.partial()."
             )
-        return amplitudes
+        # Apply photon loss before detectors to match detector basis configuration.
+        amplitudes = apply_photon_loss(amplitudes)
+        detector_output = apply_detectors(amplitudes)
+        if not isinstance(detector_output, list):
+            raise TypeError(
+                "Partial measurement expects detector output in partial_measurement mode."
+            )
+        partial_measurement_result = partial_measurement(
+            detector_output, grouping=grouping
+        )
+        return partial_measurement_result
 
 
-def resolve_measurement_strategy(
-    measurement_strategy: MeasurementStrategy,
-) -> BaseMeasurementStrategy:
-    """Return the concrete strategy implementation for the enum value."""
-    if measurement_strategy == MeasurementStrategy.PROBABILITIES:
-        return ProbabilitiesStrategy()
-    if measurement_strategy == MeasurementStrategy.MODE_EXPECTATIONS:
-        return ModeExpectationsStrategy()
-    if measurement_strategy == MeasurementStrategy.AMPLITUDES:
-        return AmplitudesStrategy()
-    raise TypeError(f"Unknown measurement_strategy: {measurement_strategy}")
+class MeasurementKind(Enum):
+    """New API: internal measurement kinds used by MeasurementStrategy."""
+
+    # This is an internal discriminator so runtime can route to the correct strategy.
+    # Not meant to be user-facing
+
+    PROBABILITIES = "PROBABILITIES"
+    MODE_EXPECTATIONS = "MODE_EXPECTATIONS"
+    AMPLITUDES = "AMPLITUDES"
+    PARTIAL = "PARTIAL"
 
 
-class MeasurementType(Enum):
-    """Low-level measurement type used by strategy implementations."""
-
-    PARTIAL = "partial"
+class _MeasurementStrategyMeta(type):
+    def __getattr__(cls, name: str) -> MeasurementStrategy | _LegacyMeasurementStrategy:
+        # Backward compatibility shim: allow MeasurementStrategy.NONE for amplitudes.
+        if name == "NONE":
+            return MeasurementStrategy.amplitudes()
+        # All other enum-style access is deprecated; warn and return legacy enum.
+        if warn_deprecated_enum_access("MeasurementStrategy", name):
+            return _LegacyMeasurementStrategy[name]
+        raise AttributeError(
+            f"type object 'MeasurementStrategy' has no attribute {name!r}"
+        )
 
 
 @dataclass(frozen=True, slots=True)
-class MeasurementStrategyV3:
-    """Immutable definition of a measurement strategy for output post-processing."""
+class MeasurementStrategy(metaclass=_MeasurementStrategyMeta):
+    """New API: immutable definition of a measurement strategy for output post-processing."""
 
-    type: MeasurementType
-    measured_modes: tuple[int, ...]
-    computation_space: ComputationSpace = ComputationSpace.FOCK
+    type: MeasurementKind
+    measured_modes: tuple[int, ...] = ()
+    computation_space: ComputationSpace | None = None
     grouping: LexGrouping | ModGrouping | None = None
+    if TYPE_CHECKING:
+        # Type-checker-only legacy/compat attributes. At runtime, the metaclass
+        # resolves these names to either a new API instance (NONE) or legacy enums.
+        NONE: ClassVar[MeasurementStrategy]
+        # TODO: verify if we want NONE or method none()
+        PROBABILITIES: ClassVar[_LegacyMeasurementStrategy]
+        MODE_EXPECTATIONS: ClassVar[_LegacyMeasurementStrategy]
+        AMPLITUDES: ClassVar[_LegacyMeasurementStrategy]
+
+    @staticmethod
+    def probs(
+        computation_space: ComputationSpace,
+        grouping: LexGrouping | ModGrouping | None = None,
+    ) -> MeasurementStrategy:
+        # Full measurement returning a probability distribution.
+        return MeasurementStrategy(
+            type=MeasurementKind["PROBABILITIES"],
+            computation_space=computation_space,
+            grouping=grouping,
+        )
+
+    @staticmethod
+    def mode_expectations(
+        computation_space: ComputationSpace,
+    ) -> MeasurementStrategy:
+        # Mode_expectations
+        # Per-mode expectation values from the measured distribution.
+        return MeasurementStrategy(
+            type=MeasurementKind.MODE_EXPECTATIONS,
+            computation_space=computation_space,
+        )
+
+    @staticmethod
+    def amplitudes(
+        computation_space: ComputationSpace = ComputationSpace.UNBUNCHED,
+    ) -> MeasurementStrategy:
+        # Raw amplitudes without detector/noise/sampling processing.
+        return MeasurementStrategy(
+            type=MeasurementKind.AMPLITUDES,
+            computation_space=computation_space,
+        )
 
     @staticmethod
     def partial(
         modes: list[int],
-        computation_space: ComputationSpace = ComputationSpace.FOCK,
+        computation_space: ComputationSpace = ComputationSpace.UNBUNCHED,
         grouping: LexGrouping | ModGrouping | None = None,
-    ) -> "MeasurementStrategyV3":
-        """Create a partial measurement on the given mode indices."""
+    ) -> MeasurementStrategy:
+        """
+        Create a partial measurement on the given mode indices.
+        Note that the specified grouping only applies on the resulting probabilities, not on the amplitudes.
+        """
 
         if len(modes) == 0:
             raise ValueError("modes cannot be empty")
@@ -169,23 +268,51 @@ class MeasurementStrategyV3:
         if any(m < 0 for m in modes):
             raise ValueError("Negative mode index")
 
-        return MeasurementStrategyV3(
-            type=MeasurementType.PARTIAL,
+        # Partial measurement is explicit and validated; modes drive processing.
+        return MeasurementStrategy(
+            type=MeasurementKind.PARTIAL,
             measured_modes=tuple(modes),
             grouping=grouping,
             computation_space=computation_space,
         )
 
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, MeasurementStrategy):
+            return (
+                self.type == other.type
+                and self.measured_modes == other.measured_modes
+                and self.computation_space == other.computation_space
+                and self.grouping == other.grouping
+            )
+        if isinstance(other, _LegacyMeasurementStrategy):
+            return self.type.name == other.name
+        if isinstance(other, MeasurementKind):
+            return self.type == other
+        if isinstance(other, str):
+            return self.type.name == other or self.type.value == other
+        return NotImplemented
+
+    def __hash__(self) -> int:
+        return hash((
+            self.type,
+            self.measured_modes,
+            self.computation_space,
+            self.grouping,
+        ))
+
     def validate_modes(self, n_modes: int) -> None:
         """Validate mode indices and warn when the selection covers all modes."""
+        # Hard validation for out-of-range indices; warn if equivalent to full measurement.
         for m in self.measured_modes:
             if m < 0 or m >= n_modes:
                 raise ValueError(
                     f"Invalid mode indices {self.measured_modes} for circuit with {n_modes} modes"
                 )
         if len(self.measured_modes) == n_modes:
-            raise Warning(
-                "All modes are measured; consider using .probs() instead of .partial()"
+            warnings.warn(
+                "All modes are measured; consider using .probs() instead of .partial()",
+                UserWarning,
+                stacklevel=2,
             )
 
     def get_unmeasured_modes(self, n_modes: int) -> tuple[int, ...]:
@@ -193,43 +320,43 @@ class MeasurementStrategyV3:
         self.validate_modes(n_modes)
         return tuple(m for m in range(n_modes) if m not in self.measured_modes)
 
-    def process_measurement(
-        self, state: StateVector
-    ) -> StateVector | torch.Tensor | PartialMeasurement:
-        """Process the measurement on the given state vector according to the strategy."""
-        if self.type == MeasurementType.PARTIAL:
-            return self._process_partial_measurement(state)
-        # Process other measurement types
-        # ...
-        raise NotImplementedError(f"Measurement type {self.type} not implemented.")
 
-    def _process_partial_measurement(self, state: StateVector) -> PartialMeasurement:
-        """Process a partial measurement on the given state vector."""
-        n_modes = state.n_modes
-        self.validate_modes(n_modes)
+MeasurementStrategyLike: TypeAlias = MeasurementStrategy | _LegacyMeasurementStrategy
 
-        # Use detector transform (partial_measurement=True) to get measured probs and unmeasured state
-        keys = (
-            state.basis.enumerate_states()
-        )  # TODO: check if that corresponds to the simulation_keys
-        # Use PNR detectors to stay as general as possible
-        detector_list = [
-            pcvl.Detector.pnr() if m in self.measured_modes else None
-            for m in range(n_modes)
-        ]
-        detector_transform = DetectorTransform(
-            simulation_keys=keys, detectors=detector_list, partial_measurement=True
+
+def _resolve_measurement_kind(
+    measurement_strategy: MeasurementStrategyLike,
+) -> MeasurementKind:
+    # Accept new API objects or legacy enum aliases.
+    if isinstance(measurement_strategy, MeasurementStrategy):
+        return measurement_strategy.type
+    if isinstance(measurement_strategy, _LegacyMeasurementStrategy):
+        if measurement_strategy == _LegacyMeasurementStrategy.NONE:
+            # Legacy NONE aliases amplitudes.
+            return MeasurementKind.AMPLITUDES
+        return MeasurementKind[measurement_strategy.name]
+    raise TypeError(f"Unknown measurement_strategy: {measurement_strategy}")
+
+
+def resolve_measurement_strategy(
+    measurement_strategy: MeasurementStrategyLike,
+) -> BaseMeasurementStrategy:
+    """Return the concrete strategy implementation for the enum value."""
+    # Map high-level kind to the concrete strategy implementation.
+    kind = _resolve_measurement_kind(measurement_strategy)
+    if kind == MeasurementKind["PROBABILITIES"]:
+        return ProbabilitiesStrategy()
+    if kind == MeasurementKind.MODE_EXPECTATIONS:
+        return ModeExpectationsStrategy()
+    if kind == MeasurementKind.AMPLITUDES:
+        return AmplitudesStrategy()
+    if kind == MeasurementKind.PARTIAL:
+        # Partial measurement requires the new API instance to carry modes.
+        if not isinstance(measurement_strategy, MeasurementStrategy):
+            raise TypeError(
+                "MeasurementStrategy.partial() must be used for partial measurement."
+            )
+        return PartialMeasurementStrategy(
+            measured_modes=measurement_strategy.measured_modes
         )
-        # Apply transform
-        # Use state.tensor for now, because detector_transform does not support StateVector yet
-        output = detector_transform(state.tensor)
-
-        partial_measurement = PartialMeasurement.from_detector_transform_output(output)
-
-        # Apply grouping (if provided) on probabilities only
-        if self.grouping is not None:
-            partial_measurement.set_grouping(self.grouping)
-
-        # Warning: self.computation_space is not taken into account
-
-        return partial_measurement
+    raise TypeError(f"Unknown measurement_strategy: {measurement_strategy}")

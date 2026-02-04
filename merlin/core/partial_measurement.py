@@ -25,7 +25,6 @@ from dataclasses import dataclass
 import torch
 
 from merlin.core.state_vector import StateVector
-from merlin.utils.grouping import LexGrouping, ModGrouping
 
 DetectorTransformOutput = list[
     dict[tuple[int | None, ...], list[tuple[torch.Tensor, torch.Tensor]]]
@@ -62,6 +61,7 @@ class PartialMeasurement:
         branches: Tuple of branches, ordered lexicographically by outcome.
         measured_modes: Indices of measured modes in the full system.
         unmeasured_modes: Indices of unmeasured modes in the full system.
+        grouping: Optional grouping callable to group probabilities.
     """
 
     def __init__(
@@ -73,7 +73,7 @@ class PartialMeasurement:
         self.branches = branches
         self.measured_modes = measured_modes
         self.unmeasured_modes = unmeasured_modes
-        self.grouping: LexGrouping | ModGrouping | None = None
+        self.grouping: Callable[[torch.Tensor], torch.Tensor] | None = grouping
 
         self.verify_branches_order()
 
@@ -98,8 +98,7 @@ class PartialMeasurement:
         batch = self._as_batch(self.branches[0].probability).shape[0]
         if self.grouping is None:
             return (batch, len(self.branches))
-        else:
-            return (batch, self.grouping.output_size)
+        return (batch, self._grouping_output_size())
 
     @property
     def n_measured_modes(self) -> int:
@@ -126,12 +125,13 @@ class PartialMeasurement:
                 "Inconsistent probability tensor shape."
             )
             return probas
-        else:
-            assert self.probability_tensor_shape == (
-                probas.shape[0],
-                self.grouping.output_size,
-            ), "Inconsistent grouped probability tensor shape"
-            return self.grouping(probas)
+        grouping = self.grouping
+        output_size = self._grouping_output_size()
+        assert self.probability_tensor_shape == (
+            probas.shape[0],
+            output_size,
+        ), "Inconsistent grouped probability tensor shape"
+        return grouping(probas)
 
     @property
     def probabilities(self) -> torch.Tensor:
@@ -166,7 +166,9 @@ class PartialMeasurement:
             f"StateVector shape={self.branches[0].amplitudes.shape})"
         )
 
-    def set_grouping(self, grouping: LexGrouping | ModGrouping | None) -> None:
+    def set_grouping(
+        self, grouping: Callable[[torch.Tensor], torch.Tensor] | None
+    ) -> None:
         """
         Set the grouping used to group probabilities.
 
@@ -175,10 +177,21 @@ class PartialMeasurement:
         Args:
             grouping: Grouping object used to group probabilities.
         """
-        if grouping is not None:
-            allowed_groupings = [LexGrouping, ModGrouping]
-            assert type(grouping) in allowed_groupings, "Grouping set is not allowed"
+        if grouping is not None and not callable(grouping):
+            raise TypeError("Grouping must be callable.")
         self.grouping = grouping
+
+    def _grouping_output_size(self) -> int:
+        grouping = self.grouping
+        if grouping is None:
+            raise RuntimeError("Grouping is not set.")
+        try:
+            output_size = getattr(grouping, "output_size", None)
+        except Exception as exc:
+            raise TypeError("Grouping must expose an 'output_size' attribute.") from exc
+        if not isinstance(output_size, int):
+            raise TypeError("Grouping 'output_size' must be an int.")
+        return output_size
 
     @staticmethod
     def from_detector_transform_output(
