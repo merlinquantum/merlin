@@ -266,7 +266,7 @@ def test_lexgrouping_mapping_integration():
         input_size=2,
         n_photons=2,
         builder=builder,
-        measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+        measurement_strategy=ML.MeasurementStrategy.probs(),
     )
     model = nn.Sequential(layer, LexGrouping(layer.output_size, 4))
 
@@ -289,7 +289,7 @@ def test_modgrouping_mapping_integration():
         input_size=2,
         n_photons=2,
         builder=builder,
-        measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+        measurement_strategy=ML.MeasurementStrategy.probs(),
     )
     model = nn.Sequential(layer, ModGrouping(layer.output_size, 3))
 
@@ -315,7 +315,7 @@ def test_mapping_gradient_flow():
             input_size=2,
             n_photons=2,
             builder=builder,
-            measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+            measurement_strategy=ML.MeasurementStrategy.probs(),
         )
         model = torch.nn.Sequential(layer, grouping_policy(layer.output_size, 3))
 
@@ -349,7 +349,7 @@ def test_mapping_output_bounds():
         input_size=2,
         n_photons=2,
         builder=builder,
-        measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+        measurement_strategy=ML.MeasurementStrategy.probs(),
     )
     model_lex = nn.Sequential(layer_lex, LexGrouping(layer_lex.output_size, 3))
     output_lex = model_lex(x)
@@ -360,7 +360,7 @@ def test_mapping_output_bounds():
         input_size=2,
         n_photons=2,
         builder=builder,
-        measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+        measurement_strategy=ML.MeasurementStrategy.probs(),
     )
     model_mod = nn.Sequential(layer_mod, ModGrouping(layer_mod.output_size, 3))
     output_mod = model_mod(x)
@@ -380,7 +380,7 @@ def test_large_dimension_mappings():
         input_size=4,
         n_photons=3,
         builder=builder,
-        measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+        measurement_strategy=ML.MeasurementStrategy.probs(),
     )
     model = nn.Sequential(layer, LexGrouping(layer.output_size, 8))
 
@@ -404,7 +404,7 @@ def test_mapping_determinism():
         input_size=2,
         n_photons=2,
         builder=builder,
-        measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+        measurement_strategy=ML.MeasurementStrategy.probs(),
     )
     model = nn.Sequential(layer, ModGrouping(layer.output_size, 3))
 

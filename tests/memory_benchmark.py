@@ -94,8 +94,7 @@ def benchmark_bs(MODES=8, PHOTONS=4, BS=32, TYPE=torch.float32, set_hp=False):
     circuit = pcvl.GenericInterferometer(
         MODES,
         lambda i: (
-            pcvl
-            .BS(theta=pcvl.P(f"theta_1_{i}"))
+            pcvl.BS(theta=pcvl.P(f"theta_1_{i}"))
             .add(0, pcvl.PS(pcvl.P(f"phase_1_{i}")))
             .add(0, pcvl.BS(theta=pcvl.P(f"theta_2_{i}")))
             .add(0, pcvl.PS(pcvl.P(f"phase_2_{i}")))
@@ -129,7 +128,7 @@ def benchmark_bs(MODES=8, PHOTONS=4, BS=32, TYPE=torch.float32, set_hp=False):
         input_state=input_state,
         trainable_parameters=[],
         input_parameters=["phase", "theta"],
-        measurement_strategy=MeasurementStrategy.PROBABILITIES,
+        measurement_strategy=MeasurementStrategy.probs(),
         device=device,
         no_bunching=True,
     )

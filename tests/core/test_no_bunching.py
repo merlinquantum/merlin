@@ -184,16 +184,18 @@ class TestNoBunchingFunctionality:
             input_state = StateGenerator.generate_state(
                 n_modes, n_photons, StatePattern.PERIODIC
             )
+            computation_space = (
+                ComputationSpace.UNBUNCHED if no_bunching else ComputationSpace.FOCK
+            )
             q_layer = QuantumLayer(
                 input_size=3,
                 circuit=circuit,
                 input_state=input_state,
                 trainable_parameters=["phi_"],
                 input_parameters=["pl"],
-                measurement_strategy=MeasurementStrategy.PROBABILITIES,
-                computation_space=ComputationSpace.UNBUNCHED
-                if no_bunching
-                else ComputationSpace.FOCK,
+                measurement_strategy=MeasurementStrategy.probs(
+                    computation_space=computation_space
+                ),
             )
 
             # Create dummy parameters

@@ -65,8 +65,7 @@ class TestPercevalComparison:
             parameters.append(parameter)
 
         chip = (
-            pcvl
-            .Circuit(self.N_MODES, name="chip")
+            pcvl.Circuit(self.N_MODES, name="chip")
             .add(0, pre_U)
             .add(0, phases_U, merge=False)
             .add(0, reservoir_U, merge=False)
@@ -87,7 +86,7 @@ class TestPercevalComparison:
             n_photons=self.N_PHOTONS,
             input_parameters=["φ"],
             trainable_parameters=[],
-            measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+            measurement_strategy=ML.MeasurementStrategy.probs(),
         )
 
         # Create dummy input to get parameters (add batch dimension)
