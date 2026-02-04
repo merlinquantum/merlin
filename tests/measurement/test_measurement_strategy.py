@@ -338,7 +338,7 @@ class TestQuantumLayerMeasurementStrategy:
             input_size=2,
             n_photons=1,
             builder=builder,
-            measurement_strategy=ML.MeasurementStrategy.amplitudes(),
+            measurement_strategy=ML.MeasurementStrategy.NONE,
         )
         x = torch.rand(2, 2, requires_grad=True)
         output = layer(x)
@@ -372,7 +372,7 @@ class TestQuantumLayerMeasurementStrategy:
             input_state=input_state,
             trainable_parameters=[],
             input_parameters=["px"],
-            measurement_strategy=MeasurementStrategy.amplitudes(),
+            measurement_strategy=MeasurementStrategy.NONE,
         )
         x = torch.rand(2, 2, requires_grad=True)
         output = layer(x)
@@ -680,7 +680,7 @@ def test_amplitudes_strategy_rejects_sampling_in_layer():
         input_size=2,
         n_photons=1,
         builder=builder,
-        measurement_strategy=ML.MeasurementStrategy.amplitudes(),
+        measurement_strategy=ML.MeasurementStrategy.NONE,
     )
     layer.eval()
     x = torch.rand(2, 2)

@@ -117,7 +117,7 @@ class TestPhotonLossWithQuantumLayer:
                 input_size=0,
                 experiment=experiment,
                 input_state=[1, 0],
-                measurement_strategy=ML.MeasurementStrategy.amplitudes(),
+                measurement_strategy=ML.MeasurementStrategy.NONE,
             )
 
         prob_layer = ML.QuantumLayer(
@@ -147,7 +147,7 @@ class TestPhotonLossWithQuantumLayer:
             input_size=0,
             experiment=experiment_no_noise,
             input_state=[1, 0],
-            measurement_strategy=ML.MeasurementStrategy.amplitudes(),
+            measurement_strategy=ML.MeasurementStrategy.NONE,
         )
 
         keys_amplitudes = amplitude_layer.output_keys

@@ -48,7 +48,7 @@ class TestOutputMapper:
 
     def test_state_vector_mapping_creation_valid(self):
         """Test creation of state vector mapping with matching sizes."""
-        mapping = ML.OutputMapper.create_mapping(ML.MeasurementStrategy.amplitudes())
+        mapping = ML.OutputMapper.create_mapping(ML.MeasurementStrategy.NONE)
         batch_size = 4
         input_amps = torch.rand(batch_size, 5)
         output_amps = mapping(input_amps)
@@ -111,7 +111,7 @@ class TestOutputMappingIntegration:
             ML.MeasurementStrategy.mode_expectations(
                 computation_space=ML.ComputationSpace.UNBUNCHED
             ),
-            ML.MeasurementStrategy.amplitudes(),
+            ML.MeasurementStrategy.NONE,
         ]
 
         builder = ML.CircuitBuilder(n_modes=6)
