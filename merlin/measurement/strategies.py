@@ -218,7 +218,7 @@ class MeasurementStrategy(metaclass=_MeasurementStrategyMeta):
 
     @staticmethod
     def probs(
-        computation_space: ComputationSpace,
+        computation_space: ComputationSpace = ComputationSpace.UNBUNCHED,
         grouping: LexGrouping | ModGrouping | None = None,
     ) -> MeasurementStrategy:
         # Full measurement returning a probability distribution.
