@@ -63,7 +63,7 @@ class TestConstructorInputTypes:
             circuit=circuit,
             input_state=sv,
             n_photons=2,
-            measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+            measurement_strategy=ML.MeasurementStrategy.probs(),
         )
 
         assert layer.n_photons == 2
@@ -77,7 +77,7 @@ class TestConstructorInputTypes:
             input_size=0,
             circuit=circuit,
             input_state=pcvl_sv,
-            measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+            measurement_strategy=ML.MeasurementStrategy.probs(),
         )
 
         assert layer.n_photons == 2
@@ -91,7 +91,7 @@ class TestConstructorInputTypes:
             input_size=0,
             circuit=circuit,
             input_state=basic_state,
-            measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+            measurement_strategy=ML.MeasurementStrategy.probs(),
         )
 
         assert layer.input_state == [1, 0, 1]
@@ -104,7 +104,7 @@ class TestConstructorInputTypes:
             input_size=0,
             circuit=circuit,
             input_state=[1, 1, 0],
-            measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+            measurement_strategy=ML.MeasurementStrategy.probs(),
         )
 
         assert layer.input_state == [1, 1, 0]
@@ -117,7 +117,7 @@ class TestConstructorInputTypes:
             input_size=0,
             circuit=circuit,
             input_state=(1, 0, 1),
-            measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+            measurement_strategy=ML.MeasurementStrategy.probs(),
         )
 
         # Layer should work regardless of internal representation
@@ -227,7 +227,7 @@ class TestForwardDispatch:
             input_size=2,
             input_state=[1, 0, 1, 0],
             builder=builder,
-            measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+            measurement_strategy=ML.MeasurementStrategy.probs(),
         )
 
     @pytest.fixture
@@ -367,7 +367,7 @@ class TestNNSequentialCompatibility:
             input_size=2,
             input_state=[1, 0, 1, 0],
             builder=builder,
-            measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+            measurement_strategy=ML.MeasurementStrategy.probs(),
         )
 
         model = torch.nn.Sequential(
@@ -394,7 +394,7 @@ class TestNNSequentialCompatibility:
             input_size=2,
             input_state=[1, 0, 1, 0],
             builder=builder,
-            measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+            measurement_strategy=ML.MeasurementStrategy.probs(),
         )
 
         model = torch.nn.Sequential(
@@ -475,7 +475,7 @@ class TestAngleEncodingBackwardCompatibility:
             input_size=2,
             input_state=[1, 0, 1, 0],
             builder=builder,
-            measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+            measurement_strategy=ML.MeasurementStrategy.probs(),
         )
 
         # Standard usage pattern
@@ -497,7 +497,7 @@ class TestAngleEncodingBackwardCompatibility:
             input_size=3,
             input_state=[1, 0, 1, 0],
             builder=builder,
-            measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+            measurement_strategy=ML.MeasurementStrategy.probs(),
         )
 
         # Test various batch sizes
@@ -516,7 +516,7 @@ class TestAngleEncodingBackwardCompatibility:
             input_size=4,
             input_state=[1, 0, 1, 0],
             builder=builder,
-            measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+            measurement_strategy=ML.MeasurementStrategy.probs(),
         )
 
         # Single combined input
@@ -678,7 +678,7 @@ class TestErrorHandling:
             input_size=2,
             input_state=[1, 0, 1, 0],
             builder=builder,
-            measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+            measurement_strategy=ML.MeasurementStrategy.probs(),
         )
 
         try:
@@ -699,7 +699,7 @@ class TestErrorHandling:
             input_size=2,
             input_state=[1, 0, 1, 0],
             builder=builder,
-            measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+            measurement_strategy=ML.MeasurementStrategy.probs(),
         )
 
         tensor = torch.rand(2, 2)

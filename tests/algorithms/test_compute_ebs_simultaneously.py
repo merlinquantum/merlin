@@ -78,13 +78,14 @@ class TestComputeEbsSimultaneously:
             input_size=0,
             circuit=self.circuit,
             n_photons=self.n_photons,
-            measurement_strategy=MeasurementStrategy.PROBABILITIES,
+            measurement_strategy=MeasurementStrategy.probs(
+                computation_space=ComputationSpace.UNBUNCHED
+            ),
             input_state=self.input_state_tensor,
             trainable_parameters=self.trainable_parameters,
             input_parameters=self.input_parameters,
             dtype=torch.float64,
             device=device,
-            computation_space=ComputationSpace.UNBUNCHED,
         )
         # Create computation process
         self.process = self.layer.computation_process

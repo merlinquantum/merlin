@@ -45,7 +45,7 @@ class TestRobustness:
             input_size=2,
             input_state=[1, 0, 1, 0],
             builder=builder,
-            measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+            measurement_strategy=ML.MeasurementStrategy.probs(),
         )
 
         model = torch.nn.Sequential(layer, torch.nn.Linear(layer.output_size, 3))
@@ -71,7 +71,7 @@ class TestRobustness:
             input_size=2,
             input_state=[1, 0, 1, 0],
             builder=builder,
-            measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+            measurement_strategy=ML.MeasurementStrategy.probs(),
         )
 
         model = torch.nn.Sequential(layer, torch.nn.Linear(layer.output_size, 3))
@@ -101,7 +101,7 @@ class TestRobustness:
             input_size=2,
             input_state=[1, 0, 1, 0],
             builder=builder,
-            measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+            measurement_strategy=ML.MeasurementStrategy.probs(),
         )
 
         model = torch.nn.Sequential(layer, torch.nn.Linear(layer.output_size, 3))
@@ -131,7 +131,7 @@ class TestRobustness:
             input_size=2,
             input_state=[1, 0, 1, 0],
             builder=builder,
-            measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+            measurement_strategy=ML.MeasurementStrategy.probs(),
         )
 
         model = torch.nn.Sequential(layer, torch.nn.Linear(layer.output_size, 3))
@@ -166,7 +166,7 @@ class TestRobustness:
             input_size=2,
             input_state=[1, 0, 1, 0],
             builder=builder,
-            measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+            measurement_strategy=ML.MeasurementStrategy.probs(),
             device=torch.device("cpu"),
         )
         model_cpu = torch.nn.Sequential(
@@ -193,7 +193,7 @@ class TestRobustness:
             input_size=2,
             input_state=[1, 0, 1, 0],
             builder=builder,
-            measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+            measurement_strategy=ML.MeasurementStrategy.probs(),
             dtype=torch.float32,
         )
         model_f32 = torch.nn.Sequential(
@@ -208,7 +208,7 @@ class TestRobustness:
             input_size=2,
             input_state=[1, 0, 1, 0],
             builder=builder,
-            measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+            measurement_strategy=ML.MeasurementStrategy.probs(),
             dtype=torch.float64,
         )
         model_f64 = torch.nn.Sequential(
@@ -242,7 +242,7 @@ class TestRobustness:
             input_size=2,
             input_state=[1, 0, 1, 0],
             builder=builder,
-            measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+            measurement_strategy=ML.MeasurementStrategy.probs(),
         )
 
         model1 = torch.nn.Sequential(layer1, torch.nn.Linear(layer1.output_size, 3))
@@ -252,7 +252,7 @@ class TestRobustness:
             input_size=2,
             input_state=[1, 0, 1, 0],
             builder=builder,
-            measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+            measurement_strategy=ML.MeasurementStrategy.probs(),
         )
 
         model2 = torch.nn.Sequential(layer2, torch.nn.Linear(layer2.output_size, 3))

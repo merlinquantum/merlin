@@ -42,7 +42,6 @@ def make_layer():
             "input_parameters": [],
             "dtype": torch.float32,
             "amplitude_encoding": True,
-            "computation_space": ComputationSpace.UNBUNCHED,
         }
         params.update(overrides)
         if not params.get("amplitude_encoding", False):
@@ -108,9 +107,8 @@ def test_amplitude_encoding_output_matches_computation_space(
     layer = QuantumLayer(
         circuit=circuit,
         n_photons=n_photons,
-        measurement_strategy=MeasurementStrategy.PROBABILITIES,
+        measurement_strategy=MeasurementStrategy.probs(computation_space=space),
         amplitude_encoding=True,
-        computation_space=space,
         trainable_parameters=["phi"],
         input_parameters=[],
         dtype=torch.float32,
@@ -142,9 +140,8 @@ def test_amplitude_encoding_gradients_follow_computation_space(
     layer = QuantumLayer(
         circuit=circuit,
         n_photons=n_photons,
-        measurement_strategy=MeasurementStrategy.PROBABILITIES,
+        measurement_strategy=MeasurementStrategy.probs(computation_space=space),
         amplitude_encoding=True,
-        computation_space=space,
         trainable_parameters=["phi"],
         input_parameters=[],
         dtype=torch.float32,
@@ -194,9 +191,8 @@ def test_amplitude_encoding_gpu_roundtrip(
     layer = QuantumLayer(
         circuit=circuit,
         n_photons=n_photons,
-        measurement_strategy=MeasurementStrategy.PROBABILITIES,
+        measurement_strategy=MeasurementStrategy.probs(computation_space=space),
         amplitude_encoding=True,
-        computation_space=space,
         trainable_parameters=["phi"],
         input_parameters=[],
         dtype=torch.float32,
@@ -343,7 +339,7 @@ def test_computation_space_consistency_no_warning(make_layer):
 
 
 def test_amplitude_encoding_probabilities_strategy(make_layer):
-    layer = make_layer(measurement_strategy=MeasurementStrategy.PROBABILITIES)
+    layer = make_layer(measurement_strategy=MeasurementStrategy.probs())
     num_states = len(layer.computation_process.simulation_graph.mapped_keys)
     raw_amplitude = torch.arange(1, num_states + 1, dtype=torch.float32)
 
@@ -371,13 +367,14 @@ def test_mapped_keys_no_bunching_space():
     layer = QuantumLayer(
         circuit=circuit,
         n_photons=n_photons,
-        measurement_strategy=MeasurementStrategy.PROBABILITIES,
+        measurement_strategy=MeasurementStrategy.probs(
+            computation_space=ComputationSpace.UNBUNCHED
+        ),
         input_state=input_state,
         trainable_parameters=["phi"],
         input_parameters=[],
         dtype=torch.float32,
         amplitude_encoding=True,
-        computation_space=ComputationSpace.UNBUNCHED,
     )
 
     mapped_keys = layer.output_keys
@@ -399,13 +396,14 @@ def test_mapped_keys_fock_space():
     layer = QuantumLayer(
         circuit=circuit,
         n_photons=n_photons,
-        measurement_strategy=MeasurementStrategy.PROBABILITIES,
+        measurement_strategy=MeasurementStrategy.probs(
+            computation_space=ComputationSpace.FOCK
+        ),
         input_state=input_state,
         trainable_parameters=["phi"],
         input_parameters=[],
         dtype=torch.float32,
         amplitude_encoding=True,
-        computation_space=ComputationSpace.FOCK,
     )
 
     mapped_keys = layer.output_keys
@@ -427,13 +425,14 @@ def test_mapped_keys_dual_rail_space():
     layer = QuantumLayer(
         circuit=circuit,
         n_photons=n_photons,
-        measurement_strategy=MeasurementStrategy.PROBABILITIES,
+        measurement_strategy=MeasurementStrategy.probs(
+            computation_space=ComputationSpace.DUAL_RAIL
+        ),
         input_state=input_state,
         trainable_parameters=["phi"],
         input_parameters=[],
         dtype=torch.float32,
         amplitude_encoding=True,
-        computation_space=ComputationSpace.DUAL_RAIL,
     )
 
     mapped_keys = layer.output_keys
@@ -461,13 +460,14 @@ def test_ebs_batches_group_fock_states(computation_space: ComputationSpace):
     layer = QuantumLayer(
         circuit=circuit,
         n_photons=n_photons,
-        measurement_strategy=MeasurementStrategy.PROBABILITIES,
+        measurement_strategy=MeasurementStrategy.probs(
+            computation_space=computation_space
+        ),
         input_state=None,
         trainable_parameters=["phi"],
         input_parameters=[],
         dtype=torch.float32,
         amplitude_encoding=True,
-        computation_space=computation_space,
     )
 
     expected_states = layer.input_size

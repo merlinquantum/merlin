@@ -46,7 +46,7 @@ def test_load_model_on_cuda():
         input_state=[1, 1, 0, 0],
         trainable_parameters=["phi"],
         device=torch.device("cuda"),
-        measurement_strategy=ml.MeasurementStrategy.PROBABILITIES,
+        measurement_strategy=ml.MeasurementStrategy.probs(),
     )
     model = nn.Sequential(layer, torch.nn.Linear(layer.output_size, 1)).to(
         torch.device("cuda")
@@ -78,7 +78,7 @@ def test_switch_model_to_cuda():
         input_state=[1, 1, 0, 0],
         trainable_parameters=["phi"],
         device=torch.device("cpu"),
-        measurement_strategy=ml.MeasurementStrategy.PROBABILITIES,
+        measurement_strategy=ml.MeasurementStrategy.probs(),
     )
     model = nn.Sequential(layer, torch.nn.Linear(layer.output_size, 1)).to(
         torch.device("cpu")
@@ -148,7 +148,7 @@ class QuantumClassifier_withBuilder(nn.Module):
             input_size=hidden_dim,
             builder=builder,
             n_photons=modes // 2,
-            measurement_strategy=ml.MeasurementStrategy.PROBABILITIES,
+            measurement_strategy=ml.MeasurementStrategy.probs(),
             device=device,
         )
 

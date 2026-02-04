@@ -227,8 +227,9 @@ class TestQuantumLayerDtypePropagation:
             trainable_parameters=[],
             input_parameters=["px"],
             input_state=[1, 0],
-            computation_space=ComputationSpace.UNBUNCHED,
-            measurement_strategy=MeasurementStrategy.PROBABILITIES,
+            measurement_strategy=MeasurementStrategy.probs(
+                computation_space=ComputationSpace.UNBUNCHED
+            ),
             dtype=torch.float64,
         )
 
