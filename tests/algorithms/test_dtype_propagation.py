@@ -113,8 +113,9 @@ class TestQuantumLayerDtypePropagation:
             trainable_parameters=[],
             input_parameters=["px"],
             input_state=[1, 0],
-            computation_space=ComputationSpace.UNBUNCHED,
-            measurement_strategy=MeasurementStrategy.MODE_EXPECTATIONS,
+            measurement_strategy=MeasurementStrategy.mode_expectations(
+                computation_space=ComputationSpace.UNBUNCHED
+            ),
             dtype=torch.float64,
         )
 
@@ -131,8 +132,9 @@ class TestQuantumLayerDtypePropagation:
             trainable_parameters=[],
             input_parameters=["px"],
             input_state=[1, 0],
-            computation_space=ComputationSpace.UNBUNCHED,
-            measurement_strategy=MeasurementStrategy.MODE_EXPECTATIONS,
+            measurement_strategy=MeasurementStrategy.mode_expectations(
+                computation_space=ComputationSpace.UNBUNCHED
+            ),
             dtype=torch.float32,
         )
 
@@ -147,8 +149,9 @@ class TestQuantumLayerDtypePropagation:
             trainable_parameters=[],
             input_parameters=["px"],
             input_state=[1, 0],
-            computation_space=ComputationSpace.UNBUNCHED,
-            measurement_strategy=MeasurementStrategy.MODE_EXPECTATIONS,
+            measurement_strategy=MeasurementStrategy.mode_expectations(
+                computation_space=ComputationSpace.UNBUNCHED
+            ),
             dtype=torch.float64,
         )
 
@@ -170,8 +173,9 @@ class TestQuantumLayerDtypePropagation:
             trainable_parameters=[],
             input_parameters=["px"],
             input_state=[1, 0],
-            computation_space=ComputationSpace.UNBUNCHED,
-            measurement_strategy=MeasurementStrategy.MODE_EXPECTATIONS,
+            measurement_strategy=MeasurementStrategy.mode_expectations(
+                computation_space=ComputationSpace.UNBUNCHED
+            ),
             dtype=torch.float32,
         )
 
@@ -188,8 +192,9 @@ class TestQuantumLayerDtypePropagation:
             trainable_parameters=[],
             input_parameters=["px"],
             input_state=[1, 0],
-            computation_space=ComputationSpace.UNBUNCHED,
-            measurement_strategy=MeasurementStrategy.MODE_EXPECTATIONS,
+            measurement_strategy=MeasurementStrategy.mode_expectations(
+                computation_space=ComputationSpace.UNBUNCHED
+            ),
             dtype=torch.float64,
         )
 
@@ -208,8 +213,9 @@ class TestQuantumLayerDtypePropagation:
             trainable_parameters=[],
             input_parameters=["px"],
             input_state=[1, 0, 1, 0],
-            computation_space=ComputationSpace.UNBUNCHED,
-            measurement_strategy=MeasurementStrategy.MODE_EXPECTATIONS,
+            measurement_strategy=MeasurementStrategy.mode_expectations(
+                computation_space=ComputationSpace.UNBUNCHED
+            ),
             dtype=torch.float64,
         )
 
@@ -246,8 +252,9 @@ class TestQuantumLayerDtypePropagation:
             trainable_parameters=[],
             input_parameters=["px"],
             input_state=[1, 0],
-            computation_space=ComputationSpace.FOCK,
-            measurement_strategy=MeasurementStrategy.MODE_EXPECTATIONS,
+            measurement_strategy=MeasurementStrategy.mode_expectations(
+                computation_space=ComputationSpace.FOCK
+            ),
             dtype=torch.float64,
         )
 
@@ -266,8 +273,9 @@ class TestQuantumLayerDtypePropagation:
             trainable_parameters=[],
             input_parameters=["px"],
             input_state=[1, 0],
-            computation_space=ComputationSpace.UNBUNCHED,
-            measurement_strategy=MeasurementStrategy.MODE_EXPECTATIONS,
+            measurement_strategy=MeasurementStrategy.mode_expectations(
+                computation_space=ComputationSpace.UNBUNCHED
+            ),
             dtype=torch.float64,
         )
 
@@ -370,8 +378,9 @@ class TestOriginalBugReproduction:
             trainable_parameters=[],
             input_parameters=["px"],
             input_state=[1, 0],
-            computation_space=merlin.ComputationSpace.UNBUNCHED,
-            measurement_strategy=merlin.MeasurementStrategy.MODE_EXPECTATIONS,
+            measurement_strategy=merlin.MeasurementStrategy.mode_expectations(
+                computation_space=merlin.ComputationSpace.UNBUNCHED
+            ),
             dtype=torch_dtype,
         )
 

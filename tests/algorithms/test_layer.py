@@ -1088,7 +1088,9 @@ class TestQuantumLayer:
             input_size=0,
             builder=builder,
             input_state=[0, 1, 0, 1, 0],
-            measurement_strategy=ML.MeasurementStrategy.MODE_EXPECTATIONS,
+            measurement_strategy=ML.MeasurementStrategy.mode_expectations(
+                ComputationSpace.UNBUNCHED
+            ),
         )
 
         res_no_obj = qlayer()
@@ -1290,8 +1292,14 @@ class TestQuantumLayer:
         builder.add_entangling_layer(trainable=True, name="U2")
 
         to_test = [
-            [ML.MeasurementStrategy.MODE_EXPECTATIONS, False],
-            [ML.MeasurementStrategy.MODE_EXPECTATIONS, True],
+            [
+                ML.MeasurementStrategy.mode_expectations(ComputationSpace.UNBUNCHED),
+                False,
+            ],
+            [
+                ML.MeasurementStrategy.mode_expectations(ComputationSpace.UNBUNCHED),
+                True,
+            ],
             [ML.MeasurementStrategy.probs(), False],
             [ML.MeasurementStrategy.NONE, False],
         ]

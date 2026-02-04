@@ -234,7 +234,9 @@ def test_feedforward_block2_mode_expectations():
     block_expect = FeedForwardBlock(
         exp,
         input_state=input_state,
-        measurement_strategy=MeasurementStrategy.MODE_EXPECTATIONS,
+        measurement_strategy=MeasurementStrategy.mode_expectations(
+            ComputationSpace.UNBUNCHED
+        ),
     )
 
     prob_outputs = block_prob()
