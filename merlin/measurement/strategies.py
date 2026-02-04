@@ -230,7 +230,7 @@ class MeasurementStrategy(metaclass=_MeasurementStrategyMeta):
 
     @staticmethod
     def mode_expectations(
-        computation_space: ComputationSpace,
+        computation_space: ComputationSpace = ComputationSpace.UNBUNCHED,
     ) -> MeasurementStrategy:
         # Mode_expectations
         # Per-mode expectation values from the measured distribution.
