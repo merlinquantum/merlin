@@ -5,20 +5,18 @@ from merlin.algorithms.layer import QuantumLayer
 from merlin.core.computation_space import ComputationSpace
 
 
-def test_no_bunching_deprecation_in_init():
-    """Passing no_bunching explicitly to QuantumLayer.__init__ must warn + fail."""
+def test_init_defaults_to_unbunched():
+    """QuantumLayer.__init__ defaults to UNBUNCHED computation space."""
     circuit = pcvl.Circuit(2)
     # Provide an explicit input_state so the layer can initialize from the custom circuit
-    with pytest.warns(DeprecationWarning):
-        with pytest.raises(TypeError):
-            QuantumLayer(circuit=circuit, input_state=[1, 0], no_bunching=True)
+    layer = QuantumLayer(circuit=circuit, input_state=[1, 0])
+    assert layer.computation_space is ComputationSpace.UNBUNCHED
 
 
-def test_simple_no_bunching_deprecation_and_conversion():
-    """QuantumLayer.simple should warn + fail on no_bunching."""
-    with pytest.warns(DeprecationWarning):
-        with pytest.raises(TypeError):
-            QuantumLayer.simple(input_size=2, no_bunching=True)
+def test_simple_defaults_to_unbunched():
+    """QuantumLayer.simple defaults to UNBUNCHED computation space."""
+    model = QuantumLayer.simple(input_size=2)
+    assert model.quantum_layer.computation_space is ComputationSpace.UNBUNCHED
 
 
 def test_simple_accepts_computation_space_with_deprecation_warning():

@@ -245,11 +245,9 @@ class TestPoolingFeedForwardLegacy:
         assert isinstance(pff.match_indices, torch.Tensor)
         assert isinstance(pff.exclude_indices, torch.Tensor)
 
-    def test_init_with_bunching(self):
-        """Test PoolingFeedForwardLegacy initialization with bunching allowed."""
-        pff = PoolingFeedForwardLegacy(
-            n_modes=8, n_photons=2, n_output_modes=4, no_bunching=False
-        )
+    def test_init_with_default_space(self):
+        """Test PoolingFeedForwardLegacy initialization with default computation space."""
+        pff = PoolingFeedForwardLegacy(n_modes=8, n_photons=2, n_output_modes=4)
         assert pff.n_modes == 8
         assert isinstance(pff.match_indices, torch.Tensor)
 

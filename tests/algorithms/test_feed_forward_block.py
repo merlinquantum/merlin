@@ -33,7 +33,9 @@ def _basis_states(n_modes: int, n_photons: int) -> list[tuple[int, ...]]:
             input_size=0,
             circuit=pcvl.Circuit(n_modes),
             n_photons=n_photons,
-            computation_space=ComputationSpace.FOCK,
+            measurement_strategy=MeasurementStrategy.probs(
+                computation_space=ComputationSpace.FOCK
+            ),
         )
         _BASIS_CACHE[cache_key] = layer.computation_process.simulation_graph.mapped_keys
     return _BASIS_CACHE[cache_key]

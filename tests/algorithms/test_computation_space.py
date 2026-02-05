@@ -39,10 +39,13 @@ def test_computation_space_members():
     assert ComputationSpace.DUAL_RAIL.value == "dual_rail"
 
 
-def test_computation_space_default_mapping():
-    """Legacy no_bunching flag maps onto the appropriate enum member."""
-    assert ComputationSpace.default(no_bunching=True) is ComputationSpace.UNBUNCHED
-    assert ComputationSpace.default(no_bunching=False) is ComputationSpace.FOCK
+def test_computation_space_coerce_accepts_enum_members():
+    """Enum inputs are returned unchanged."""
+    assert ComputationSpace.coerce(ComputationSpace.FOCK) is ComputationSpace.FOCK
+    assert (
+        ComputationSpace.coerce(ComputationSpace.UNBUNCHED)
+        is ComputationSpace.UNBUNCHED
+    )
 
 
 def test_computation_space_coerce_accepts_strings():

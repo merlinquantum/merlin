@@ -10,6 +10,7 @@ from sklearn.svm import SVC
 from merlin.algorithms.kernels import FeatureMap, FidelityKernel, KernelCircuitBuilder
 from merlin.algorithms.loss import NKernelAlignment
 from merlin.builder import CircuitBuilder
+from merlin.core.computation_space import ComputationSpace
 
 
 class TestFeatureMap:
@@ -106,14 +107,14 @@ class TestFidelityKernel:
         self.quantum_kernel = FidelityKernel(
             feature_map=self.feature_map,
             input_state=[2, 0],
-            no_bunching=False,
+            computation_space=ComputationSpace.FOCK,
         )
 
     def test_fidelity_kernel_initialization(self):
         assert self.quantum_kernel.input_state == [2, 0]
         assert self.quantum_kernel.shots == 0
         assert self.quantum_kernel.sampling_method == "multinomial"
-        assert not self.quantum_kernel.no_bunching
+        assert self.quantum_kernel.computation_space is ComputationSpace.FOCK
         assert self.quantum_kernel.force_psd
         assert not self.quantum_kernel.is_trainable
 
@@ -138,7 +139,7 @@ class TestFidelityKernel:
         kernel = FidelityKernel(
             feature_map=feature_map,
             input_state=[1, 0],
-            no_bunching=False,
+            computation_space=ComputationSpace.FOCK,
         )
 
         assert kernel.is_trainable
@@ -197,12 +198,16 @@ class TestFidelityKernel:
     def test_no_bunching_validation(self):
         with pytest.raises(ValueError, match="Bunching must be enabled"):
             FidelityKernel(
-                feature_map=self.feature_map, input_state=[2, 0], no_bunching=True
+                feature_map=self.feature_map,
+                input_state=[2, 0],
+                computation_space=ComputationSpace.UNBUNCHED,
             )
 
         with pytest.raises(ValueError, match="kernel value will always be 1"):
             FidelityKernel(
-                feature_map=self.feature_map, input_state=[1, 1], no_bunching=True
+                feature_map=self.feature_map,
+                input_state=[1, 1],
+                computation_space=ComputationSpace.UNBUNCHED,
             )
 
     def test_input_state_circuit_size_mismatch(self):
@@ -220,7 +225,7 @@ class TestFidelityKernel:
             FidelityKernel(
                 feature_map=feature_map,
                 input_state=[2, 0],  # Only 2 modes
-                no_bunching=False,
+                computation_space=ComputationSpace.FOCK,
             )
 
     def test_psd_projection(self):
@@ -279,13 +284,13 @@ class TestFidelityKernel:
         unbunching_kernel = FidelityKernel(
             feature_map,
             input_state,
-            no_bunching=True,
+            computation_space=ComputationSpace.UNBUNCHED,
             force_psd=False,
         )
         quantum_kernel = FidelityKernel(
             feature_map,
             input_state,
-            no_bunching=False,
+            computation_space=ComputationSpace.FOCK,
         )
 
         rng = np.random.default_rng(42)
@@ -741,13 +746,15 @@ class TestKernelCircuitBuilder:
             .input_size(2)
             .n_modes(4)
             .build_fidelity_kernel(
-                shots=1000, sampling_method="multinomial", no_bunching=True
+                shots=1000,
+                sampling_method="multinomial",
+                computation_space=ComputationSpace.UNBUNCHED,
             )
         )
 
         assert kernel.shots == 1000
         assert kernel.sampling_method == "multinomial"
-        assert kernel.no_bunching
+        assert kernel.computation_space is ComputationSpace.UNBUNCHED
 
     def test_builder_default_values(self):
         """Test builder with default values for optional parameters."""
@@ -926,7 +933,7 @@ class TestKernelIntegration:
         quantum_kernel = FidelityKernel(
             feature_map=feature_map,
             input_state=[2, 0],
-            no_bunching=False,
+            computation_space=ComputationSpace.FOCK,
         )
 
         # Compute kernel matrices
@@ -966,7 +973,7 @@ class TestKernelIntegration:
         quantum_kernel = FidelityKernel(
             feature_map=feature_map,
             input_state=[2, 0],
-            no_bunching=False,
+            computation_space=ComputationSpace.FOCK,
         )
 
         optimizer = torch.optim.Adam(quantum_kernel.parameters(), lr=0.1)
@@ -1032,7 +1039,12 @@ def create_quantum_circuit(m, size=400):
     return c
 
 
-def get_quantum_kernel(modes=10, input_size=10, photons=4, no_bunching=False):
+def get_quantum_kernel(
+    modes=10,
+    input_size=10,
+    photons=4,
+    computation_space=ComputationSpace.FOCK,
+):
     circuit = create_quantum_circuit(m=modes, size=input_size)
     feature_map = FeatureMap(
         circuit=circuit,
@@ -1047,7 +1059,7 @@ def get_quantum_kernel(modes=10, input_size=10, photons=4, no_bunching=False):
     quantum_kernel = FidelityKernel(
         feature_map=feature_map,
         input_state=input_state,
-        no_bunching=no_bunching,
+        computation_space=computation_space,
     )
     return quantum_kernel
 
