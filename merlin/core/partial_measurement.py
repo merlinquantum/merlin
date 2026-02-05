@@ -127,11 +127,21 @@ class PartialMeasurement:
             return probas
         grouping = self.grouping
         output_size = self._grouping_output_size()
+        # Verify shape of probas
+        assert probas.shape == (
+            self.probability_tensor_shape[0],
+            len(self.branches),
+        ), "Inconsistent probability tensor shape before grouping"
+        # Verify shape of grouped probas
+        grouped_probas = grouping(probas)
+        assert grouped_probas.shape == (self.probability_tensor_shape), (
+            "Inconsistent grouped probability tensor shape after grouping"
+        )
         assert self.probability_tensor_shape == (
             probas.shape[0],
             output_size,
-        ), "Inconsistent grouped probability tensor shape"
-        return grouping(probas)
+        ), "Inconsistent grouped probability tensor shape after grouping"
+        return grouped_probas
 
     @property
     def probabilities(self) -> torch.Tensor:

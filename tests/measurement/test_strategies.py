@@ -27,10 +27,12 @@ import pytest
 import torch
 
 from merlin.algorithms.layer import QuantumLayer
+from merlin.builder.circuit_builder import CircuitBuilder
 from merlin.core.computation_space import ComputationSpace
 from merlin.core.partial_measurement import PartialMeasurement
 from merlin.core.state_vector import StateVector
 from merlin.measurement.strategies import MeasurementKind, MeasurementStrategy
+from merlin.utils.combinadics import Combinadics
 from merlin.utils.grouping import LexGrouping, ModGrouping
 
 
@@ -408,3 +410,122 @@ class TestMeasurementStrategy:
         loss.backward()
         assert amplitudes.grad is not None
         assert torch.any(amplitudes.grad.abs() > 0)
+
+    def test_partial_measurement_exactitude(self):
+        """
+        Test that compares the amplitudes outputed by partial measurement with the
+        amplitudes outputed by amplitude measurement on the same circuit.
+        """
+        # Build Gan et al. style circuit
+        builder = CircuitBuilder(n_modes=4)
+        builder.add_entangling_layer()
+        builder.add_angle_encoding([0, 1], name="data_")
+        builder.add_entangling_layer()
+        input_state = [1, 0, 1, 0]
+        partial_measurement_strat = MeasurementStrategy.partial(modes=[0, 2])
+        amplitude_measurement_strat = MeasurementStrategy.amplitudes()
+
+        layer_partial = QuantumLayer(
+            builder=builder,
+            input_size=2,
+            input_state=input_state,
+            measurement_strategy=partial_measurement_strat,
+        )
+
+        layer_amplitude = QuantumLayer(
+            builder=builder,
+            input_size=2,
+            input_state=input_state,
+            measurement_strategy=amplitude_measurement_strat,
+            return_object=True,
+        )
+        layer_amplitude.load_state_dict(
+            layer_partial.state_dict()
+        )  # Ensure both layers have the same parameters for a fair comparison
+
+        input_data = torch.rand((1, 2), requires_grad=True)
+
+        result_partial = layer_partial(input_data)
+        result_amplitude = layer_amplitude(input_data)
+
+        # Compare the amplitudes of the first branch of the partial measurement with the amplitude measurement
+        first_branch = result_partial.branches[0]
+        first_outcome = first_branch.outcome
+        first_branch_amplitudes = first_branch.amplitudes
+
+        assert type(first_branch_amplitudes) is StateVector
+        assert type(result_amplitude) is StateVector
+
+        output_keys = layer_amplitude.output_keys
+        measured_modes = result_partial.measured_modes
+        unmeasured_modes = result_partial.unmeasured_modes
+
+        # Build expected probability and conditional amplitudes without detector effects
+        amps_full = result_amplitude.tensor
+        remaining_n = first_branch.amplitudes.n_photons
+        remaining_basis = Combinadics("fock", remaining_n, len(unmeasured_modes))
+
+        expected_prob = torch.zeros_like(first_branch.probability)
+        expected_conditional = torch.zeros(
+            (amps_full.shape[0], len(remaining_basis)),
+            dtype=amps_full.dtype,
+            device=amps_full.device,
+        )
+
+        for key_idx, key in enumerate(output_keys):
+            remaining_key = tuple(key[m] for m in unmeasured_modes)
+            if sum(remaining_key) != remaining_n:
+                continue
+            if tuple(key[m] for m in measured_modes) != first_outcome:
+                continue
+            amp_col = amps_full[:, key_idx]
+            expected_prob += amp_col.abs().pow(2)
+            local_index = remaining_basis.fock_to_index(remaining_key)
+            expected_conditional[:, local_index] += amp_col
+
+        matching_branches = [
+            branch
+            for branch in result_partial.branches
+            if branch.outcome == first_outcome
+            and branch.amplitudes.n_photons == remaining_n
+        ]
+        combined_branch_prob = torch.stack(
+            [branch.probability for branch in matching_branches], dim=0
+        ).sum(dim=0)
+
+        assert torch.allclose(
+            expected_prob,
+            combined_branch_prob,
+            atol=1e-6,
+        ), "Branch probability does not match amplitude marginal."
+
+        # Normalize to get the conditional state (partial measurement returns normalized amplitudes)
+        norm = expected_prob.sqrt().unsqueeze(-1)
+        expected_conditional = torch.where(
+            norm == 0,
+            expected_conditional,
+            expected_conditional / norm,
+        )
+
+        # Align global phase before comparing amplitudes
+        if len(matching_branches) != 1:
+            # If there are multiple branches with the same outcome and remaining photon
+            # number, amplitude comparison is not well-defined due to potential superposition
+            # of branches. We can only check probabilities in this case, unless we compare
+            # the mixed-state density matrix instead of pure state amplitudes, which is out
+            # of scope for this test.
+            return
+        actual = matching_branches[0].amplitudes.tensor
+        phase = torch.sum(expected_conditional.conj() * actual, dim=1, keepdim=True)
+        phase = torch.where(
+            phase.abs() == 0,
+            torch.ones_like(phase),
+            phase / phase.abs(),
+        )
+        expected_aligned = expected_conditional * phase
+
+        assert torch.allclose(
+            expected_aligned,
+            actual,
+            atol=1e-6,
+        ), "Conditional amplitudes do not match (up to global phase)."
