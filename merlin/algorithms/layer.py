@@ -928,9 +928,13 @@ class QuantumLayer(MerlinModule):
 
         if (
             self.return_object is True
-            and not self.measurement_strategy == MeasurementStrategy.MODE_EXPECTATIONS
+            and _resolve_measurement_kind(self.measurement_strategy)
+            != MeasurementKind.MODE_EXPECTATIONS
         ):
-            if self.measurement_strategy == MeasurementStrategy.PROBABILITIES:
+            if (
+                _resolve_measurement_kind(self.measurement_strategy)
+                == MeasurementKind.PROBABILITIES
+            ):
                 return ProbabilityDistribution(
                     self.measurement_mapping(results),
                     n_modes=len(self.input_state),

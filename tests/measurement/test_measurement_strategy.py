@@ -442,18 +442,19 @@ class TestQuantumLayerMeasurementStrategy:
 
 
 def test_resolve_measurement_strategy():
-    assert isinstance(
-        resolve_measurement_strategy(MeasurementStrategy.PROBABILITIES),
-        ProbabilitiesStrategy,
-    )
-    assert isinstance(
-        resolve_measurement_strategy(MeasurementStrategy.MODE_EXPECTATIONS),
-        ModeExpectationsStrategy,
-    )
-    assert isinstance(
-        resolve_measurement_strategy(MeasurementStrategy.AMPLITUDES),
-        AmplitudesStrategy,
-    )
+    with pytest.warns(DeprecationWarning):
+        assert isinstance(
+            resolve_measurement_strategy(MeasurementStrategy.PROBABILITIES),
+            ProbabilitiesStrategy,
+        )
+        assert isinstance(
+            resolve_measurement_strategy(MeasurementStrategy.MODE_EXPECTATIONS),
+            ModeExpectationsStrategy,
+        )
+        assert isinstance(
+            resolve_measurement_strategy(MeasurementStrategy.AMPLITUDES),
+            AmplitudesStrategy,
+        )
     assert isinstance(
         resolve_measurement_strategy(MeasurementStrategy.probs()),
         ProbabilitiesStrategy,
