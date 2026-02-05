@@ -34,6 +34,7 @@ from perceval.algorithm.sampler import Sampler
 
 import merlin as ML
 from merlin.core.computation_space import ComputationSpace
+from merlin.measurement import DetectorTransform
 
 N_MODES = 8
 INPUT_STATE = [1, 0, 1, 0, 1, 0, 1, 0]
@@ -967,3 +968,17 @@ class TestDetectorsWithKernels:
         assert torch.allclose(diag, torch.ones_like(diag), atol=1e-6)
         assert torch.all(k_train >= 0)
         assert torch.all(k_test >= 0)
+
+
+def test_detector_transform_row():
+    v = 0.5**0.5
+    H = [[v, v], [v, -v]]
+
+    simulation_keys = H
+    detectors = [pcvl.Detector.ppnr()] + [pcvl.Detector.threshold()]
+
+    transform = DetectorTransform(simulation_keys, detectors, partial_measurement=False)
+    row = transform.row(index=0)
+    assert torch.allclose(row, torch.tensor([1.0])), (
+        f"Unexpected value for row: got {row}, expected tensor([1.])"
+    )
