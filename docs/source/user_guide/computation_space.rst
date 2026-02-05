@@ -62,8 +62,8 @@ We can choose from
   - ``merlin.ComputationSpace.FOCK``, allow multiple photons per modes (i.e. explore the full Fock space).
   - ``merlin.ComputationSpace.DUAL_RAIL``, Use a dual rail encoding (two modes per photon).
 
-Those computation spaces can also be assigned with the computation_space argument in the constructor but, it
-is prefered to exploit the ``measurement_strategy`.
+Those computation spaces can also be assigned with the ``computation_space`` argument in the constructor but, it
+is prefered to exploit the ``measurement_strategy`` since ``computation_space`` will be deprecated in the future.
 
 Another parameter is also relevent.
 ``index_photons``
