@@ -245,10 +245,12 @@ def normalize_measurement_strategy(
     Rules:
     1. If MeasurementStrategy instance (new API) + constructor computation_space provided
        → ERROR: user must move computation_space into the factory method
-    2. If legacy enum (PROBABILITIES, etc) + constructor computation_space
+    2. If measurement_strategy is None and computation_space provided
+       → OK with deprecation warning (default to MeasurementStrategy.probs(computation_space))
+    3. If legacy enum (PROBABILITIES, etc) + constructor computation_space
        → OK with deprecation warning (backward compat)
-    3. If MeasurementStrategy instance only → use its computation_space
-    4. If legacy enum only → wrap with computation_space param
+    4. If MeasurementStrategy instance only → use its computation_space
+    5. If legacy enum only → wrap with computation_space param
     """
     from ..measurement.strategies import (
         MeasurementKind,
@@ -264,6 +266,13 @@ def normalize_measurement_strategy(
             computation_space = ComputationSpace.UNBUNCHED
         else:
             computation_space = ComputationSpace.coerce(computation_space)
+            warnings.warn(
+                "Passing 'computation_space' without an explicit measurement_strategy is deprecated. "
+                "Use MeasurementStrategy.probs(computation_space=...) instead. "
+                "Will be removed in 0.4 (v0.4).",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         measurement_strategy = MeasurementStrategy.probs(computation_space)
         return measurement_strategy, computation_space
 
