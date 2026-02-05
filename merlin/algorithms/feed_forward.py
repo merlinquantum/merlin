@@ -1341,9 +1341,11 @@ class FeedForwardBlock(MerlinModule):
                 input_size=0,
                 circuit=pcvl.Circuit(n_modes),
                 n_photons=n_photons,
-                computation_space=self.computation_space,
                 device=self.device,
                 dtype=self.dtype,
+                measurement_strategy=MeasurementStrategy.probs(
+                    computation_space=self.computation_space
+                ),
             )
             basis = tuple(layer.computation_process.simulation_graph.mapped_keys)
             self._basis_cache[cache_key] = basis
