@@ -516,6 +516,40 @@ class TestNoBunchingFunctionality:
                 )
 
 
+@pytest.mark.parametrize("no_bunching", [True, False])
+def test_quantum_layer_rejects_no_bunching(no_bunching: bool):
+    circuit, _ = CircuitGenerator.generate_circuit(CircuitType.SERIES, 4, 2)
+    input_state = StateGenerator.generate_state(4, 2, StatePattern.PERIODIC)
+
+    with pytest.warns(DeprecationWarning):
+        with pytest.raises(ValueError) as exc_info:
+            QuantumLayer(
+                input_size=3,
+                circuit=circuit,
+                input_state=input_state,
+                trainable_parameters=["phi_"],
+                input_parameters=["pl"],
+                no_bunching=no_bunching,
+            )
+
+    message = str(exc_info.value)
+    assert "MeasurementStrategy.probs" in message
+    assert "ComputationSpace.UNBUNCHED" in message
+    assert "ComputationSpace.FOCK" in message
+
+
+@pytest.mark.parametrize("no_bunching", [True, False])
+def test_quantum_layer_simple_rejects_no_bunching(no_bunching: bool):
+    with pytest.warns(DeprecationWarning):
+        with pytest.raises(ValueError) as exc_info:
+            QuantumLayer.simple(input_size=2, no_bunching=no_bunching)
+
+    message = str(exc_info.value)
+    assert "MeasurementStrategy.probs" in message
+    assert "ComputationSpace.UNBUNCHED" in message
+    assert "ComputationSpace.FOCK" in message
+
+
 if __name__ == "__main__":
     # Run a quick demonstration
     print("=== No-Bunching Test Demonstration ===")
