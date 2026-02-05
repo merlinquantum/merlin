@@ -4,8 +4,8 @@ import perceval as pcvl
 import pytest
 import torch
 
-from merlin import QuantumLayer
-from merlin.bridge.quantum_bridge import ComputationSpace, QuantumBridge
+from merlin import ComputationSpace, MeasurementStrategy, QuantumLayer
+from merlin.bridge.quantum_bridge import QuantumBridge
 
 
 def make_identity_layer(
@@ -15,10 +15,12 @@ def make_identity_layer(
     layer = QuantumLayer(
         circuit=c,
         n_photons=n_photons,
-        computation_space=ComputationSpace.default(no_bunching=no_bunching),
         device=torch.device("cpu"),
         dtype=torch.float32,
         amplitude_encoding=True,
+        measurement_strategy=MeasurementStrategy.probs(
+            computation_space=ComputationSpace.default(no_bunching=no_bunching)
+        ),
     )
     return layer
 

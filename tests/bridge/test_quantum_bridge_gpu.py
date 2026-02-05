@@ -2,8 +2,8 @@ import perceval as pcvl
 import pytest
 import torch
 
-from merlin import QuantumLayer
-from merlin.bridge.quantum_bridge import ComputationSpace, QuantumBridge
+from merlin import ComputationSpace, MeasurementStrategy, QuantumLayer
+from merlin.bridge.quantum_bridge import QuantumBridge
 
 pytestmark = pytest.mark.skipif(
     not torch.cuda.is_available(), reason="CUDA GPU not available"
@@ -15,9 +15,11 @@ def make_identity_layer(m: int, n_photons: int, device: torch.device) -> Quantum
     return QuantumLayer(
         circuit=c,
         n_photons=n_photons,
-        computation_space=ComputationSpace.UNBUNCHED,
         device=device,
         dtype=torch.float32,
+        measurement_strategy=MeasurementStrategy.probs(
+            computation_space=ComputationSpace.UNBUNCHED
+        ),
         amplitude_encoding=True,
     )
 
