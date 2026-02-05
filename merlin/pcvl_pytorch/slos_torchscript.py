@@ -37,6 +37,7 @@ import torch
 import torch.jit as jit
 
 from merlin.core.computation_space import ComputationSpace
+from merlin.utils.deprecations import raise_no_bunching_deprecated
 from merlin.utils.dtypes import resolve_float_complex
 
 
@@ -980,11 +981,11 @@ def build_slos_distribution_computegraph(
         Pre-built computation graph ready for repeated evaluations.
     """
 
-    # backward compatibility for deprecated no_bunching parameter
+    if no_bunching is not None:
+        raise_no_bunching_deprecated(stacklevel=2)
+
     if computation_space is None:
-        computation_space = (
-            ComputationSpace.UNBUNCHED if no_bunching else ComputationSpace.FOCK
-        )
+        computation_space = ComputationSpace.FOCK
 
     compute_graph = SLOSComputeGraph(
         m,

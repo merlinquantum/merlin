@@ -29,6 +29,7 @@ from perceval.components import BS, PS
 from ..core.computation_space import ComputationSpace
 from ..core.generators import StateGenerator, StatePattern
 from ..measurement.strategies import MeasurementStrategy
+from ..utils.deprecations import raise_no_bunching_deprecated
 from .layer import QuantumLayer
 
 
@@ -600,9 +601,8 @@ class PoolingFeedForwardLegacy(torch.nn.Module):
         Specifies how input modes are grouped (pooled) into output modes.
         Each sublist contains the indices of input modes to pool together
         for one output mode. If None, an even pooling scheme is automatically generated.
-    no_bunching : bool, default=True
-        Whether to restrict to Fock states without photon bunching
-        (i.e., no two photons occupy the same mode).
+    no_bunching : bool | None, optional (deprecated)
+        Deprecated and now removed; use computation_space in MeasurementStrategy instead.
 
     Attributes
     ----------
@@ -623,9 +623,13 @@ class PoolingFeedForwardLegacy(torch.nn.Module):
         n_photons: int,
         n_output_modes: int,
         pooling_modes: list[list[int]] = None,
-        no_bunching=True,
+        no_bunching: bool | None = None,
     ):
         super().__init__()
+        if no_bunching is not None:
+            raise_no_bunching_deprecated(stacklevel=2)
+        if no_bunching is None:
+            no_bunching = True
         keys_in = QuantumLayer(
             0,
             circuit=pcvl.Circuit(n_modes),

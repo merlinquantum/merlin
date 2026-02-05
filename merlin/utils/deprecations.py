@@ -20,30 +20,29 @@ _MEASUREMENT_STRATEGY_ENUM_MIGRATIONS = {
 }
 
 
-def _convert_no_bunching_init(
+_NO_BUNCHING_REMOVED_MESSAGE = (
+    "The 'no_bunching' parameter is removed. "
+    "Use measurement_strategy=MeasurementStrategy.probs(computation_space=...) instead."
+)
+
+
+def raise_no_bunching_deprecated(*, stacklevel: int = 2) -> None:
+    """Warn and raise when deprecated no_bunching is used."""
+    warnings.warn(
+        _NO_BUNCHING_REMOVED_MESSAGE,
+        DeprecationWarning,
+        stacklevel=stacklevel,
+    )
+    raise TypeError(_NO_BUNCHING_REMOVED_MESSAGE)
+
+
+def _reject_no_bunching_init(
     method_qualname: str, kwargs: dict[str, Any]
 ) -> dict[str, Any]:
-    """Converter for QuantumLayer.__init__ deprecated `no_bunching`.
-    Removes `no_bunching`, sets/validates `computation_space`.
-    """
-    no_bunching = kwargs.pop("no_bunching", None)
-    comp_space_in = kwargs.get("computation_space", None)
-
-    if comp_space_in is None:
-        if no_bunching is None:
-            comp_value = ComputationSpace.UNBUNCHED
-        else:
-            comp_value = ComputationSpace.default(no_bunching=bool(no_bunching))
-    else:
-        comp_value = ComputationSpace.coerce(comp_space_in)
-        if no_bunching is not None:
-            derived_nb = comp_value is ComputationSpace.UNBUNCHED
-            if bool(no_bunching) != derived_nb:
-                raise ValueError(
-                    "Incompatible 'no_bunching' value with selected 'computation_space'. "
-                )
-
-    kwargs["computation_space"] = comp_value
+    """Reject deprecated `no_bunching` usage (hard-fail with warning)."""
+    _ = method_qualname
+    if "no_bunching" in kwargs:
+        raise_no_bunching_deprecated(stacklevel=3)
     return kwargs
 
 
@@ -120,15 +119,15 @@ DEPRECATION_REGISTRY: dict[
         None,
     ),
     "QuantumLayer.__init__.no_bunching": (
-        "The 'no_bunching' keyword is deprecated; prefer selecting the computation_space instead.",
-        False,
-        _convert_no_bunching_init,
+        None,
+        None,
+        _reject_no_bunching_init,
     ),
     # QuantumLayer.simple deprecations
     "QuantumLayer.simple.no_bunching": (
-        "The 'no_bunching' keyword is deprecated; prefer selecting the computation_space instead.",
-        False,
-        _convert_no_bunching_init,
+        None,
+        None,
+        _reject_no_bunching_init,
     ),
     "QuantumLayer.simple.computation_space": (
         "The 'computation_space' keyword is deprecated; move it into MeasurementStrategy.probs(computation_space).",

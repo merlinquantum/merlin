@@ -31,6 +31,7 @@ import torch
 from torch import Tensor
 
 from ..builder.circuit_builder import ANGLE_ENCODING_MODE_ERROR, CircuitBuilder
+from ..core.computation_space import ComputationSpace
 from ..core.generators import StateGenerator, StatePattern
 from ..measurement.autodiff import AutoDiffProcess
 from ..measurement.detectors import DetectorTransform, resolve_detectors
@@ -39,7 +40,7 @@ from ..pcvl_pytorch.locirc_to_tensor import CircuitConverter
 from ..pcvl_pytorch.slos_torchscript import (
     build_slos_distribution_computegraph as build_slos_graph,
 )
-from ..utils.deprecations import sanitize_parameters
+from ..utils.deprecations import raise_no_bunching_deprecated, sanitize_parameters
 from ..utils.dtypes import to_torch_dtype
 from .module import MerlinModule
 
@@ -585,7 +586,7 @@ class KernelCircuitBuilder:
         *,
         shots: int = 0,
         sampling_method: str = "multinomial",
-        no_bunching: bool = False,
+        no_bunching: bool | None = None,
         force_psd: bool = True,
     ) -> "FidelityKernel":
         """
@@ -598,6 +599,9 @@ class KernelCircuitBuilder:
         :param force_psd: Whether to project to positive semi-definite
         :return: Configured FidelityKernel
         """
+        if no_bunching is not None:
+            raise_no_bunching_deprecated(stacklevel=2)
+
         feature_map = self.build_feature_map()
 
         # Generate default input state if not provided
@@ -681,12 +685,16 @@ class FidelityKernel(MerlinModule):
         *,
         shots: int | None = None,
         sampling_method: str = "multinomial",
-        no_bunching: bool = False,
+        no_bunching: bool | None = None,
         force_psd: bool = True,
         device: torch.device | None = None,
         dtype: str | torch.dtype | None = None,
     ):
         super().__init__()
+        if no_bunching is not None:
+            raise_no_bunching_deprecated(stacklevel=2)
+        if no_bunching is None:
+            no_bunching = False
         self.feature_map = feature_map
         self.input_state = input_state
         self.shots = shots or 0
@@ -749,10 +757,13 @@ class FidelityKernel(MerlinModule):
                 "no_bunching must be False if Experiment contains at least one Detector."
             )
 
+        computation_space = (
+            ComputationSpace.UNBUNCHED if no_bunching else ComputationSpace.FOCK
+        )
         self._slos_graph = build_slos_graph(
             m=m,
             n_photons=n,
-            no_bunching=no_bunching,
+            computation_space=computation_space,
             keep_keys=True,
             device=device,
             dtype=self.dtype,
@@ -887,8 +898,7 @@ class FidelityKernel(MerlinModule):
             ])
             if isinstance(x2, torch.Tensor):
                 U_adjoint = torch.stack([
-                    self.feature_map
-                    .compute_unitary(x)
+                    self.feature_map.compute_unitary(x)
                     .transpose(0, 1)
                     .conj()
                     .to(x1.device)
@@ -1039,7 +1049,7 @@ class FidelityKernel(MerlinModule):
         *,
         shots: int = 0,
         sampling_method: str = "multinomial",
-        no_bunching: bool = False,
+        no_bunching: bool | None = None,
         force_psd: bool = True,
         dtype: str | torch.dtype = torch.float32,
         device: torch.device | None = None,
@@ -1049,6 +1059,8 @@ class FidelityKernel(MerlinModule):
         """
         Simple factory method to create a FidelityKernel with minimal configuration.
         """
+        if no_bunching is not None:
+            raise_no_bunching_deprecated(stacklevel=2)
         feature_map = FeatureMap.simple(
             input_size=input_size,
             n_modes=n_modes,

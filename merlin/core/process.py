@@ -32,6 +32,7 @@ import torch
 
 from ..pcvl_pytorch import CircuitConverter, build_slos_distribution_computegraph
 from ..utils.combinadics import Combinadics
+from ..utils.deprecations import raise_no_bunching_deprecated
 from .base import AbstractComputationProcess
 from .computation_space import ComputationSpace
 
@@ -59,6 +60,9 @@ class ComputationProcess(AbstractComputationProcess):
         self.input_parameters = input_parameters
         self.dtype = dtype
         self.device = device
+
+        if no_bunching is not None:
+            raise_no_bunching_deprecated(stacklevel=2)
 
         if computation_space is None:
             # Default computation space based on deprecated no_bunching flag
