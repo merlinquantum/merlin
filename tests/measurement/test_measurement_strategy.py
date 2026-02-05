@@ -237,11 +237,11 @@ class TestQuantumLayerMeasurementStrategy:
         output.sum().backward()
         assert x.grad is not None
 
-        # By default, no_bunching=True so output values cannot surpass 1
+        # By default, UNBUNCHED computation space so output values cannot surpass 1
         assert torch.all(output <= 1.0 + 1e-6)
         assert torch.all(output >= -1e-6)  # No negative values
 
-        # ModeExpectations with explicit no_bunching=True
+        # ModeExpectations with explicit UNBUNCHED space
         layer = ML.QuantumLayer(
             input_size=2,
             n_photons=n_photons,
@@ -258,7 +258,7 @@ class TestQuantumLayerMeasurementStrategy:
         assert torch.all(output <= 1.0 + 1e-6)
         assert torch.all(output >= -1e-6)  # No negative values
 
-        # ModeExpectations with no_bunching=False (has some output values > 1)
+        # ModeExpectations with FOCK space (has some output values > 1)
         builder = ML.CircuitBuilder(n_modes=n_modes)
         builder.add_superpositions((0, 1), name="BS")
         builder.add_angle_encoding(modes=[0, 1], name="input")
@@ -280,7 +280,7 @@ class TestQuantumLayerMeasurementStrategy:
         assert torch.all(
             output <= n_photons + 1e-6
         )  # Values cannot surpass the number of photons
-        # output[:, 0] and output[:, 1] should have values superior to 1 because their expected number of photons is higher than 1 with no_bunching=False
+        # output[:, 0] and output[:, 1] should have values superior to 1 because their expected number of photons is higher than 1 with FOCK space
         assert torch.all(output[:, 0] > torch.ones_like(output[:, 0]))
 
         assert torch.all(output[:, 1] > torch.ones_like(output[:, 1]))

@@ -251,7 +251,7 @@ class TestModeExpectationsMapping:
     """Unit tests for ModeExpectations mapper."""
 
     def test_no_bunching_probability(self):
-        """no_bunching=True should compute per-mode occupancy probability."""
+        """UNBUNCHED space should compute per-mode occupancy probability."""
         keys = [(1, 0), (0, 1), (1, 1)]
         mapper = ML.ModeExpectations(
             computation_space=ML.ComputationSpace.UNBUNCHED, keys=keys
@@ -264,7 +264,7 @@ class TestModeExpectationsMapping:
         assert torch.allclose(output, expected, atol=1e-6)
 
     def test_expectation_counts(self):
-        """no_bunching=False should compute expected photon counts per mode."""
+        """FOCK space should compute expected photon counts per mode."""
         keys = [(2, 0), (0, 2), (1, 1)]
         mapper = ML.ModeExpectations(
             computation_space=ML.ComputationSpace.FOCK, keys=keys

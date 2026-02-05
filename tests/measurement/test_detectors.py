@@ -570,7 +570,7 @@ class TestDetectorsWithQuantumLayer:
         assert torch.allclose(layer_probs, reference, atol=1e-6)
 
     def test_detector_plus_no_bunching_warning(self):
-        """Using detectors with no_bunching=True should raise a warning, and ignore the detectors."""
+        """Using detectors with UNBUNCHED space should raise a warning, and ignore the detectors."""
         random_unitary = pcvl.Unitary(pcvl.Matrix.random_unitary(4))
 
         # Define Experiment without Detector
