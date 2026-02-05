@@ -147,7 +147,6 @@ class TestNoBunchingFunctionality:
             input_state=input_state,
             trainable_parameters=["phi_"],
             input_parameters=["pl"],
-            computation_space=ComputationSpace.UNBUNCHED,
         )
 
         # Create dummy parameters
@@ -236,7 +235,6 @@ class TestNoBunchingFunctionality:
                 input_state=input_state,
                 trainable_parameters=["phi_"],
                 input_parameters=["pl"],
-                computation_space=ComputationSpace.UNBUNCHED,
             )
 
             # Test with full Fock space
@@ -292,7 +290,6 @@ class TestNoBunchingFunctionality:
             input_state=input_state,
             trainable_parameters=["phi_"],
             input_parameters=["pl"],
-            computation_space=ComputationSpace.UNBUNCHED,
         )
 
         # The calculation shows this should be 0, but the system might handle it differently
@@ -394,7 +391,6 @@ class TestNoBunchingFunctionality:
                 input_state=input_state,
                 trainable_parameters=["phi_"],
                 input_parameters=["pl"],
-                computation_space=ComputationSpace.UNBUNCHED,
             )
 
             # Process with full Fock space

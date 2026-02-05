@@ -3,7 +3,7 @@ import math
 import perceval as pcvl
 import pytest
 
-from merlin import QuantumLayer
+from merlin import ComputationSpace, MeasurementStrategy, QuantumLayer
 from merlin.utils.combinadics import Combinadics
 
 
@@ -105,12 +105,26 @@ def test_dual_rail_requires_twice_as_many_modes():
 def test_iteration_order_matches_quantum_layer(scheme: str):
     print("Testing scheme:", scheme)
     n, m = 4, 8
-    ql = QuantumLayer(
-        input_size=0,
-        circuit=pcvl.Circuit(m),
-        n_photons=n,
-        computation_space=scheme,
-    )
+    if scheme == "unbunched":
+        ql = QuantumLayer(
+            input_size=0,
+            circuit=pcvl.Circuit(m),
+            n_photons=n,
+        )
+    else:
+        computation_space = (
+            ComputationSpace.DUAL_RAIL
+            if scheme == "dual_rail"
+            else ComputationSpace.FOCK
+        )
+        ql = QuantumLayer(
+            input_size=0,
+            circuit=pcvl.Circuit(m),
+            n_photons=n,
+            measurement_strategy=MeasurementStrategy.probs(
+                computation_space=computation_space
+            ),
+        )
 
     mapped_keys = [
         tuple(state) for state in ql.computation_process.simulation_graph.mapped_keys

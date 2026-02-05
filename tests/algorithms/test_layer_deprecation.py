@@ -3,6 +3,7 @@ import pytest
 
 from merlin.algorithms.layer import QuantumLayer
 from merlin.core.computation_space import ComputationSpace
+from merlin.measurement.strategies import MeasurementStrategy
 
 
 def test_init_defaults_to_unbunched():
@@ -19,17 +20,16 @@ def test_simple_defaults_to_unbunched():
     assert model.quantum_layer.computation_space is ComputationSpace.UNBUNCHED
 
 
-def test_simple_accepts_computation_space_with_deprecation_warning():
-    with pytest.warns(
-        DeprecationWarning,
-        match=r"Parameter 'computation_space' is deprecated",
-    ):
-        model = QuantumLayer.simple(
-            input_size=2,
-            computation_space=ComputationSpace.FOCK,
-        )
-
-    assert model.quantum_layer.computation_space == ComputationSpace.FOCK
+def test_init_accepts_measurement_strategy_fock():
+    circuit = pcvl.Circuit(2)
+    layer = QuantumLayer(
+        circuit=circuit,
+        input_state=[1, 0],
+        measurement_strategy=MeasurementStrategy.probs(
+            computation_space=ComputationSpace.FOCK
+        ),
+    )
+    assert layer.computation_space is ComputationSpace.FOCK
 
 
 def test_simple_warns_on_n_params():

@@ -218,7 +218,9 @@ class TestPhotonLossWithQuantumLayer:
             input_size=0,
             circuit=circuit,
             input_state=[1, 4],
-            computation_space=ML.ComputationSpace.FOCK,
+            measurement_strategy=ML.MeasurementStrategy.probs(
+                computation_space=ComputationSpace.FOCK
+            ),
         )
 
         output = layer()
@@ -240,13 +242,17 @@ class TestPhotonLossWithQuantumLayer:
             input_size=0,
             circuit=circuit,
             input_state=[1, 0],
-            computation_space=ML.ComputationSpace.FOCK,
+            measurement_strategy=ML.MeasurementStrategy.probs(
+                computation_space=ComputationSpace.FOCK
+            ),
         )
         layer_experiment = ML.QuantumLayer(
             input_size=0,
             experiment=experiment,
             input_state=[1, 0],
-            computation_space=ML.ComputationSpace.FOCK,
+            measurement_strategy=ML.MeasurementStrategy.probs(
+                computation_space=ComputationSpace.FOCK
+            ),
         )
         layer_experiment_unbunched = ML.QuantumLayer(
             input_size=0,
@@ -270,7 +276,9 @@ class TestPhotonLossWithQuantumLayer:
             input_size=0,
             circuit=circuit,
             input_state=[1, 1],
-            computation_space=ML.ComputationSpace.FOCK,
+            measurement_strategy=ML.MeasurementStrategy.probs(
+                computation_space=ComputationSpace.FOCK
+            ),
         )
 
         experiment_brightness = pcvl.Experiment(circuit)
@@ -280,7 +288,9 @@ class TestPhotonLossWithQuantumLayer:
             input_size=0,
             experiment=experiment_brightness,
             input_state=[1, 1],
-            computation_space=ML.ComputationSpace.FOCK,
+            measurement_strategy=ML.MeasurementStrategy.probs(
+                computation_space=ComputationSpace.FOCK
+            ),
         )
 
         experiment_transmittance = pcvl.Experiment(circuit)
@@ -290,7 +300,9 @@ class TestPhotonLossWithQuantumLayer:
             input_size=0,
             experiment=experiment_transmittance,
             input_state=[1, 1],
-            computation_space=ML.ComputationSpace.FOCK,
+            measurement_strategy=ML.MeasurementStrategy.probs(
+                computation_space=ComputationSpace.FOCK
+            ),
         )
 
         keys = base_layer.output_keys
@@ -325,7 +337,9 @@ class TestPhotonLossWithQuantumLayer:
             input_size=0,
             experiment=experiment,
             input_state=[1, 0],
-            computation_space=ComputationSpace.FOCK,
+            measurement_strategy=ML.MeasurementStrategy.probs(
+                computation_space=ComputationSpace.FOCK
+            ),
         )
 
         output = layer()
@@ -343,7 +357,9 @@ class TestPhotonLossWithQuantumLayer:
             input_size=0,
             experiment=experiment,
             input_state=[4, 0],
-            computation_space=ComputationSpace.FOCK,
+            measurement_strategy=ML.MeasurementStrategy.probs(
+                computation_space=ComputationSpace.FOCK
+            ),
         )
 
         output_4 = layer_4_photons()
@@ -370,7 +386,9 @@ class TestPhotonLossWithQuantumLayer:
             input_size=0,
             circuit=circuit,
             input_state=[1, 1],
-            computation_space=ML.ComputationSpace.FOCK,
+            measurement_strategy=ML.MeasurementStrategy.probs(
+                computation_space=ComputationSpace.FOCK
+            ),
         )
 
         experiment = pcvl.Experiment(circuit)
@@ -379,7 +397,9 @@ class TestPhotonLossWithQuantumLayer:
             input_size=0,
             experiment=experiment,
             input_state=[1, 1],
-            computation_space=ML.ComputationSpace.FOCK,
+            measurement_strategy=ML.MeasurementStrategy.probs(
+                computation_space=ComputationSpace.FOCK
+            ),
         )
 
         base_output = base_layer()
@@ -418,7 +438,9 @@ class TestPhotonLossWithQuantumLayer:
             experiment=experiment,
             input_state=[1, 1],
             input_parameters=["phi"],
-            computation_space=ML.ComputationSpace.FOCK,
+            measurement_strategy=ML.MeasurementStrategy.probs(
+                computation_space=ComputationSpace.FOCK
+            ),
         )
 
         x = torch.rand(3, 1, requires_grad=True)
@@ -447,7 +469,9 @@ class TestPhotonLossWithQuantumLayer:
             experiment=experiment,
             input_state=[1, 1],
             trainable_parameters=["phi"],
-            computation_space=ML.ComputationSpace.FOCK,
+            measurement_strategy=ML.MeasurementStrategy.probs(
+                computation_space=ComputationSpace.FOCK
+            ),
         )
 
         # Check that it has trainable parameters
@@ -482,7 +506,9 @@ class TestPhotonLossWithQuantumLayer:
             input_size=0,
             experiment=experiment,
             input_state=input_state,
-            computation_space=ML.ComputationSpace.FOCK,
+            measurement_strategy=ML.MeasurementStrategy.probs(
+                computation_space=ComputationSpace.FOCK
+            ),
         )
 
         output = loss_layer()
@@ -523,7 +549,9 @@ class TestPhotonLossWithQuantumLayer:
             input_size=0,
             experiment=experiment,
             input_state=input_state,
-            computation_space=ML.ComputationSpace.FOCK,
+            measurement_strategy=ML.MeasurementStrategy.probs(
+                computation_space=ComputationSpace.FOCK
+            ),
         )
 
         output = loss_layer()

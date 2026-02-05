@@ -997,7 +997,9 @@ class TestQuantumLayer:
         bs1 = pcvl.BasicState("|1,0,1>")
         ML.QuantumLayer(
             circuit=pcvl.Circuit(bs1.m),
-            computation_space=ML.ComputationSpace.FOCK,
+            measurement_strategy=ML.MeasurementStrategy.probs(
+                computation_space=ML.ComputationSpace.FOCK
+            ),
             input_state=bs1,
         )
         # An annotated BasicState should raise as annotations are not supported
@@ -1007,7 +1009,9 @@ class TestQuantumLayer:
         ):
             _ = ML.QuantumLayer(
                 circuit=pcvl.Circuit(bs_annot.m),
-                computation_space=ML.ComputationSpace.FOCK,
+                measurement_strategy=ML.MeasurementStrategy.probs(
+                    computation_space=ML.ComputationSpace.FOCK
+                ),
                 input_state=bs_annot,
             )
 
