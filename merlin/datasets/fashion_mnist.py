@@ -22,7 +22,7 @@
 
 import numpy as np
 
-from .mnist_digits import get_data_generic
+from .utils import get_data_generic
 
 FASHION_MNIST_METADATA = {
     "name": "Fashion-MNIST",
@@ -66,6 +66,7 @@ def get_data_train():
         subset="train",
         url_images="https://github.com/zalandoresearch/fashion-mnist/raw/refs/heads/master/data/fashion/train-images-idx3-ubyte.gz",
         url_labels="https://github.com/zalandoresearch/fashion-mnist/raw/refs/heads/master/data/fashion/train-labels-idx1-ubyte.gz",
+        metadata=FASHION_MNIST_METADATA,
     )
 
 
@@ -74,6 +75,7 @@ def get_data_test():
         subset="test",
         url_images="https://github.com/zalandoresearch/fashion-mnist/raw/refs/heads/master/data/fashion/t10k-images-idx3-ubyte.gz",
         url_labels="https://github.com/zalandoresearch/fashion-mnist/raw/refs/heads/master/data/fashion/t10k-labels-idx1-ubyte.gz",
+        metadata=FASHION_MNIST_METADATA,
     )
 
 

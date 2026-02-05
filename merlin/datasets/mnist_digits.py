@@ -21,14 +21,13 @@
 # SOFTWARE.
 
 import ast
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
 from merlin.datasets import DatasetMetadata
 
-from .utils import fetch, read_idx
+from .utils import fetch, get_data_generic
 
 MNIST_METADATA = {
     "name": "MNIST Database of Handwritten Digits",
@@ -97,63 +96,12 @@ MNIST_METADATA_PERCEVALQUEST = {
 }
 
 
-def read_mnist_images(filepath: Path) -> np.ndarray:
-    """
-    Read MNIST images file and return a numpy array of shape (n_images, 28, 28).
-
-    Args:
-        filepath: Path to the MNIST images file
-
-    Returns:
-        np.ndarray: Array of images with shape (n_images, 28, 28)
-    """
-    data, metadata = read_idx(filepath)
-
-    # Verify this is an image file (3 dimensions: n_images, height, width)
-    if len(metadata["dims"]) != 3:
-        raise ValueError(
-            f"Expected 3 dimensions for images, got {len(metadata['dims'])}"
-        )
-
-    return data
-
-
-def read_mnist_labels(filepath: Path) -> np.ndarray:
-    """
-    Read MNIST labels file and return a numpy array of labels.
-
-    Args:
-        filepath: Path to the MNIST labels file
-
-    Returns:
-        np.ndarray: Array of labels
-    """
-    data, metadata = read_idx(filepath)
-
-    # Verify this is a labels file (1 dimension)
-    if len(metadata["dims"]) != 1:
-        raise ValueError(
-            f"Expected 1 dimension for labels, got {len(metadata['dims'])}"
-        )
-
-    return data
-
-
-def get_data_generic(subset, url_images, url_labels):
-    train_images_path = fetch(url_images)
-    train_labels_path = fetch(url_labels)
-    X = read_mnist_images(train_images_path)
-    y = read_mnist_labels(train_labels_path)
-    MNIST_METADATA["num_instances"] = len(X)
-    MNIST_METADATA["subset"] = subset
-    return X, y, DatasetMetadata.from_dict(MNIST_METADATA)
-
-
 def get_data_train_original():
     return get_data_generic(
         subset="train",
         url_images="https://storage.googleapis.com/cvdf-datasets/mnist/train-images-idx3-ubyte.gz",
         url_labels="https://storage.googleapis.com/cvdf-datasets/mnist/train-labels-idx1-ubyte.gz",
+        metadata=MNIST_METADATA,
     )
 
 
@@ -162,6 +110,7 @@ def get_data_test_original():
         subset="test",
         url_images="https://storage.googleapis.com/cvdf-datasets/mnist/t10k-images-idx3-ubyte.gz",
         url_labels="https://storage.googleapis.com/cvdf-datasets/mnist/t10k-labels-idx1-ubyte.gz",
+        metadata=MNIST_METADATA,
     )
 
 

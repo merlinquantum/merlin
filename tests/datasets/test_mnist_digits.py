@@ -3,7 +3,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from merlin.datasets import DatasetMetadata, mnist_digits
+from merlin.datasets import DatasetMetadata, fashion_mnist, k_mnist, mnist_digits, utils
 
 # --- Helpers to build tiny IDX files (no network) ---
 
@@ -50,7 +50,7 @@ def _make_percevalquest_csv(path: Path, n: int):
     df.to_csv(path, index=False)
 
 
-def test_mnist_original_apis_offline(tmp_path: Path, monkeypatch):
+def test_mnist_like_datasets_apis_offline(tmp_path: Path, monkeypatch):
     # Create tiny offline IDX files
     train_images = tmp_path / "train-images-idx3-ubyte"
     train_labels = tmp_path / "train-labels-idx1-ubyte"
@@ -75,8 +75,9 @@ def test_mnist_original_apis_offline(tmp_path: Path, monkeypatch):
         raise ValueError(f"Unexpected URL: {url}")
 
     # Monkeypatch the fetch function inside the mnist_digits module
-    monkeypatch.setattr(mnist_digits, "fetch", _fake_fetch)
+    monkeypatch.setattr(utils, "fetch", _fake_fetch)
 
+    # MNIST original
     # Train
     Xtr, ytr, md_tr = mnist_digits.get_data_train_original()
     assert Xtr.shape == (3, 3, 3)
@@ -88,6 +89,44 @@ def test_mnist_original_apis_offline(tmp_path: Path, monkeypatch):
 
     # Test
     Xte, yte, md_te = mnist_digits.get_data_test_original()
+    assert Xte.shape == (2, 3, 3)
+    assert yte.shape == (2,)
+    assert Xte.dtype == np.uint8 and yte.dtype == np.uint8
+    assert isinstance(md_te, DatasetMetadata)
+    assert md_te.subset == "test"
+    assert md_te.num_instances == 2
+
+    # Fashion MNIST
+    # Train
+    Xtr, ytr, md_tr = fashion_mnist.get_data_train()
+    assert Xtr.shape == (3, 3, 3)
+    assert ytr.shape == (3,)
+    assert Xtr.dtype == np.uint8 and ytr.dtype == np.uint8
+    assert isinstance(md_tr, DatasetMetadata)
+    assert md_tr.subset == "train"
+    assert md_tr.num_instances == 3
+
+    # Test
+    Xte, yte, md_te = fashion_mnist.get_data_test()
+    assert Xte.shape == (2, 3, 3)
+    assert yte.shape == (2,)
+    assert Xte.dtype == np.uint8 and yte.dtype == np.uint8
+    assert isinstance(md_te, DatasetMetadata)
+    assert md_te.subset == "test"
+    assert md_te.num_instances == 2
+
+    # K-MNIST
+    # Train
+    Xtr, ytr, md_tr = k_mnist.get_data_train()
+    assert Xtr.shape == (3, 3, 3)
+    assert ytr.shape == (3,)
+    assert Xtr.dtype == np.uint8 and ytr.dtype == np.uint8
+    assert isinstance(md_tr, DatasetMetadata)
+    assert md_tr.subset == "train"
+    assert md_tr.num_instances == 3
+
+    # Test
+    Xte, yte, md_te = k_mnist.get_data_test()
     assert Xte.shape == (2, 3, 3)
     assert yte.shape == (2,)
     assert Xte.dtype == np.uint8 and yte.dtype == np.uint8

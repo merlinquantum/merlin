@@ -22,7 +22,7 @@
 
 import numpy as np
 
-from .mnist_digits import get_data_generic
+from .utils import get_data_generic
 
 K_MNIST_METADATA = {
     "name": "Kuzushiji-MNIST",
@@ -75,6 +75,7 @@ def get_data_train():
         subset="train",
         url_images="https://codh.rois.ac.jp/kmnist/dataset/kmnist/train-images-idx3-ubyte.gz",
         url_labels="https://codh.rois.ac.jp/kmnist/dataset/kmnist/train-labels-idx1-ubyte.gz",
+        metadata=K_MNIST_METADATA,
     )
 
 
@@ -83,6 +84,7 @@ def get_data_test():
         subset="test",
         url_images="https://codh.rois.ac.jp/kmnist/dataset/kmnist/t10k-images-idx3-ubyte.gz",
         url_labels="https://codh.rois.ac.jp/kmnist/dataset/kmnist/t10k-labels-idx1-ubyte.gz",
+        metadata=K_MNIST_METADATA,
     )
 
 

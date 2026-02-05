@@ -31,6 +31,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from merlin.datasets import DatasetMetadata
+
 
 def get_venv_data_dir() -> Path:
     """
@@ -237,7 +239,66 @@ def df_to_xy(
     return X, y
 
 
-__all__ = ["fetch", "read_idx", "df_to_xy"]
+def read_mnist_images(filepath: Path) -> np.ndarray:
+    """
+    Read MNIST images file and return a numpy array of shape (n_images, 28, 28).
+
+    Args:
+        filepath: Path to the MNIST images file
+
+    Returns:
+        np.ndarray: Array of images with shape (n_images, 28, 28)
+    """
+    data, metadata = read_idx(filepath)
+
+    # Verify this is an image file (3 dimensions: n_images, height, width)
+    if len(metadata["dims"]) != 3:
+        raise ValueError(
+            f"Expected 3 dimensions for images, got {len(metadata['dims'])}"
+        )
+
+    return data
+
+
+def read_mnist_labels(filepath: Path) -> np.ndarray:
+    """
+    Read MNIST labels file and return a numpy array of labels.
+
+    Args:
+        filepath: Path to the MNIST labels file
+
+    Returns:
+        np.ndarray: Array of labels
+    """
+    data, metadata = read_idx(filepath)
+
+    # Verify this is a labels file (1 dimension)
+    if len(metadata["dims"]) != 1:
+        raise ValueError(
+            f"Expected 1 dimension for labels, got {len(metadata['dims'])}"
+        )
+
+    return data
+
+
+def get_data_generic(subset, url_images, url_labels, metadata):
+    train_images_path = fetch(url_images)
+    train_labels_path = fetch(url_labels)
+    X = read_mnist_images(train_images_path)
+    y = read_mnist_labels(train_labels_path)
+    metadata["num_instances"] = len(X)
+    metadata["subset"] = subset
+    return X, y, DatasetMetadata.from_dict(metadata)
+
+
+__all__ = [
+    "fetch",
+    "read_idx",
+    "df_to_xy",
+    "read_mnist_images",
+    "read_mnist_labels",
+    "get_data_generic",
+]
 
 if __name__ == "__main__":
 
