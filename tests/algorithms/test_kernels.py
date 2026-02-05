@@ -145,6 +145,27 @@ class TestFidelityKernel:
         assert kernel.is_trainable
         assert "theta" in dict(kernel.named_parameters())
 
+    def test_kernel_rejects_no_bunching(self):
+        with pytest.warns(DeprecationWarning):
+            with pytest.raises(ValueError) as exc_info:
+                FidelityKernel(
+                    feature_map=self.feature_map,
+                    input_state=[2, 0],
+                    no_bunching=True,
+                )
+        assert "no_bunching" in str(exc_info.value)
+
+        with pytest.warns(DeprecationWarning):
+            with pytest.raises(ValueError) as exc_info:
+                FidelityKernel.simple(input_size=2, no_bunching=True)
+        assert "no_bunching" in str(exc_info.value)
+
+        builder = KernelCircuitBuilder().input_size(2).n_modes(4)
+        with pytest.warns(DeprecationWarning):
+            with pytest.raises(ValueError) as exc_info:
+                builder.build_fidelity_kernel(no_bunching=True)
+        assert "no_bunching" in str(exc_info.value)
+
     def test_kernel_scalar_computation(self):
         x1 = torch.tensor([0.5, 1.0])
         x2 = torch.tensor([1.0, 0.5])

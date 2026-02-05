@@ -40,7 +40,7 @@ from ..pcvl_pytorch.locirc_to_tensor import CircuitConverter
 from ..pcvl_pytorch.slos_torchscript import (
     build_slos_distribution_computegraph as build_slos_graph,
 )
-from ..utils.deprecations import raise_no_bunching_deprecated, sanitize_parameters
+from ..utils.deprecations import sanitize_parameters
 from ..utils.dtypes import to_torch_dtype
 from .module import MerlinModule
 
@@ -580,13 +580,13 @@ class KernelCircuitBuilder:
             device=self._device,
         )
 
+    @sanitize_parameters
     def build_fidelity_kernel(
         self,
         input_state: list[int] | None = None,
         *,
         shots: int = 0,
         sampling_method: str = "multinomial",
-        no_bunching: bool | None = None,
         computation_space: ComputationSpace | str | None = None,
         force_psd: bool = True,
     ) -> "FidelityKernel":
@@ -596,14 +596,10 @@ class KernelCircuitBuilder:
         :param input_state: Input Fock state. If None, automatically generated
         :param shots: Number of sampling shots
         :param sampling_method: Sampling method for shots
-        :param no_bunching: Deprecated. Use ``computation_space`` instead.
         :param computation_space: Logical computation subspace; one of {"fock", "unbunched", "dual_rail"}.
         :param force_psd: Whether to project to positive semi-definite
         :return: Configured FidelityKernel
         """
-        if no_bunching is not None:
-            raise_no_bunching_deprecated(stacklevel=2)
-
         feature_map = self.build_feature_map()
 
         # Generate default input state if not provided
@@ -619,7 +615,6 @@ class KernelCircuitBuilder:
             input_state=input_state,
             shots=shots,
             sampling_method=sampling_method,
-            no_bunching=no_bunching,
             computation_space=computation_space,
             force_psd=force_psd,
             device=self._device,
@@ -648,7 +643,6 @@ class FidelityKernel(MerlinModule):
     :param sampling_method: Probability distributions are post-
         processed with some pseudo-sampling method: 'multinomial',
         'binomial' or 'gaussian'.
-    :param no_bunching: Deprecated. Use ``computation_space`` instead.
     :param computation_space: Logical computation subspace; one of
         ``{"fock", "unbunched", "dual_rail"}``. Default: ``FOCK``.
     :param force_psd: Projects training kernel matrix to closest
@@ -667,7 +661,6 @@ class FidelityKernel(MerlinModule):
         >>> quantum_kernel = FidelityKernel(
         >>>     feature_map,
         >>>     input_state=[0, 4],
-        >>>     no_bunching=False,
         >>> )
         >>> # Construct the training & test kernel matrices
         >>> K_train = quantum_kernel(X_train)
@@ -682,6 +675,7 @@ class FidelityKernel(MerlinModule):
         >>> y_pred = svc.predict(K_test)
     """
 
+    @sanitize_parameters
     def __init__(
         self,
         feature_map: FeatureMap,
@@ -689,15 +683,12 @@ class FidelityKernel(MerlinModule):
         *,
         shots: int | None = None,
         sampling_method: str = "multinomial",
-        no_bunching: bool | None = None,
         computation_space: ComputationSpace | str | None = None,
         force_psd: bool = True,
         device: torch.device | None = None,
         dtype: str | torch.dtype | None = None,
     ):
         super().__init__()
-        if no_bunching is not None:
-            raise_no_bunching_deprecated(stacklevel=2)
         if computation_space is None:
             computation_space = ComputationSpace.FOCK
         else:
@@ -1059,7 +1050,6 @@ class FidelityKernel(MerlinModule):
         *,
         shots: int = 0,
         sampling_method: str = "multinomial",
-        no_bunching: bool | None = None,
         computation_space: ComputationSpace | str | None = None,
         force_psd: bool = True,
         dtype: str | torch.dtype = torch.float32,
@@ -1070,8 +1060,6 @@ class FidelityKernel(MerlinModule):
         """
         Simple factory method to create a FidelityKernel with minimal configuration.
         """
-        if no_bunching is not None:
-            raise_no_bunching_deprecated(stacklevel=2)
         feature_map = FeatureMap.simple(
             input_size=input_size,
             n_modes=n_modes,
@@ -1098,7 +1086,6 @@ class FidelityKernel(MerlinModule):
             input_state=input_state,
             shots=shots,
             sampling_method=sampling_method,
-            no_bunching=no_bunching,
             computation_space=computation_space,
             force_psd=force_psd,
             device=device,

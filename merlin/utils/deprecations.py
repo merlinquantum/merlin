@@ -168,6 +168,11 @@ DEPRECATION_REGISTRY: dict[
         False,
         _remove_FidelityKernel_simple_n_photons,
     ),
+    "FidelityKernel.simple.no_bunching": (
+        None,
+        None,
+        _reject_no_bunching_init,
+    ),
     "FidelityKernel.simple.trainable": (
         "Since merlin >= 0.3, input parameter allocation is automatically inferred from input dimensionality, following Gan et al. (2022) on Fock-space expressivity. Manual control of input/trainable parameters is deprecated.",
         False,
@@ -177,6 +182,18 @@ DEPRECATION_REGISTRY: dict[
         "Since merlin >= 0.3, The input state is alway going to be a [0,1,0,1,...] state depending on input size.",
         False,
         _remove_FidelityKernel_input_state,
+    ),
+    # FidelityKernel.__init__ deprecations
+    "FidelityKernel.__init__.no_bunching": (
+        None,
+        None,
+        _reject_no_bunching_init,
+    ),
+    # KernelCircuitBuilder.build_fidelity_kernel deprecations
+    "KernelCircuitBuilder.build_fidelity_kernel.no_bunching": (
+        None,
+        None,
+        _reject_no_bunching_init,
     ),
 }
 
