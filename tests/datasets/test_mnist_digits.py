@@ -1,4 +1,6 @@
 from pathlib import Path
+import hashlib
+import json
 
 import numpy as np
 import pandas as pd
@@ -49,6 +51,11 @@ def _make_percevalquest_csv(path: Path, n: int):
     df = pd.DataFrame(rows)
     df.to_csv(path, index=False)
 
+def _hash_string(s: str) -> str:
+    return hashlib.sha256(s.encode()).hexdigest()
+
+def _hash_dict(d: dict) -> str:
+    return _hash_string(json.dumps(d, sort_keys=True))
 
 def test_mnist_like_datasets_apis_offline(tmp_path: Path, monkeypatch):
     # Create tiny offline IDX files
@@ -80,59 +87,89 @@ def test_mnist_like_datasets_apis_offline(tmp_path: Path, monkeypatch):
     # MNIST original
     # Train
     Xtr, ytr, md_tr = mnist_digits.get_data_train_original()
+    md_str_hash = _hash_string(str(md_tr))
+    md_dict_hash = _hash_dict(md_tr.to_dict())
+    REF_STR_HASH = "b4e78db840b411cf28b4635f542de8d49b689c2650fed4c36fae9d30511ad475"
+    REF_DICT_HASH = "6d5d1385ef88741d8ca8e8fe3a6e32c361c1cb6e87c7c25d8a9e56759a5e9036"
     assert Xtr.shape == (3, 3, 3)
     assert ytr.shape == (3,)
     assert Xtr.dtype == np.uint8 and ytr.dtype == np.uint8
     assert isinstance(md_tr, DatasetMetadata)
     assert md_tr.subset == "train"
     assert md_tr.num_instances == 3
+    assert md_str_hash == REF_STR_HASH, "MNIST / Train: Mismatch in str(METADATA): Expected:" + REF_STR_HASH + " calculated:" + md_str_hash
+    assert md_dict_hash == REF_DICT_HASH, "MNIST / Train: Mismatch in dict(METADATA): Expected:" + REF_DICT_HASH + " calculated:" + md_dict_hash
 
     # Test
     Xte, yte, md_te = mnist_digits.get_data_test_original()
+    md_str_hash = _hash_string(str(md_tr))
+    md_dict_hash = _hash_dict(md_tr.to_dict())
     assert Xte.shape == (2, 3, 3)
     assert yte.shape == (2,)
     assert Xte.dtype == np.uint8 and yte.dtype == np.uint8
     assert isinstance(md_te, DatasetMetadata)
     assert md_te.subset == "test"
     assert md_te.num_instances == 2
+    assert md_str_hash == REF_STR_HASH, "MNIST / Test: Mismatch in str(METADATA): Expected:" + REF_STR_HASH + " calculated:" + md_str_hash
+    assert md_dict_hash == REF_DICT_HASH, "MNIST / Test: Mismatch in dict(METADATA): Expected:" + REF_DICT_HASH + " calculated:" + md_dict_hash
 
     # Fashion MNIST
     # Train
     Xtr, ytr, md_tr = fashion_mnist.get_data_train()
+    md_str_hash = _hash_string(str(md_tr))
+    md_dict_hash = _hash_dict(md_tr.to_dict())
+    REF_STR_HASH = "1f53f37e14a7b8278637f4ab5dca4e922fdda4cb64cf14fcfe47bf7a717aeb9e"
+    REF_DICT_HASH = "61ef906cbde33f50c9c9b44b5e1849e4cc5f8d1fee474b55e3a15d3b8895c895"
     assert Xtr.shape == (3, 3, 3)
     assert ytr.shape == (3,)
     assert Xtr.dtype == np.uint8 and ytr.dtype == np.uint8
     assert isinstance(md_tr, DatasetMetadata)
     assert md_tr.subset == "train"
     assert md_tr.num_instances == 3
+    assert md_str_hash == REF_STR_HASH, "Fashion-MNIST / Train: Mismatch in str(METADATA): Expected:" + REF_STR_HASH + " calculated:" + md_str_hash
+    assert md_dict_hash == REF_DICT_HASH, "Fashion-FMNIST / Train: Mismatch in dict(METADATA): Expected:" + REF_DICT_HASH + " calculated:" + md_dict_hash
 
     # Test
     Xte, yte, md_te = fashion_mnist.get_data_test()
+    md_str_hash = _hash_string(str(md_tr))
+    md_dict_hash = _hash_dict(md_tr.to_dict())
     assert Xte.shape == (2, 3, 3)
     assert yte.shape == (2,)
     assert Xte.dtype == np.uint8 and yte.dtype == np.uint8
     assert isinstance(md_te, DatasetMetadata)
     assert md_te.subset == "test"
     assert md_te.num_instances == 2
+    assert md_str_hash == REF_STR_HASH, "Fashion-MNIST / Test: Mismatch in str(METADATA): Expected:" + REF_STR_HASH + " calculated:" + md_str_hash
+    assert md_dict_hash == REF_DICT_HASH, "Fashion-MNIST / Test: Mismatch in dict(METADATA): Expected:" + REF_DICT_HASH + " calculated:" + md_dict_hash
 
     # K-MNIST
     # Train
     Xtr, ytr, md_tr = k_mnist.get_data_train()
+    md_str_hash = _hash_string(str(md_tr))
+    md_dict_hash = _hash_dict(md_tr.to_dict())
+    REF_STR_HASH = "8c01b556077483c07904ea62765c65893236ef72b01583881a830ee5e568c5f9"
+    REF_DICT_HASH = "3ea97b89f76c68c4be7713b7be6793253ce7cf5a4a0543adcac09d35cebb20d9"
     assert Xtr.shape == (3, 3, 3)
     assert ytr.shape == (3,)
     assert Xtr.dtype == np.uint8 and ytr.dtype == np.uint8
     assert isinstance(md_tr, DatasetMetadata)
     assert md_tr.subset == "train"
     assert md_tr.num_instances == 3
+    assert md_str_hash == REF_STR_HASH, "K-MNIST / Train: Mismatch in str(METADATA): Expected:" + REF_STR_HASH + " calculated:" + md_str_hash
+    assert md_dict_hash == REF_DICT_HASH, "K-MNIST / Train: Mismatch in dict(METADATA): Expected:" + REF_DICT_HASH + " calculated:" + md_dict_hash
 
     # Test
     Xte, yte, md_te = k_mnist.get_data_test()
+    md_str_hash = _hash_string(str(md_tr))
+    md_dict_hash = _hash_dict(md_tr.to_dict())
     assert Xte.shape == (2, 3, 3)
     assert yte.shape == (2,)
     assert Xte.dtype == np.uint8 and yte.dtype == np.uint8
     assert isinstance(md_te, DatasetMetadata)
     assert md_te.subset == "test"
     assert md_te.num_instances == 2
+    assert md_str_hash == REF_STR_HASH, "K-MNIST / Test: Mismatch in str(METADATA): Expected:" + REF_STR_HASH + " calculated:" + md_str_hash
+    assert md_dict_hash == REF_DICT_HASH, "K-MNIST / Test: Mismatch in dict(METADATA): Expected:" + REF_DICT_HASH + " calculated:" + md_dict_hash
 
 
 def test_mnist_percevalquest_apis_offline(tmp_path: Path, monkeypatch):
