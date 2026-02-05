@@ -178,10 +178,10 @@ that best matches the rest of your model.
 Measurement strategy tips
 -------------------------
 
-- ``PROBABILITIES`` returns the Fock state probability distribution – Ideal for attaching dense classical heads, simple linear probings or grouping strategies.
-- ``MODE_EXPECTATIONS`` compresses the outputs to one value per mode, reducing the
+- ``MeasurementStrategy.probs()`` returns the Fock state probability distribution – Ideal for attaching dense classical heads, simple linear probings or grouping strategies.
+- ``MeasurementStrategy.mode_expectations()`` compresses the outputs to one value per mode, reducing the
   number of classical weights you need downstream.
-- ``AMPLITUDES`` yields tensors with complex values and is restricted to noiseless simulations without detectors. Convert them with ``torch.view_as_real`` or flatten real/imaginary parts before feeding the data to classical layers.
+- ``MeasurementStrategy.amplitudes()`` yields tensors with complex values and is restricted to noiseless simulations without detectors. Convert them with ``torch.view_as_real`` or flatten real/imaginary parts before feeding the data to classical layers.
 
 More informations on measurement strategies can be found here: :doc:`../user_guide/measurement_strategy`.
 
@@ -190,7 +190,8 @@ Choosing a computation space
 
 The ``computation_space`` parameter controls how Perceval truncates the Fock space. If
 you omit it, MerLin falls back to ``ComputationSpace.FOCK`` (or ``UNBUNCHED`` when the
-legacy ``no_bunching`` flag is active). Override the default when you need explicit
+legacy ``no_bunching`` flag is active). It needs to be defined in the MeasurementStrategy 
+object as the computation_space input will be deprecated. Override the default when you need explicit
 control:
 
 .. code-block:: python
@@ -201,21 +202,21 @@ control:
         input_size=X_train.shape[1],
         builder=builder,
         n_photons=3,
-        computation_space=ComputationSpace.FOCK,       # Full Fock basis
+        measurement_strategy=MeasurementStrategy.probs(ComputationSpace.FOCK),       # Full Fock basis
     )
 
     unbunched_layer = QuantumLayer(
         input_size=X_train.shape[1],
         builder=builder,
         n_photons=3,
-        computation_space=ComputationSpace.UNBUNCHED,  # Forbid multiple photons per mode
+        measurement_strategy=MeasurementStrategy.probs(ComputationSpace.UNBUNCHED),  # Forbid multiple photons per mode
     )
 
     dual_rail_layer = QuantumLayer(
         input_size=X_train.shape[1],
         builder=builder,
         n_photons=3,
-        computation_space=ComputationSpace.DUAL_RAIL,  # Pair modes to encode qubits
+        measurement_strategy=MeasurementStrategy.probs(ComputationSpace.DUAL_RAIL),  # Pair modes to encode qubits
     )
 
 - ``FOCK`` keeps the entire combinatorial space of the declared photons.

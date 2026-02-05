@@ -18,6 +18,8 @@ Overview
 - **Output measurement strategies** – Select between probabilities, per-mode expectations,
   or raw amplitudes through :class:`~merlin.measurement.strategies.MeasurementStrategy`.
   The layer validates incompatible combinations (e.g. detectors with amplitude read-out). More information at :doc:`./measurement_strategy`.
+  - **Grouping strategy** – The grouping strategy to format the output of the QuantumLayer to the desired size can be defined directly in
+    the measurement_strategy parameter. See :doc:`./grouping` for more information.
 - **Multiple construction paths** – Build layers from
   the convenience :meth:`~merlin.algorithms.layer.QuantumLayer.simple` factory,
   a :class:`~merlin.builder.circuit_builder.CircuitBuilder`, a custom
