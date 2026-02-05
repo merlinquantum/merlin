@@ -985,7 +985,7 @@ def build_slos_distribution_computegraph(
         raise_no_bunching_deprecated(stacklevel=2)
 
     if computation_space is None:
-        computation_space = ComputationSpace.FOCK
+        computation_space = ComputationSpace.UNBUNCHED
 
     compute_graph = SLOSComputeGraph(
         m,

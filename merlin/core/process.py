@@ -65,8 +65,7 @@ class ComputationProcess(AbstractComputationProcess):
             raise_no_bunching_deprecated(stacklevel=2)
 
         if computation_space is None:
-            # Default computation space based on deprecated no_bunching flag
-            computation_space = ComputationSpace.default(no_bunching=no_bunching)
+            computation_space = ComputationSpace.UNBUNCHED
 
         self.computation_space = computation_space
         self.output_map_func = output_map_func
