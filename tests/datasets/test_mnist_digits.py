@@ -1,6 +1,6 @@
-from pathlib import Path
 import hashlib
 import json
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -51,11 +51,14 @@ def _make_percevalquest_csv(path: Path, n: int):
     df = pd.DataFrame(rows)
     df.to_csv(path, index=False)
 
+
 def _hash_string(s: str) -> str:
     return hashlib.sha256(s.encode()).hexdigest()
 
+
 def _hash_dict(d: dict) -> str:
     return _hash_string(json.dumps(d, sort_keys=True))
+
 
 def test_mnist_like_datasets_apis_offline(tmp_path: Path, monkeypatch):
     # Create tiny offline IDX files
@@ -97,8 +100,18 @@ def test_mnist_like_datasets_apis_offline(tmp_path: Path, monkeypatch):
     assert isinstance(md_tr, DatasetMetadata)
     assert md_tr.subset == "train"
     assert md_tr.num_instances == 3
-    assert md_str_hash == REF_STR_HASH, "MNIST / Train: Mismatch in str(METADATA): Expected:" + REF_STR_HASH + " calculated:" + md_str_hash
-    assert md_dict_hash == REF_DICT_HASH, "MNIST / Train: Mismatch in dict(METADATA): Expected:" + REF_DICT_HASH + " calculated:" + md_dict_hash
+    assert md_str_hash == REF_STR_HASH, (
+        "MNIST / Train: Mismatch in str(METADATA): Expected:"
+        + REF_STR_HASH
+        + " calculated:"
+        + md_str_hash
+    )
+    assert md_dict_hash == REF_DICT_HASH, (
+        "MNIST / Train: Mismatch in dict(METADATA): Expected:"
+        + REF_DICT_HASH
+        + " calculated:"
+        + md_dict_hash
+    )
 
     # Test
     Xte, yte, md_te = mnist_digits.get_data_test_original()
@@ -110,8 +123,18 @@ def test_mnist_like_datasets_apis_offline(tmp_path: Path, monkeypatch):
     assert isinstance(md_te, DatasetMetadata)
     assert md_te.subset == "test"
     assert md_te.num_instances == 2
-    assert md_str_hash == REF_STR_HASH, "MNIST / Test: Mismatch in str(METADATA): Expected:" + REF_STR_HASH + " calculated:" + md_str_hash
-    assert md_dict_hash == REF_DICT_HASH, "MNIST / Test: Mismatch in dict(METADATA): Expected:" + REF_DICT_HASH + " calculated:" + md_dict_hash
+    assert md_str_hash == REF_STR_HASH, (
+        "MNIST / Test: Mismatch in str(METADATA): Expected:"
+        + REF_STR_HASH
+        + " calculated:"
+        + md_str_hash
+    )
+    assert md_dict_hash == REF_DICT_HASH, (
+        "MNIST / Test: Mismatch in dict(METADATA): Expected:"
+        + REF_DICT_HASH
+        + " calculated:"
+        + md_dict_hash
+    )
 
     # Fashion MNIST
     # Train
@@ -126,8 +149,18 @@ def test_mnist_like_datasets_apis_offline(tmp_path: Path, monkeypatch):
     assert isinstance(md_tr, DatasetMetadata)
     assert md_tr.subset == "train"
     assert md_tr.num_instances == 3
-    assert md_str_hash == REF_STR_HASH, "Fashion-MNIST / Train: Mismatch in str(METADATA): Expected:" + REF_STR_HASH + " calculated:" + md_str_hash
-    assert md_dict_hash == REF_DICT_HASH, "Fashion-FMNIST / Train: Mismatch in dict(METADATA): Expected:" + REF_DICT_HASH + " calculated:" + md_dict_hash
+    assert md_str_hash == REF_STR_HASH, (
+        "Fashion-MNIST / Train: Mismatch in str(METADATA): Expected:"
+        + REF_STR_HASH
+        + " calculated:"
+        + md_str_hash
+    )
+    assert md_dict_hash == REF_DICT_HASH, (
+        "Fashion-FMNIST / Train: Mismatch in dict(METADATA): Expected:"
+        + REF_DICT_HASH
+        + " calculated:"
+        + md_dict_hash
+    )
 
     # Test
     Xte, yte, md_te = fashion_mnist.get_data_test()
@@ -139,8 +172,18 @@ def test_mnist_like_datasets_apis_offline(tmp_path: Path, monkeypatch):
     assert isinstance(md_te, DatasetMetadata)
     assert md_te.subset == "test"
     assert md_te.num_instances == 2
-    assert md_str_hash == REF_STR_HASH, "Fashion-MNIST / Test: Mismatch in str(METADATA): Expected:" + REF_STR_HASH + " calculated:" + md_str_hash
-    assert md_dict_hash == REF_DICT_HASH, "Fashion-MNIST / Test: Mismatch in dict(METADATA): Expected:" + REF_DICT_HASH + " calculated:" + md_dict_hash
+    assert md_str_hash == REF_STR_HASH, (
+        "Fashion-MNIST / Test: Mismatch in str(METADATA): Expected:"
+        + REF_STR_HASH
+        + " calculated:"
+        + md_str_hash
+    )
+    assert md_dict_hash == REF_DICT_HASH, (
+        "Fashion-MNIST / Test: Mismatch in dict(METADATA): Expected:"
+        + REF_DICT_HASH
+        + " calculated:"
+        + md_dict_hash
+    )
 
     # K-MNIST
     # Train
@@ -155,8 +198,18 @@ def test_mnist_like_datasets_apis_offline(tmp_path: Path, monkeypatch):
     assert isinstance(md_tr, DatasetMetadata)
     assert md_tr.subset == "train"
     assert md_tr.num_instances == 3
-    assert md_str_hash == REF_STR_HASH, "K-MNIST / Train: Mismatch in str(METADATA): Expected:" + REF_STR_HASH + " calculated:" + md_str_hash
-    assert md_dict_hash == REF_DICT_HASH, "K-MNIST / Train: Mismatch in dict(METADATA): Expected:" + REF_DICT_HASH + " calculated:" + md_dict_hash
+    assert md_str_hash == REF_STR_HASH, (
+        "K-MNIST / Train: Mismatch in str(METADATA): Expected:"
+        + REF_STR_HASH
+        + " calculated:"
+        + md_str_hash
+    )
+    assert md_dict_hash == REF_DICT_HASH, (
+        "K-MNIST / Train: Mismatch in dict(METADATA): Expected:"
+        + REF_DICT_HASH
+        + " calculated:"
+        + md_dict_hash
+    )
 
     # Test
     Xte, yte, md_te = k_mnist.get_data_test()
@@ -168,8 +221,18 @@ def test_mnist_like_datasets_apis_offline(tmp_path: Path, monkeypatch):
     assert isinstance(md_te, DatasetMetadata)
     assert md_te.subset == "test"
     assert md_te.num_instances == 2
-    assert md_str_hash == REF_STR_HASH, "K-MNIST / Test: Mismatch in str(METADATA): Expected:" + REF_STR_HASH + " calculated:" + md_str_hash
-    assert md_dict_hash == REF_DICT_HASH, "K-MNIST / Test: Mismatch in dict(METADATA): Expected:" + REF_DICT_HASH + " calculated:" + md_dict_hash
+    assert md_str_hash == REF_STR_HASH, (
+        "K-MNIST / Test: Mismatch in str(METADATA): Expected:"
+        + REF_STR_HASH
+        + " calculated:"
+        + md_str_hash
+    )
+    assert md_dict_hash == REF_DICT_HASH, (
+        "K-MNIST / Test: Mismatch in dict(METADATA): Expected:"
+        + REF_DICT_HASH
+        + " calculated:"
+        + md_dict_hash
+    )
 
 
 def test_mnist_percevalquest_apis_offline(tmp_path: Path, monkeypatch):
