@@ -443,7 +443,7 @@ class TestMeasurementStrategy:
             layer_partial.state_dict()
         )  # Ensure both layers have the same parameters for a fair comparison
 
-        input_data = torch.rand((1, 2), requires_grad=True)
+        input_data = torch.rand((5, 2), requires_grad=True)
 
         result_partial = layer_partial(input_data)
         result_amplitude = layer_amplitude(input_data)
