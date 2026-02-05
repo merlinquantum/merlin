@@ -202,8 +202,7 @@ class QuantumLayer(MerlinModule):
             ``amplitude_encoding=True`` and ``input_size`` is set; if
             ``amplitude_encoding=True`` and ``n_photons`` is not provided; if
             classical ``input_parameters`` are combined with
-            ``amplitude_encoding=True``; if ``no_bunching`` conflicts with the
-            selected ``computation_space``; if an ``experiment`` is not unitary or
+            ``amplitude_encoding=True``; if an ``experiment`` is not unitary or
             uses post-selection/heralding; if neither ``input_state`` nor
             ``n_photons`` is provided when required; or if an annotated
             ``BasicState`` is passed (annotations are not supported).
