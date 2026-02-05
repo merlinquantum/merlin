@@ -36,6 +36,7 @@ from typing import Any
 import pytest
 import torch
 
+from merlin.core.computation_space import ComputationSpace
 from merlin.pcvl_pytorch.slos_torchscript import (
     build_slos_distribution_computegraph,
 )
@@ -61,13 +62,17 @@ class SLOSBenchmarkRunner:
         return q.to(dtype=dtype, device=device)
 
     def validate_output_correctness(
-        self, keys: list, pa: torch.Tensor, input_state: list[int], no_bunching: bool
+        self,
+        keys: list,
+        pa: torch.Tensor,
+        input_state: list[int],
+        computation_space: ComputationSpace,
     ) -> bool:
         """Validate that the SLOS output is correct."""
         if keys is None:
             return True  # If keep_keys=False, we can't validate keys
 
-        if not no_bunching:
+        if computation_space is ComputationSpace.FOCK:
             # Check probability normalization
             probs = (pa.abs() ** 2).real
             probs_sum = probs.sum().item()
@@ -126,7 +131,6 @@ def test_build_graph_benchmark(benchmark, config: dict, device: str, dtype_pair:
         return build_slos_distribution_computegraph(
             m=m,
             n_photons=n_photons,
-            no_bunching=True,
             keep_keys=True,
             device=device,
             dtype=float_dtype,
@@ -168,7 +172,6 @@ def test_compute_benchmark(benchmark, config: dict, device: str, dtype_pair: tup
     graph = build_slos_distribution_computegraph(
         m=m,
         n_photons=n_photons,
-        no_bunching=True,
         keep_keys=True,
         device=device,
         dtype=float_dtype,
@@ -194,7 +197,7 @@ def test_compute_benchmark(benchmark, config: dict, device: str, dtype_pair: tup
     # Validate each batch item
     for batch_idx in range(batch_size):
         assert benchmark_runner.validate_output_correctness(
-            keys, probs[batch_idx], input_state, True
+            keys, probs[batch_idx], input_state, ComputationSpace.UNBUNCHED
         )
 
 
@@ -219,7 +222,6 @@ def test_compute_batched_benchmark(
     graph = build_slos_distribution_computegraph(
         m=m,
         n_photons=n_photons,
-        no_bunching=True,
         keep_keys=True,
         device=device,
         dtype=float_dtype,
@@ -245,7 +247,7 @@ def test_compute_batched_benchmark(
     # Validate correctness
     if batch_size == 1:
         assert benchmark_runner.validate_output_correctness(
-            keys, probs, input_state, True
+            keys, probs, input_state, ComputationSpace.UNBUNCHED
         )
     else:
         assert probs.shape[0] == batch_size, (
@@ -254,7 +256,7 @@ def test_compute_batched_benchmark(
         # Validate each batch item
         for batch_idx in range(batch_size):
             assert benchmark_runner.validate_output_correctness(
-                keys, probs[batch_idx], input_state, True
+                keys, probs[batch_idx], input_state, ComputationSpace.UNBUNCHED
             )
 
 
@@ -296,7 +298,6 @@ class TestSLOSPerformanceRegression:
         _graph = build_slos_distribution_computegraph(
             m=config["m"],
             n_photons=config["n_photons"],
-            no_bunching=True,
             keep_keys=True,
             device=device,
             dtype=torch.float32,
@@ -320,7 +321,6 @@ class TestSLOSPerformanceRegression:
         graph = build_slos_distribution_computegraph(
             m=config["m"],
             n_photons=config["n_photons"],
-            no_bunching=True,
             keep_keys=True,
             device=device,
             dtype=torch.float32,
@@ -337,7 +337,7 @@ class TestSLOSPerformanceRegression:
         # Assert reasonable performance bounds
         assert compute_time < 2.0, f"Compute took {compute_time:.3f}s, expected < 2.0s"
         assert benchmark_runner.validate_output_correctness(
-            keys, probs, input_state, True
+            keys, probs, input_state, ComputationSpace.UNBUNCHED
         )
 
 
@@ -389,7 +389,6 @@ if __name__ == "__main__":
     graph = build_slos_distribution_computegraph(
         m=config["m"],
         n_photons=config["n_photons"],
-        no_bunching=True,
         keep_keys=True,
         device=device,
         dtype=torch.float32,
@@ -414,7 +413,7 @@ if __name__ == "__main__":
     all_valid = True
     for batch_idx in range(batch_size):
         if not benchmark_runner.validate_output_correctness(
-            keys, probs[batch_idx], input_state, True
+            keys, probs[batch_idx], input_state, ComputationSpace.UNBUNCHED
         ):
             all_valid = False
             break

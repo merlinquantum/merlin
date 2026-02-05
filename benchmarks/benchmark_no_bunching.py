@@ -35,6 +35,7 @@ import pytest
 import torch
 
 import merlin as ML
+from merlin.core.computation_space import ComputationSpace
 from merlin.core.generators import CircuitGenerator, StateGenerator
 from merlin.core.process import ComputationProcessFactory
 
@@ -105,13 +106,12 @@ def test_no_bunching_computation_benchmark(benchmark, config: dict, device: str)
         n_modes, n_photons, ML.StatePattern.SEQUENTIAL
     )
 
-    # Create computation process with no_bunching=True
+    # Create computation process with default (UNBUNCHED) computation space
     process = ComputationProcessFactory.create(
         circuit=circuit,
         input_state=input_state,
         trainable_parameters=["phi_"],
         input_parameters=["pl"],
-        no_bunching=True,
     )
 
     # Create dummy parameters
@@ -156,7 +156,6 @@ def test_fock_space_comparison_benchmark(benchmark, config: dict, device: str):
             input_state=input_state,
             trainable_parameters=["phi_"],
             input_parameters=["pl"],
-            no_bunching=True,
         )
 
         # Full Fock space process
@@ -165,7 +164,7 @@ def test_fock_space_comparison_benchmark(benchmark, config: dict, device: str):
             input_state=input_state,
             trainable_parameters=["phi_"],
             input_parameters=["pl"],
-            no_bunching=False,
+            computation_space=ComputationSpace.FOCK,
         )
 
         # Create dummy parameters
@@ -220,7 +219,6 @@ def test_compute_with_keys_benchmark(benchmark, config: dict, device: str):
         input_state=input_state,
         trainable_parameters=["phi_"],
         input_parameters=["pl"],
-        no_bunching=True,
     )
 
     spec_mappings = process_no_bunching.converter.spec_mappings
@@ -266,7 +264,6 @@ class TestNoBunchingPerformanceRegression:
             input_state=input_state,
             trainable_parameters=["phi_"],
             input_parameters=["pl"],
-            no_bunching=True,
         )
 
         spec_mappings = process.converter.spec_mappings
@@ -337,7 +334,6 @@ if __name__ == "__main__":
         input_state=input_state,
         trainable_parameters=["phi_"],
         input_parameters=["pl"],
-        no_bunching=True,
     )
 
     spec_mappings = process.converter.spec_mappings
