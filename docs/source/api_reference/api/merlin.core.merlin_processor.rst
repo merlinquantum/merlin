@@ -203,7 +203,7 @@ Threading & Pools
 Return Shapes & Mapping
 ^^^^^^^^^^^^^^^^^^^^^^^
 * Distribution size is inferred from the leaf graph or from
-  ``(n_modes, n_photons)`` and whether ``no_bunching`` is enabled. Probability
+  ``(n_modes, n_photons)`` and the computation space chosen. Probability
   vectors are normalized if needed.
 
 Examples

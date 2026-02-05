@@ -65,7 +65,7 @@ Example: Declarative builder API
         input_size=4,
         builder=builder,
         n_photons=3,  # is equivalent to input_state=[1,1,1,0,0,0]
-        measurement_strategy=MeasurementStrategy.PROBABILITIES,
+        measurement_strategy=MeasurementStrategy.probs(),
     )
 
     model = nn.Sequential(
@@ -126,7 +126,7 @@ Example: Manual Perceval circuit (more control)
         input_state=[1, 0, 1, 0, 1, 0],
         trainable_parameters=["theta"],
         input_parameters=["input"],
-        measurement_strategy=MeasurementStrategy.PROBABILITIES,
+        measurement_strategy=MeasurementStrategy.probs(),
     )
 
     model = nn.Sequential(
@@ -170,6 +170,7 @@ The snippet below prepares a dual-rail Bell state as the initial condition and e
     from merlin.algorithms.layer import QuantumLayer
     from merlin.core import ComputationSpace
     from merlin.measurement.strategies import MeasurementStrategy
+    from merlin.measurement.
 
     circuit = pcvl.Unitary(pcvl.Matrix.random_unitary(4))  # some haar-random 4-mode circuit
 
@@ -182,8 +183,7 @@ The snippet below prepares a dual-rail Bell state as the initial condition and e
         circuit=circuit,
         n_photons=2,
         input_state=bell,
-        measurement_strategy=MeasurementStrategy.PROBABILITIES,
-        computation_space=ComputationSpace.DUAL_RAIL,
+        measurement_strategy=MeasurementStrategy.probs(computation_space=ComputationSpace.DUAL_RAIL),
     )
 
     x = torch.rand(10, circuit.m)  # batch of classical parameters
@@ -260,8 +260,7 @@ The snippet below prepares a basic quantum layer and returns a ``ProbabilityDist
         circuit=circuit,
         n_photons=2,
         input_state=bell,
-        measurement_strategy=MeasurementStrategy.PROBABILITIES,
-        computation_space=ComputationSpace.DUAL_RAIL,
+        measurement_strategy=MeasurementStrategy.probs(computation_space=ComputationSpace.DUAL_RAIL),
         return_object=True,
     )
 

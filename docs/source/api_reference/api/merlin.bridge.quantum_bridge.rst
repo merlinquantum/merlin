@@ -103,8 +103,7 @@ through the photonic layer:
        input_size=0,
        circuit=circuit,
        n_photons=2,
-       measurement_strategy=MeasurementStrategy.PROBABILITIES,
-       no_bunching=True,
+       measurement_strategy=MeasurementStrategy.probs(computation_space=ComputationSpace.UNBUNCHED),
    )
 
    # Create the bridge
@@ -176,8 +175,7 @@ A complete example showing hybrid qubit-photonic classification:
                input_size=0,
                circuit=circuit,
                n_photons=1,
-               measurement_strategy=MeasurementStrategy.PROBABILITIES,
-               no_bunching=True,
+               measurement_strategy=MeasurementStrategy.probs(),
            )
            
            # Quantum bridge

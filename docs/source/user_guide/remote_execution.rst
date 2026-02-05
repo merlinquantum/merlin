@@ -66,8 +66,7 @@ Quick Start
         input_size=2,
         builder=b,
         n_photons=2,
-        no_bunching=True,
-        measurement_strategy=MeasurementStrategy.PROBABILITIES,  # raw probability vector
+        measurement_strategy=MeasurementStrategy.probs(computation_space=ComputationSpace.UNBUNCHED),  # raw probability vector
     ).eval()
 
     model = nn.Sequential(

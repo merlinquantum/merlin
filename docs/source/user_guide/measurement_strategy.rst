@@ -27,7 +27,7 @@ The output vector contains real numbers and has a size of combination(m + n - 1,
         input_size=4,
         builder=builder,
         n_photons=2,
-        measurement_strategy=MeasurementStrategy.PROBABILITIES,  # Optional because this is its default value
+        measurement_strategy=MeasurementStrategy.probs(),  # Optional because this is its default value
     )
 
 Characteristics:
@@ -60,10 +60,10 @@ The output vector is real and has a size equal to the number of modes. Each elem
         input_size=4,
         builder=builder,
         n_photons=2,
-        measurement_strategy=MeasurementStrategy.MODE_EXPECTATIONS,
+        measurement_strategy=MeasurementStrategy.mode_expectations(),
     )
 
-Use MODE_EXPECTATIONS if you only need an m-sized vector that summarizes the quantum layer output by providing expectations values.
+Use mode_expectations if you only need an m-sized vector that summarizes the quantum layer output by providing expectations values.
 
 Key properties:
 
@@ -79,7 +79,7 @@ Return type (forward call):
 AMPLITUDES
 ---------------
 
-Returns the complex amplitudes directly. The output size is the same as with MeasurementStrategy.PROBABILITIES, which is dependent on the computation space. This strategy is only meaningful in 
+Returns the complex amplitudes directly. The output size is the same as with MeasurementStrategy.probs(), which is dependent on the computation space. This strategy is only meaningful in 
 simulation, because amplitudes cannot be measured or obtained on hardware. Indeed,
 returning amplitudes is physically non-realizable and should mainly be used for 
 connecting two quantum layers (e.g. when the second one uses amplitude encoding) 
@@ -94,7 +94,7 @@ or for analytical purposes when studying quantum systems.
         input_size=4,
         builder=builder,
         n_photons=2,
-        measurement_strategy=MeasurementStrategy.AMPLITUDES,
+        measurement_strategy=MeasurementStrategy.amplitudes(),
     )
 
 Use this strategy for debugging, algorithmic research, or when a classical routine manipulates complex amplitudes directly. The output is a complex tensor normalised to unit norm.
@@ -117,8 +117,8 @@ derives a photon loss transform and a detector transform that remaps raw Fock-st
 outcomes defined by the experiment. The photon loss mapping is applied first. Then, the detector mapping is applied. Lastly, the
 measurement strategy converts the distribution into classical features. As a consequence:
 
-* ``MeasurementStrategy.PROBABILITIES`` and ``MeasurementStrategy.MODE_EXPECTATIONS`` transparently work with any noise model and detector setup.
-* ``MeasurementStrategy.AMPLITUDES`` requires direct access to the complex amplitudes and therefore **cannot** be used when a noise model or custom detectors are defined (the layer will raise a ``RuntimeError``).
+* ``MeasurementStrategy.probs()`` and ``MeasurementStrategy.mode_expectations()`` transparently work with any noise model and detector setup.
+* ``MeasurementStrategy.amplitudes()`` requires direct access to the complex amplitudes and therefore **cannot** be used when a noise model or custom detectors are defined (the layer will raise a ``RuntimeError``).
 
 Migrating from OutputMappingStrategy (legacy)
 ============================================
@@ -127,10 +127,10 @@ Earlier releases exposed :class:`~merlin.algorithms.layer.QuantumLayer` through
 ``OutputMappingStrategy``. Newc code should rely on :class:`~merlin.measurement.strategies.MeasurementStrategy`
 instead. The mapping is:
 
-- ``OutputMappingStrategy.NONE`` → ``MeasurementStrategy.PROBABILITIES``
-- ``OutputMappingStrategy.LINEAR`` → ``MeasurementStrategy.PROBABILITIES`` followed by a ``torch.nn.Linear`` layer
-- ``OutputMappingStrategy.LEXGROUPING`` or ``GROUPING`` → ``MeasurementStrategy.PROBABILITIES`` + :class:`~merlin.utils.grouping.LexGrouping`
-- ``OutputMappingStrategy.MODGROUPING`` → ``MeasurementStrategy.PROBABILITIES`` + :class:`~merlin.utils.grouping.ModGrouping`
+- ``OutputMappingStrategy.NONE`` → ``MeasurementStrategy.probs()``
+- ``OutputMappingStrategy.LINEAR`` → ``MeasurementStrategy.probs()`` followed by a ``torch.nn.Linear`` layer
+- ``OutputMappingStrategy.LEXGROUPING`` or ``GROUPING`` → ``MeasurementStrategy.probs()`` + :class:`~merlin.utils.grouping.LexGrouping`
+- ``OutputMappingStrategy.MODGROUPING`` → ``MeasurementStrategy.probs()`` + :class:`~merlin.utils.grouping.ModGrouping`
 
 Selection Cheat Sheet
 =====================

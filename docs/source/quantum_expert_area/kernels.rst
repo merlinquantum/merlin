@@ -93,7 +93,7 @@ The kernel builds a SLOS distribution graph via
 ``build_slos_distribution_computegraph`` with parameters:
 
 * number of modes :math:`m`, total photons :math:`n`,
-* ``no_bunching`` switch, and ``keep_keys=True``.
+* ``computation_space`` class, and ``keep_keys=True``.
 
 The graph exposes the list of Fock states (``final_keys``) and a
 ``compute_probs(unitaries, input_state)`` method that returns transition
@@ -120,8 +120,8 @@ vector when several detection outcomes are compatible with the input pattern.
 
 .. note::
 
-	 ``no_bunching=True`` cannot be combined with experiments that define
-	 detectors. The kernel raises if detectors are present and ``no_bunching`` is
+	 ``ComputationSpace.UNBUNCHED`` cannot be combined with experiments that define
+	 detectors. The kernel raises if detectors are present and ``ComputationSpace.UNBUNCHED`` or ``ComputationSpace.FOCK`` is
 	 requested.
 
 Sampling and autodiff
@@ -157,8 +157,9 @@ Shapes, devices and dtypes
 Complexity and performance tips
 -------------------------------
 
-* Reduce ``m`` (modes) or ``n`` (photons) to shrink the Fock space; enable
-	``no_bunching`` when your circuit forbids multi‑occupancy per mode.
+* Reduce ``m`` (modes) or ``n`` (photons) to shrink the Fock space; use the 
+  ``ComputationSpace.UNBUNCHED`` computation space instead of ``ComputationSpace.FOCK``
+	when your circuit forbids multi‑occupancy per mode.
 * Reuse feature maps and kernels across batches to amortize converter/setup
 	costs.
 * Keep inputs contiguous and on the same device to minimise transfers.

@@ -79,7 +79,7 @@ angle-encoding stage into your photonic circuit.
     )
 
     x = torch.rand((4, 6))      # batch of 4 samples
-    probs = layer(x)            # default MeasurementStrategy.PROBABILITIES
+    probs = layer(x)            # default MeasurementStrategy.probs()
 
 Parameter names and prefixes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -202,7 +202,7 @@ Minimal example (amplitudes out)
         circuit=circuit,              # or builder=..., or experiment=...
         n_photons=2,                  # required: defines the subspace
         amplitude_encoding=True,      # switch to amplitude input
-        measurement_strategy=MeasurementStrategy.AMPLITUDES
+        measurement_strategy=MeasurementStrategy.amplitudes()
     )
 
     # Build (or sample) an input statevector compatible with the layer basis
@@ -216,7 +216,7 @@ Minimal example (amplitudes out)
 Detectors, noise, and shots
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-- With :data:`~merlin.measurement.MeasurementStrategy.AMPLITUDES`, only strong simulation is possible. Hence, the layer
+- With :data:`~merlin.measurement.MeasurementStrategy.amplitudes()`, only strong simulation is possible. Hence, the layer
   **bypasses** detectors and noise; ``shots`` must be unset or zero.
 - With probability-like strategies, detector/noise models (if present in a
   :class:`perceval.Experiment`) are applied *after* converting amplitudes to
@@ -266,7 +266,7 @@ Troubleshooting
   the layer basis size: ``len(layer.output_keys)``. For batching, use
   ``[batch, len(output_keys)]``.
 - **Incompatible measurement strategy**: When
-  :data:`~merlin.measurement.MeasurementStrategy.AMPLITUDES` is selected, do not
+  :data:`~merlin.measurement.MeasurementStrategy.amplitudes()` is selected, do not
   set nonzero ``shots`` or enable detectors/noise.
 - **Unnormalized amplitudes**: Always normalize amplitude inputs to avoid
   unstable gradients and to ensure proper probability mass.
@@ -294,7 +294,7 @@ Angle encoding with builder and probabilities out
         input_size=6,
         builder=builder,
         input_state=[1, 0, 1, 0, 1, 0],
-        measurement_strategy=MeasurementStrategy.PROBABILITIES
+        measurement_strategy=MeasurementStrategy.probs()
     )
 
     x = torch.rand((3, 6))
@@ -318,7 +318,7 @@ Amplitude encoding with amplitudes out
         circuit=circuit,
         n_photons=2,
         amplitude_encoding=True,
-        measurement_strategy=MeasurementStrategy.AMPLITUDES
+        measurement_strategy=MeasurementStrategy.amplitudes()
     )
 
     num_states = len(layer.output_keys)
@@ -340,7 +340,7 @@ Amplitude encoding with probabilities out
         circuit=circuit,     # same circuit as above
         n_photons=2,
         amplitude_encoding=True,
-        measurement_strategy=MeasurementStrategy.PROBABILITIES
+        measurement_strategy=MeasurementStrategy.probs()
     )
 
     psi_in = torch.randn(len(layer.output_keys), dtype=torch.complex64)
@@ -353,11 +353,11 @@ Measurement Strategies (Output Options)
 
 Both angle and amplitude encoding support the following output measurement strategies. For more details, see :doc:`measurement_strategy`.
 
-- :data:`~merlin.measurement.MeasurementStrategy.PROBABILITIES` (default):
+- :data:`~merlin.measurement.MeasurementStrategy.probs()` (default):
   returns a probability vector aligned with ``layer.output_keys``.
-- :data:`~merlin.measurement.MeasurementStrategy.MODE_EXPECTATIONS`:
+- :data:`~merlin.measurement.MeasurementStrategy.mode_expectations()`:
   returns per-mode expected photon counts.
-- :data:`~merlin.measurement.MeasurementStrategy.AMPLITUDES`:
+- :data:`~merlin.measurement.MeasurementStrategy.amplitudes()`:
   returns complex amplitudes (simulation-only; bypasses detectors and noise).
 
 References

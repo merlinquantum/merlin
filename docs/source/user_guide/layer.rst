@@ -46,7 +46,7 @@ learning experts without any prior knowledge in quantum machine learning.
 
    layer = ML.QuantumLayer.simple(
        input_size=4,
-       measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+       measurement_strategy=ML.MeasurementStrategy.probs(),
    )
 
    x = torch.rand(16, 4)
@@ -70,8 +70,7 @@ Use MerLin’s :class:`CircuitBuilder` utilities to describe a circuit at a high
    layer = ML.QuantumLayer(
        input_size=2,
        builder=builder,
-       measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
-       no_bunching=True,
+       measurement_strategy=ML.MeasurementStrategy.probs(computation_space=ML.ComputationSpace.UNBUNCHED),
    )
 
    x = torch.rand(4, 2)
@@ -100,7 +99,7 @@ a good understanding of Perceval.
        input_parameters=["phi"],
        trainable_parameters=["theta"],
        input_state=[1, 0, 0],
-       measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+       measurement_strategy=ML.MeasurementStrategy.probs(),
    )
 
    x = torch.linspace(0.0, 1.0, steps=8).unsqueeze(1)
@@ -129,7 +128,7 @@ If you want to simulate a noise model or specify detectors characteristics, conf
        input_size=0,
        experiment=experiment,
        input_state=[1, 1],
-       measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+       measurement_strategy=ML.MeasurementStrategy.probs(),
    )
 
    probs = layer()
@@ -139,14 +138,12 @@ If you want to simulate a noise model or specify detectors characteristics, conf
 Photon loss and detectors
 -----------
 
-- If any detector is set on the experiment, ``no_bunching`` must be ``False``.
-  The layer enforces this by raising a ``RuntimeError`` when both are requested.
 - Without an experiment, the layer defaults to ideal PNR detection on every
   mode, mirroring Perceval’s default behaviour.
 - ``experiment.noise = pcvl.NoiseModel(...)`` adds photon-loss sampling ahead of
   detector transforms. The resulting ``output_keys`` and ``output_size`` cover
   every survival/loss configuration implied by the noise model.
-- ``MeasurementStrategy.AMPLITUDES`` requires access to raw complex amplitudes
+- ``MeasurementStrategy.amplitudes()`` requires access to raw complex amplitudes
   and is therefore incompatible with custom detectors **or** photon-loss noise
   models. Attempting this combination raises a ``RuntimeError``. To emulate a
   detector pipeline while still inspecting amplitudes, run the layer without

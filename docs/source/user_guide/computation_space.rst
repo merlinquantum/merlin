@@ -54,16 +54,23 @@ Configuring the computation space
 ---------------------------------
 
 The :class:`~merlin.algorithms.layer.QuantumLayer` configures its computation space at
-construction time.  Two parameters are especially relevant:
+construction time. 
 
-``no_bunching``
-    When ``True`` (the default) the layer simulates the unbunched space; setting it to
-    ``False`` recovers the full Fock space.
+The ``measurement_strategy`` can define the computation space with its ``computation_space`` argument.
+We can choose from 
+  - ``merlin.ComputationSpace.UNBUNCHED``, do not allow multiple photons per modes.
+  - ``merlin.ComputationSpace.FOCK``, allow multiple photons per modes (i.e. explore the full Fock space).
+  - ``merlin.ComputationSpace.DUAL_RAIL``, Use a dual rail encoding (two modes per photon).
+
+Those computation spaces can also be assigned with the computation_space argument in the constructor but, it
+is prefered to exploit the ``measurement_strategy`.
+
+Another parameter is also relevent.
 ``index_photons``
     Optional per-photon constraints on allowed modes.  This lets you carve out logical
     subspaces such as dual-rail groupings without rebuilding the circuit.
 
-Internally the :class:`~merlin.core.process.ComputationProcessFactory` uses these flags
+Internally the :class:`~merlin.core.process.ComputationProcessFactory` uses these 
 to build the correct :mod:`perceval` simulation graph.  The same options propagate
 through factory-created ansätze and algorithm builders.
 
@@ -93,7 +100,7 @@ Example setup
 
    import perceval as pcvl
    import torch
-   from merlin import MeasurementStrategy, QuantumLayer
+   from merlin import MeasurementStrategy,ComputationSpace QuantumLayer
 
    # 3 logical qubits: first two qubits in a 4-mode block, third qubit dual-railed
    qubit_groups = [2, 1]
@@ -105,8 +112,7 @@ Example setup
        input_size=0,
        circuit=circuit,
        n_photons=n_photons,
-       measurement_strategy=MeasurementStrategy.PROBABILITIES,
-       no_bunching=True,  # stay inside the unbunched/QLOQ space
+       measurement_strategy=MeasurementStrategy.probs(computation_space=ComputationSpace.UNBUNCHED), # stay inside the unbunched/QLOQ space
        dtype=torch.float32,
    )
 
@@ -130,7 +136,7 @@ Takeaways
 ---------
 
 * Pick the computation space that matches your hardware and loss profile.
-* Use ``no_bunching``/``index_photons`` to constrain Merlin's simulation graph without
+* Use ``ComputationSpace.UNBUNCHED``/ ``index_photons`` to constrain Merlin's simulation graph without
   rewriting circuits.
 * QLOQ encodings generalise dual-rail: group as many qubits as you want under a single
   photon.

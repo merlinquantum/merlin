@@ -32,8 +32,7 @@ Minimal example
         input_size=0,
         circuit=circuit,
         n_photons=len(qubit_groups),
-        measurement_strategy=MeasurementStrategy.PROBABILITIES,
-        no_bunching=True,
+        measurement_strategy=MeasurementStrategy.probs(computation_space=ComputationSpace.UNBUNCHED),
         device=torch.device("cpu"),
         dtype=torch.float32,
     )

@@ -146,7 +146,7 @@ Practical notes
 - Experiments used with QuantumLayer **must be unitary** and cannot carry
   Perceval heralding detectors.
 - If at least one detector is defined, the quantum layer needs to have ``ComputationSpace.FOCK`` (default value). Photon filtering and detector post-processing are incompatible.
-- Adding photon loss or detectors corresponds to performing a measurement of the quantum state. This collapses the quantum state and is therefore **incompatible with amplitude retrieval** (MeasurementStrategy.AMPLITUDES).
+- Adding photon loss or detectors corresponds to performing a measurement of the quantum state. This collapses the quantum state and is therefore **incompatible with amplitude retrieval** (MeasurementStrategy.amplitudes()).
 - Provide either brightness, transmittance, or both. Any missing parameter is
   treated as 1.0 so you can model source-only or circuit-only loss independently.
 - Detector assignments use standard Python indexing or the Perceval

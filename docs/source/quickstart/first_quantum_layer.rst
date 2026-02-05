@@ -103,7 +103,7 @@ result to :class:`~merlin.algorithms.layer.QuantumLayer`.
         input_size=X_train.shape[1],
         builder=builder,
         n_photons=3,                             # 3 photons evenly distributed on 6 modes
-        measurement_strategy=MeasurementStrategy.PROBABILITIES,
+        measurement_strategy=MeasurementStrategy.probs(),
     )
 
     model = nn.Sequential(
@@ -136,8 +136,8 @@ that best matches the rest of your model.
 .. code-block:: python
 
     strategies = {
-        "probabilities": MeasurementStrategy.PROBABILITIES,
-        "mode_expectations": MeasurementStrategy.MODE_EXPECTATIONS,
+        "probabilities": MeasurementStrategy.probs(),
+        "mode_expectations": MeasurementStrategy.mode_expectations(),
     }
 
     for label, strategy in strategies.items():
@@ -159,7 +159,7 @@ that best matches the rest of your model.
         input_size=X_train.shape[1],
         builder=builder,
         n_photons=3,
-        measurement_strategy=MeasurementStrategy.AMPLITUDES,
+        measurement_strategy=MeasurementStrategy.amplitudes(),
     )
     class ComplexToReal(nn.Module):
         def forward(self, x):
@@ -247,7 +247,7 @@ of truth for measurement semantics.
         experiment=experiment,
         input_state=[1, 1, 1, 0, 0, 0],
         input_parameters=["input"],
-        measurement_strategy=MeasurementStrategy.PROBABILITIES,
+        measurement_strategy=MeasurementStrategy.probs(),
     )
 
     model_with_noise = nn.Sequential(
@@ -261,7 +261,7 @@ of truth for measurement semantics.
 Experiment notes
 ----------------
 
-- Attaching detectors or photon-loss models disables ``MeasurementStrategy.AMPLITUDES``
+- Attaching detectors or photon-loss models disables ``MeasurementStrategy.amplitudes()``
   because amplitudes are no longer observable.
 - ``input_parameters`` must match the prefixes emitted by ``add_angle_encoding`` (``"input"`` in this example).
 - You can reuse the same experiment across multiple layers or kernel feature maps to

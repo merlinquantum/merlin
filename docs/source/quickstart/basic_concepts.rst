@@ -132,9 +132,9 @@ Quantum circuits produce probability distributions or amplitudes (in simulation)
 .. code-block:: python
 
     # Common measurement strategies
-    ML.MeasurementStrategy.PROBABILITIES  # Default: full Fock distribution
-    ML.MeasurementStrategy.MODE_EXPECTATIONS   # Per-mode photon statistics
-    ML.MeasurementStrategy.AMPLITUDES       # Complex amplitudes (simulation only)
+    ML.MeasurementStrategy.probs()  # Default: full Fock distribution
+    ML.MeasurementStrategy.mode_expectations()   # Per-mode photon statistics
+    ML.MeasurementStrategy.amplitudes()       # Complex amplitudes (simulation only)
 
 To reduce the dimensionality of the Fock distribution after measurement, compose your layer with a grouping
 :class:`~merlin.utils.grouping.LexGrouping` or :class:`~merlin.utils.grouping.ModGrouping`.
@@ -183,9 +183,8 @@ The **QuantumLayer** combines all these concepts into a PyTorch-compatible inter
         builder=builder,                                # CircuitBuilder instance
         n_photons=2,                                    # Number of photons in the register
         input_state=[1, 0, 1, 0, 1, 0],                 # Initial photon pattern
-        input_parameters=["px"],                        # Prefix for angle-encoded features
-        computation_space=ML.ComputationSpace.FOCK,     # Choose Fock space handling
-        measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+        input_parameters=["px"],                        # Prefix for angle-encoded features  
+        measurement_strategy=ML.MeasurementStrategy.probs(computation_space=ML.ComputationSpace.FOCK), # Choose Fock space handling and output type
         return_object=False                             # Choose whether or not to return a typed object after a forward call depending on the measurement strategy.
     )
 
@@ -236,8 +235,7 @@ Here's how all these concepts work together in practice:
                 n_photons=2,
                 input_state=[1, 0, 1, 0, 1, 0],
                 input_parameters=["px"],
-                computation_space=ML.ComputationSpace.FOCK,
-                measurement_strategy=ML.MeasurementStrategy.PROBABILITIES,
+                measurement_strategy=measurement_strategy=ML.MeasurementStrategy.probs(computation_space=ML.ComputationSpace.FOCK),
                 return_object=False,
             )
             self.quantum = nn.Sequential(

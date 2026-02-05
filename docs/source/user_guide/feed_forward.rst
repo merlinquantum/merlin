@@ -104,7 +104,7 @@ Example
        input_state=[2, 0, 0],
        trainable_parameters=["theta"],   # optional Perceval prefixes
        input_parameters=["phi"],         # classical inputs for the first unitary
-       measurement_strategy=MeasurementStrategy.PROBABILITIES,
+       measurement_strategy=MeasurementStrategy.probs(),
    )
 
    x = torch.zeros((1, 1))               # only the first stage consumes features

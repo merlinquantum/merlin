@@ -67,7 +67,7 @@ Chaining Measurement Strategy and Grouping
         input_size=2,
         builder=builder,
         n_photons=2,
-        measurement_strategy=MeasurementStrategy.PROBABILITIES,
+        measurement_strategy=MeasurementStrategy.probs(),
     )
 
     quantum_pipeline = nn.Sequential(
