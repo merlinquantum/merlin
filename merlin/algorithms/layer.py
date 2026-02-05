@@ -1322,6 +1322,11 @@ class QuantumLayer(MerlinModule):
             # Trainable entangling layer after encoding
             builder.add_entangling_layer(trainable=True, name="RI_simple")
 
+        # new API forces explicit measurement strategy definition, so we set it here to match the old default behavior of returning probabilities
+        measurement_strategy = MeasurementStrategy.probs(
+            computation_space=ComputationSpace.coerce(computation_space)
+        )
+
         quantum_layer_kwargs = {
             "input_size": input_size,
             "input_state": input_state,
@@ -1329,7 +1334,7 @@ class QuantumLayer(MerlinModule):
             "n_photons": n_photons,
             "device": device,
             "dtype": dtype,
-            "computation_space": computation_space,
+            "measurement_strategy": measurement_strategy,
         }
 
         # mypy: quantum_layer_kwargs is constructed dynamically; cast to satisfy
