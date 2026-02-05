@@ -255,15 +255,15 @@ def test_output_mapping_strategies_benchmark(benchmark, config: dict, device: st
     """Benchmark different output mapping strategies."""
     strategies = [
         {
-            "measurement_strategy": ML.MeasurementStrategy.PROBABILITIES,
+            "measurement_strategy": ML.MeasurementStrategy.probs(),
             "grouping_policy": None,
         },
         {
-            "measurement_strategy": ML.MeasurementStrategy.PROBABILITIES,
+            "measurement_strategy": ML.MeasurementStrategy.probs(),
             "grouping_policy": ML.LexGrouping,
         },
         {
-            "measurement_strategy": ML.MeasurementStrategy.PROBABILITIES,
+            "measurement_strategy": ML.MeasurementStrategy.probs(),
             "grouping_policy": ML.ModGrouping,
         },
     ]
