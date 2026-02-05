@@ -587,6 +587,7 @@ class KernelCircuitBuilder:
         shots: int = 0,
         sampling_method: str = "multinomial",
         no_bunching: bool | None = None,
+        computation_space: ComputationSpace | str | None = None,
         force_psd: bool = True,
     ) -> "FidelityKernel":
         """
@@ -595,7 +596,8 @@ class KernelCircuitBuilder:
         :param input_state: Input Fock state. If None, automatically generated
         :param shots: Number of sampling shots
         :param sampling_method: Sampling method for shots
-        :param no_bunching: Whether to exclude bunched states
+        :param no_bunching: Deprecated. Use ``computation_space`` instead.
+        :param computation_space: Logical computation subspace; one of {"fock", "unbunched", "dual_rail"}.
         :param force_psd: Whether to project to positive semi-definite
         :return: Configured FidelityKernel
         """
@@ -618,6 +620,7 @@ class KernelCircuitBuilder:
             shots=shots,
             sampling_method=sampling_method,
             no_bunching=no_bunching,
+            computation_space=computation_space,
             force_psd=force_psd,
             device=self._device,
             dtype=self._dtype,
@@ -645,8 +648,9 @@ class FidelityKernel(MerlinModule):
     :param sampling_method: Probability distributions are post-
         processed with some pseudo-sampling method: 'multinomial',
         'binomial' or 'gaussian'.
-    :param no_bunching: Whether or not to post-select out results with
-        bunching. Default: `False`.
+    :param no_bunching: Deprecated. Use ``computation_space`` instead.
+    :param computation_space: Logical computation subspace; one of
+        ``{"fock", "unbunched", "dual_rail"}``. Default: ``FOCK``.
     :param force_psd: Projects training kernel matrix to closest
         positive semi-definite. Default: `True`.
     :param device: Device on which to perform SLOS
@@ -686,6 +690,7 @@ class FidelityKernel(MerlinModule):
         shots: int | None = None,
         sampling_method: str = "multinomial",
         no_bunching: bool | None = None,
+        computation_space: ComputationSpace | str | None = None,
         force_psd: bool = True,
         device: torch.device | None = None,
         dtype: str | torch.dtype | None = None,
@@ -693,13 +698,16 @@ class FidelityKernel(MerlinModule):
         super().__init__()
         if no_bunching is not None:
             raise_no_bunching_deprecated(stacklevel=2)
-        if no_bunching is None:
-            no_bunching = False
+        if computation_space is None:
+            computation_space = ComputationSpace.FOCK
+        else:
+            computation_space = ComputationSpace.coerce(computation_space)
+        self.computation_space = computation_space
         self.feature_map = feature_map
         self.input_state = input_state
         self.shots = shots or 0
         self.sampling_method = sampling_method
-        self.no_bunching = no_bunching
+        self.no_bunching = self.computation_space is not ComputationSpace.FOCK
         self.force_psd = force_psd
         base_device = device if device is not None else feature_map.device
         self.device = (
@@ -735,35 +743,36 @@ class FidelityKernel(MerlinModule):
                 "Experiment circuit must have the same number of modes as the feature map circuit."
             )
 
-        if max(input_state) > 1 and no_bunching:
+        if max(input_state) > 1 and self.computation_space is not ComputationSpace.FOCK:
             raise ValueError(
                 f"Bunching must be enabled for an input state with"
                 f"{max(input_state)} in one mode."
             )
-        elif all(x == 1 for x in input_state) and no_bunching:
+        elif (
+            all(x == 1 for x in input_state)
+            and self.computation_space is not ComputationSpace.FOCK
+        ):
             raise ValueError(
-                "For `no_bunching = True`, the kernel value will always be 1"
-                " for an input state with a photon in all modes."
+                "For non-FOCK computation_space, the kernel value will always be 1 "
+                "for an input state with a photon in all modes."
             )
 
         m, n = len(input_state), sum(input_state)
         self._detectors, self._empty_detectors = resolve_detectors(self.experiment, m)
 
-        # Verify that no Detector was defined in experiement if using no_bunching=True:
-        # TODO: change no_bunching check with computation_space check
-        # if not self._empty_detectors and not ComputationSpace.FOCK:
-        if not self._empty_detectors and no_bunching:
+        # Verify that no Detector was defined in experiment if using non-FOCK space:
+        if (
+            not self._empty_detectors
+            and self.computation_space is not ComputationSpace.FOCK
+        ):
             raise RuntimeError(
-                "no_bunching must be False if Experiment contains at least one Detector."
+                "computation_space must be FOCK if Experiment contains at least one Detector."
             )
 
-        computation_space = (
-            ComputationSpace.UNBUNCHED if no_bunching else ComputationSpace.FOCK
-        )
         self._slos_graph = build_slos_graph(
             m=m,
             n_photons=n,
-            computation_space=computation_space,
+            computation_space=self.computation_space,
             keep_keys=True,
             device=device,
             dtype=self.dtype,
@@ -1050,6 +1059,7 @@ class FidelityKernel(MerlinModule):
         shots: int = 0,
         sampling_method: str = "multinomial",
         no_bunching: bool | None = None,
+        computation_space: ComputationSpace | str | None = None,
         force_psd: bool = True,
         dtype: str | torch.dtype = torch.float32,
         device: torch.device | None = None,
@@ -1088,6 +1098,7 @@ class FidelityKernel(MerlinModule):
             shots=shots,
             sampling_method=sampling_method,
             no_bunching=no_bunching,
+            computation_space=computation_space,
             force_psd=force_psd,
             device=device,
             dtype=dtype,
