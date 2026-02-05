@@ -499,14 +499,14 @@ class TestNoBunchingFunctionality:
             )
 
     def test_no_bunching_deprecation_warning_and_error(self):
-        """Passing no_bunching should warn and raise a TypeError."""
+        """Passing no_bunching should warn and raise a ValueError."""
         circuit, _ = CircuitGenerator.generate_circuit(
             CircuitType.PARALLEL_COLUMNS, 2, 1
         )
         input_state = StateGenerator.generate_state(2, 1, StatePattern.SEQUENTIAL)
 
         with pytest.warns(DeprecationWarning):
-            with pytest.raises(TypeError):
+            with pytest.raises(ValueError):
                 ComputationProcessFactory.create(
                     circuit=circuit,
                     input_state=input_state,

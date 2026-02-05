@@ -22,7 +22,8 @@ _MEASUREMENT_STRATEGY_ENUM_MIGRATIONS = {
 
 _NO_BUNCHING_REMOVED_MESSAGE = (
     "The 'no_bunching' parameter is removed. "
-    "Use measurement_strategy=MeasurementStrategy.probs(computation_space=...) instead."
+    "Use measurement_strategy=MeasurementStrategy.probs(computation_space=ComputationSpace.UNBUNCHED) "
+    "for no_bunching=True or computation_space=ComputationSpace.FOCK for no_bunching=False."
 )
 
 
@@ -33,7 +34,7 @@ def raise_no_bunching_deprecated(*, stacklevel: int = 2) -> None:
         DeprecationWarning,
         stacklevel=stacklevel,
     )
-    raise TypeError(_NO_BUNCHING_REMOVED_MESSAGE)
+    raise ValueError(_NO_BUNCHING_REMOVED_MESSAGE)
 
 
 def _reject_no_bunching_init(
