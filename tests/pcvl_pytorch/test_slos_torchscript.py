@@ -100,7 +100,7 @@ def test_slos_save_load_computation_graph(get_tmp_file):
         sDoesntMatch + "has_output_map_func"
     )
 
-    # Vérification de vectorized_operations (liste de tuples de tenseurs)
+    # Test for vectorized_operations
     assert len(graph.vectorized_operations) == len(
         loaded_graph.vectorized_operations
     ), sDoesntMatch + "vectorized_operations (length mismatch)"
@@ -155,11 +155,12 @@ def test_slos_compute_slos_distribution_with_output_map_function():
     # Error l.513 '@jit.script' : DeprecationWarning: `torch.jit.script` is deprecated. Please switch to `torch.compile` or `torch.export`
     # def reverse_state(state):
     #    return state[::-1]
+    output_map_func = None
 
     keys, amplitudes = compute_slos_distribution(
         unitary=U_torch,
         input_state=input_state,
-        output_map_func=None,
+        output_map_func=output_map_func,
         keep_keys=True,
         computation_space=ComputationSpace.FOCK,
     )

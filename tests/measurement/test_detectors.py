@@ -979,6 +979,7 @@ def test_detector_transform_row():
 
     transform = DetectorTransform(simulation_keys, detectors, partial_measurement=False)
     row = transform.row(index=0)
-    assert torch.allclose(row, torch.tensor([1.0])), (
-        f"Unexpected value for row: got {row}, expected tensor([1.])"
+    expected = torch.tensor([1.0])
+    assert torch.allclose(row, expected), (
+        f"Unexpected value for row: got {row}, expected: {expected}"
     )
