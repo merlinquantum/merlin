@@ -17,7 +17,7 @@ Overview
 - **Input encoding strategies** - Pick a data encoding method: angle or amplitude encoding.. See :doc:`./angle_amplitude_encoding` for more information.
 - **Output measurement strategies** – Select between probabilities, per-mode expectations,
   or raw amplitudes through :class:`~merlin.measurement.strategies.MeasurementStrategy`.
-  The layer validates incompatible combinations (e.g. detectors with amplitude read-out). More information at :doc:`./measurement_strategy`.
+  The layer validates incompatible combinations (e.g. detectors with amplitude read-out). For more information ont this and all of the possible output configurations, visit :doc:`./measurement_strategy`.
   - **Grouping strategy** – The grouping strategy to format the output of the QuantumLayer to the desired size can be defined directly in
     the measurement_strategy parameter. See :doc:`./grouping` for more information.
 - **Multiple construction paths** – Build layers from
@@ -163,6 +163,10 @@ Notes
 - The ``layer.parameters()`` method provides access to the trainable parameters (if any), just like any standard PyTorch layer.
 - Inspect ``layer.has_custom_noise_model`` and ``layer.output_keys`` to confirm
   whether photon loss is active and how it alters the output distribution.
+
+.. deprecated:: 0.4
+   The use of the ``no_bunching`` flag  is deprecated and will be removed in version 0.4.
+   Use the :func:`measurement_strategy` parameter instead. See :ref:`api_reference/api/migration_guide`.
 
 -----------
 API Reference

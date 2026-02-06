@@ -268,7 +268,7 @@ Design Guidelines
 
 When choosing configurations, consider these general principles:
 
-**Start Simple**: Begin with a small ``CircuitBuilder`` (4–6 modes), default ``PROBABILITIES`` measurement, and a lightweight classical head.
+**Start Simple**: Begin with a small ``CircuitBuilder`` (4–6 modes), default ``MeasurementStrategy.probs()`` measurement, and a lightweight classical head.
 
 **Match Complexity to Problem**:
 

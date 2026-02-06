@@ -140,6 +140,8 @@ Example: Manual Perceval circuit (more control)
    :width: 600px
    :align: center
 
+Here, the grouping can also be directly added to the ``MeasurementStrategy`` object used in the ``measurement_strategy`` parameter.
+
 See the User guide and Notebooks for more advanced usage and training routines !
 
 Input states and amplitude encoding
@@ -268,3 +270,9 @@ The snippet below prepares a basic quantum layer and returns a ``ProbabilityDist
     probs = layer(x)
     assert isinstance(probs,ProbabilityDistribution)
     assert isinstance(probs.tensor,torch.Tensor)
+
+Deprecations
+-------------------------
+.. deprecated:: 0.4
+   The use of the ``no_bunching`` flag  is deprecated and will be removed in version 0.4.
+   Use the :func:`measurement_strategy` parameter instead. See :ref:`migration_guide`.

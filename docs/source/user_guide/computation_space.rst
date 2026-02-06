@@ -65,6 +65,11 @@ We can choose from
 Those computation spaces can also be assigned with the ``computation_space`` argument in the constructor but, it
 is prefered to exploit the ``measurement_strategy`` since ``computation_space`` will be deprecated in the future.
 
+It will be the only way to control the computation space as the ``no_bunching`` flag will be deprecated as well.
+.. deprecated:: 0.4
+   The use of the ``no_bunching`` flag  is deprecated and will be removed in version 0.4.
+   Use the :func:`measurement_strategy` parameter instead. See :ref:`api_reference/api/migration_guide`.
+
 Another parameter is also relevent.
 ``index_photons``
     Optional per-photon constraints on allowed modes.  This lets you carve out logical

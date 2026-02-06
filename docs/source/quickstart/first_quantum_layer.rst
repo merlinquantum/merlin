@@ -188,11 +188,9 @@ More informations on measurement strategies can be found here: :doc:`../user_gui
 Choosing a computation space
 ============================
 
-The ``computation_space`` parameter controls how Perceval truncates the Fock space. If
-you omit it, MerLin falls back to ``ComputationSpace.FOCK`` (or ``UNBUNCHED`` when the
-legacy ``no_bunching`` flag is active). It needs to be defined in the MeasurementStrategy 
-object as the computation_space input will be deprecated. Override the default when you need explicit
-control:
+The ``computation_space`` parameter is not recommended, it will be deprecated in the future. Instead, define the computation_space,
+how Perceval truncates the Fock space, in the MeasurementStrategy chosen. By default the computation_space is the ``ComputationSpace.UNBUNCHED``.
+Override the default when you need explicit control:
 
 .. code-block:: python
 

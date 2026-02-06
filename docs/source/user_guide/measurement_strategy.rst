@@ -120,6 +120,22 @@ measurement strategy converts the distribution into classical features. As a con
 * ``MeasurementStrategy.probs()`` and ``MeasurementStrategy.mode_expectations()`` transparently work with any noise model and detector setup.
 * ``MeasurementStrategy.amplitudes()`` requires direct access to the complex amplitudes and therefore **cannot** be used when a noise model or custom detectors are defined (the layer will raise a ``RuntimeError``).
 
+Computation space and grouping
+============================================
+The measurement strategy is now a first class object that contains all of the informations of the output of the layer for SLOS optimizations.
+The MeasurementStrategy now gets two arguments in input.
+
+* ``computation_space``: A ``ComputationSpace`` object that defines the output computation space.
+
+  It will be the only way to define the computation space as the ``no_bunching`` flag will be deprecated.
+  .. deprecated:: 0.4
+   The use of the ``no_bunching`` flag  is deprecated and will be removed in version 0.4.
+   Use the :func:`measurement_strategy` parameter instead. See :ref:`api_reference/api/migration_guide`.
+
+
+* ``grouping``: The grouping strategy to use between ``LexGrouping`` and ``ModGrouping``. By default, no grouping is applied.
+
+
 Migrating from OutputMappingStrategy (legacy)
 ============================================
 
@@ -149,7 +165,7 @@ Selection Cheat Sheet
      - ``PROBABILITIES`` + ``LexGrouping`` / ``ModGrouping``
      - Preserves probability mass while reducing dimensionality.
    * - Hardware-friendly analytics
-     - ``MODE_EXPECTATIONS`` (``no_bunching`` to taste)
+     - ``MODE_EXPECTATIONS`` (``ComputationSpace.UNBUNCHED`` to taste)
      - Outputs one feature per mode, easy to interpret.
    * - Algorithm debugging
      - ``AMPLITUDES``

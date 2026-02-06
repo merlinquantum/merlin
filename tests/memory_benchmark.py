@@ -31,7 +31,7 @@ import torch
 from pynvml_utils import nvidia_smi
 from torch.amp import GradScaler, autocast
 
-from merlin import MeasurementStrategy, QuantumLayer
+from merlin import MeasurementStrategy, QuantumLayer, ComputationSpace
 
 parser = argparse.ArgumentParser(description="Test MerLin on your GPU !")
 parser.add_argument(
@@ -117,20 +117,23 @@ def benchmark_bs(MODES=8, PHOTONS=4, BS=32, TYPE=torch.float32, set_hp=False):
     print(
         f"\n Create circuit with input state = {input_state} (nb photons = {sum(input_state)}, nb parameters = {nb_parameters})"
     )
-    input_size = len([
-        p.name
-        for p in circuit.get_parameters()
-        if p.name.startswith("theta") or p.name.startswith("phase")
-    ])
+    input_size = len(
+        [
+            p.name
+            for p in circuit.get_parameters()
+            if p.name.startswith("theta") or p.name.startswith("phase")
+        ]
+    )
     q_model = QuantumLayer(
         input_size=input_size,
         circuit=circuit,
         input_state=input_state,
         trainable_parameters=[],
         input_parameters=["phase", "theta"],
-        measurement_strategy=MeasurementStrategy.probs(),
+        measurement_strategy=MeasurementStrategy.probs(
+            computation_space=ComputationSpace.UNBUNCHED
+        ),
         device=device,
-        no_bunching=True,
     )
     print(f"Checking device of qlayer = {q_model.device}")
     t_end_layer = time.time() - t_start_layer
@@ -312,9 +315,9 @@ def save_experiment_results(results, filename="bunched_results.json"):
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    assert args.photons <= args.modes // 2, (
-        "You cannot have more photons than half the number of modes"
-    )
+    assert (
+        args.photons <= args.modes // 2
+    ), "You cannot have more photons than half the number of modes"
     assert args.photons > 0, "You need at least 1 photon !"
 
     benchmark_bs(
