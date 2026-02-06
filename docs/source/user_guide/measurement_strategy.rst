@@ -127,7 +127,7 @@ The MeasurementStrategy now gets two arguments in input.
 
 * ``computation_space``: A ``ComputationSpace`` object that defines the output computation space.
 
-  It will be the only way to define the computation space as the ``no_bunching`` flag will be deprecated.
+  It will be the only way to define the computation space as the ``no_bunching`` flag is deprecated.
   .. deprecated:: 0.4
    The use of the ``no_bunching`` flag  is deprecated and will be removed in version 0.4.
    Use the :func:`measurement_strategy` parameter instead. See :ref:`api_reference/api/migration_guide`.

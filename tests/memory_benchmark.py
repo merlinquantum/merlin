@@ -31,7 +31,7 @@ import torch
 from pynvml_utils import nvidia_smi
 from torch.amp import GradScaler, autocast
 
-from merlin import MeasurementStrategy, QuantumLayer, ComputationSpace
+from merlin import ComputationSpace, MeasurementStrategy, QuantumLayer
 
 parser = argparse.ArgumentParser(description="Test MerLin on your GPU !")
 parser.add_argument(
@@ -94,7 +94,8 @@ def benchmark_bs(MODES=8, PHOTONS=4, BS=32, TYPE=torch.float32, set_hp=False):
     circuit = pcvl.GenericInterferometer(
         MODES,
         lambda i: (
-            pcvl.BS(theta=pcvl.P(f"theta_1_{i}"))
+            pcvl
+            .BS(theta=pcvl.P(f"theta_1_{i}"))
             .add(0, pcvl.PS(pcvl.P(f"phase_1_{i}")))
             .add(0, pcvl.BS(theta=pcvl.P(f"theta_2_{i}")))
             .add(0, pcvl.PS(pcvl.P(f"phase_2_{i}")))
@@ -117,13 +118,11 @@ def benchmark_bs(MODES=8, PHOTONS=4, BS=32, TYPE=torch.float32, set_hp=False):
     print(
         f"\n Create circuit with input state = {input_state} (nb photons = {sum(input_state)}, nb parameters = {nb_parameters})"
     )
-    input_size = len(
-        [
-            p.name
-            for p in circuit.get_parameters()
-            if p.name.startswith("theta") or p.name.startswith("phase")
-        ]
-    )
+    input_size = len([
+        p.name
+        for p in circuit.get_parameters()
+        if p.name.startswith("theta") or p.name.startswith("phase")
+    ])
     q_model = QuantumLayer(
         input_size=input_size,
         circuit=circuit,
@@ -315,9 +314,9 @@ def save_experiment_results(results, filename="bunched_results.json"):
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    assert (
-        args.photons <= args.modes // 2
-    ), "You cannot have more photons than half the number of modes"
+    assert args.photons <= args.modes // 2, (
+        "You cannot have more photons than half the number of modes"
+    )
     assert args.photons > 0, "You need at least 1 photon !"
 
     benchmark_bs(

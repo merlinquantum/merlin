@@ -189,7 +189,7 @@ Choosing a computation space
 ============================
 
 The ``computation_space`` parameter is not recommended, it will be deprecated in the future. Instead, define the computation_space,
-how Perceval truncates the Fock space, in the MeasurementStrategy chosen. By default the computation_space is the ``ComputationSpace.UNBUNCHED``.
+how Perceval truncates the Fock space, in the MeasurementStrategy chosen. By default the computation space is the ``ComputationSpace.UNBUNCHED``.
 Override the default when you need explicit control:
 
 .. code-block:: python

@@ -65,7 +65,8 @@ class TestPercevalComparison:
             parameters.append(parameter)
 
         chip = (
-            pcvl.Circuit(self.N_MODES, name="chip")
+            pcvl
+            .Circuit(self.N_MODES, name="chip")
             .add(0, pre_U)
             .add(0, phases_U, merge=False)
             .add(0, reservoir_U, merge=False)

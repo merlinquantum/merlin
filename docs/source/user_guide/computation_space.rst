@@ -60,12 +60,12 @@ The ``measurement_strategy`` can define the computation space with its ``computa
 We can choose from 
   - ``merlin.ComputationSpace.UNBUNCHED``, do not allow multiple photons per modes.
   - ``merlin.ComputationSpace.FOCK``, allow multiple photons per modes (i.e. explore the full Fock space).
-  - ``merlin.ComputationSpace.DUAL_RAIL``, Use a dual rail encoding (two modes per photon).
+  - ``merlin.ComputationSpace.DUAL_RAIL``, use a dual rail encoding (two modes per photon).
 
 Those computation spaces can also be assigned with the ``computation_space`` argument in the constructor but, it
 is prefered to exploit the ``measurement_strategy`` since ``computation_space`` will be deprecated in the future.
 
-It will be the only way to control the computation space as the ``no_bunching`` flag will be deprecated as well.
+It will be the only way to control the computation space as the ``no_bunching`` flag is deprecated.
 .. deprecated:: 0.4
    The use of the ``no_bunching`` flag  is deprecated and will be removed in version 0.4.
    Use the :func:`measurement_strategy` parameter instead. See :ref:`api_reference/api/migration_guide`.
