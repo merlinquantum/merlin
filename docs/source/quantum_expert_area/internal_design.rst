@@ -105,14 +105,14 @@ the measured outcomes. Branch bookkeeping keeps track of:
 At the end of the execution the block can expose different classical views over
 the surviving quantum modes. Much like :class:`~merlin.algorithms.layer.QuantumLayer`,
 the ``measurement_strategy`` parameter switches between raw amplitudes, dense
-probabilities, or per-mode expectations. ``measurement_strategy=AMPLITUDES``
+probabilities, or per-mode expectations. ``measurement_strategy=merlin.MeasurementStrategy.amplitudes()``
 returns a list of tuples ``(measurement_key, branch_probability,
 remaining_photons, amplitudes)`` so callers can reason about the remaining
-mixed state. ``PROBABILITIES`` collapses every branch into a tensor of shape
+mixed state. ``merlin.MeasurementStrategy.probs()`` collapses every branch into a tensor of shape
 ``(batch_size, len(output_keys))`` where the columns already align with the
 fully specified Fock states recorded in
 :pyattr:`~merlin.algorithms.feed_forward.FeedForwardBlock.output_keys`.
-``MODE_EXPECTATIONS`` produces a ``(batch_size, num_modes)`` tensor describing
+``merlin.MeasurementStrategy.mode_expectations()`` produces a ``(batch_size, num_modes)`` tensor describing
 the photon expectations per mode. The result is already aggregated across all
 measurement keys, so :pyattr:`~merlin.algorithms.feed_forward.FeedForwardBlock.output_keys`
 is retained solely for metadata while
@@ -221,5 +221,7 @@ on the encoding mode:
   input states (superposition components) through a single unitary.
 
 Refer to ``QuantumLayer`` for the exact wiring and measurement strategies
-(``PROBABILITIES``, ``AMPLITUDES``, ``MODE_EXPECTATIONS``) layered on top of the
-SLOS outputs.
+(``measurement_strategy=merlin.MeasurementStrategy.probs()``, 
+``measurement_strategy=merlin.MeasurementStrategy.amplitudes()``, 
+``measurement_strategy=merlin.MeasurementStrategy.mode_expectations()``) 
+layered on top of the SLOS outputs.

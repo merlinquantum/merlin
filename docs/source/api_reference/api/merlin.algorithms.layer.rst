@@ -199,7 +199,7 @@ For comparison, the ``amplitude_encoding`` variant supplies the photonic state d
     import torch
     import perceval as pcvl
     from merlin.algorithms.layer import QuantumLayer
-    from merlin.core import ComputationSpace
+    from merlin.core import MeasurementStrategy,ComputationSpace
 
     circuit = pcvl.Circuit(3)
 
@@ -207,7 +207,7 @@ For comparison, the ``amplitude_encoding`` variant supplies the photonic state d
         circuit=circuit,
         n_photons=2,
         amplitude_encoding=True,
-        computation_space=ComputationSpace.UNBUNCHED,
+        measurement_strategy=MeasurementStrategy.probs(computation_space=ComputationSpace.UNBUNCHED),
         dtype=torch.cdouble,
     )
 
@@ -275,4 +275,4 @@ Deprecations
 -------------------------
 .. deprecated:: 0.4
    The use of the ``no_bunching`` flag  is deprecated and will be removed in version 0.4.
-   Use the :func:`measurement_strategy` parameter instead. See :ref:`migration_guide`.
+   Use the ``computation_space`` flag inside ``measurement_strategy`` instead. See :ref:`migration_guide`.

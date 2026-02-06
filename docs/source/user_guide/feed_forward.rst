@@ -48,25 +48,25 @@ propagated in amplitude-encoding mode.
 ``measurement_strategy`` controls the classical view exposed by
 :meth:`~merlin.algorithms.feed_forward.FeedForwardBlock.forward`:
 
-* ``PROBABILITIES`` (default): returns a tensor of shape
+* ``merlin.MeasurementStrategy.probs()`` (default): returns a tensor of shape
   ``(batch_size, len(output_keys))``. Each column already corresponds to the
   fully specified Fock state listed in
   :pyattr:`~merlin.algorithms.feed_forward.FeedForwardBlock.output_keys`.
-* ``MODE_EXPECTATIONS``: returns a tensor of shape
+* ``merlin.MeasurementStrategy.mode_expectations()``: returns a tensor of shape
   ``(batch_size, num_modes)`` containing the per-mode photon expectations
   aggregated across **all** measurement keys. The
   :pyattr:`~merlin.algorithms.feed_forward.FeedForwardBlock.output_keys` list is
   retained for metadata while
   :pyattr:`~merlin.algorithms.feed_forward.FeedForwardBlock.output_state_sizes`
   stores ``num_modes`` for each entry.
-* ``AMPLITUDES``: list of tuples
+* ``merlin.MeasurementStrategy.amplitudes()``: list of tuples
   ``(measurement_key, branch_probability, remaining_photons, amplitudes)``
   describing the mixed state produced after every partial measurement.
 
 For tensor outputs the attribute
 :pyattr:`~merlin.algorithms.feed_forward.FeedForwardBlock.output_keys` lists the
-measurement tuple corresponding to each column. ``PROBABILITIES`` therefore
-directly aligns with the dictionary keys, whereas ``MODE_EXPECTATIONS``
+measurement tuple corresponding to each column. ``merlin.MeasurementStrategy.probs()`` therefore
+directly aligns with the dictionary keys, whereas ``merlin.MeasurementStrategy.mode_expectations()``
 retains the key ordering purely as metadata because the returned tensor is
 already aggregated across all outcomes.
 
