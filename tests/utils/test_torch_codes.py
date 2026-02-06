@@ -74,7 +74,7 @@ def test_torch_codes():
 
     num_features = 1
     circuit_type = CircuitType.SERIES
-    bandwidth_coeffs = {i: (1.0 + i / n_modes) for i in range(n_modes)}
+    bandwidth_coeffs = None
     expected_res = torch.tensor([[2.7717, 5.5435, 8.3152], [2.8746, 5.7491, 8.6237]])
     _run_partial_test(
         n_modes, num_features, circuit_type, bandwidth_coeffs, expected_res
@@ -90,6 +90,7 @@ def test_torch_codes():
 
     num_features = 1
     circuit_type = CircuitType.PARALLEL
+    bandwidth_coeffs = None
     expected_res = torch.tensor([[2.9555, 2.9555, 2.9555], [0.4184, 0.4184, 0.4184]])
     _run_partial_test(
         n_modes, num_features, circuit_type, bandwidth_coeffs, expected_res
@@ -97,13 +98,17 @@ def test_torch_codes():
 
     num_features = 3
     circuit_type = CircuitType.PARALLEL
-    expected_res = torch.tensor([[2.9361, 1.8648, 2.7313], [1.7835, 2.3282, 1.3490]])
+    bandwidth_coeffs = {
+        "dim_" + str(i): (1.0 + i / n_modes) for i in range(num_features)
+    }
+    expected_res = torch.tensor([[2.9361, 2.3310, 4.0970], [1.7835, 2.9103, 2.0235]])
     _run_partial_test(
         n_modes, num_features, circuit_type, bandwidth_coeffs, expected_res
     )
 
     num_features = 3
     circuit_type = CircuitType.PARALLEL_COLUMNS
+    bandwidth_coeffs = None
     expected_res = torch.tensor([
         [
             8.7390,
