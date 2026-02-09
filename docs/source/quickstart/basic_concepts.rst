@@ -237,9 +237,15 @@ Typed outputs with ``return_object=True``
 When ``return_object=True``, the layer returns typed Merlin objects instead of bare
 tensors, carrying metadata such as mode count, photon number, and computation space:
 
-- ``.probs()`` → :class:`~merlin.core.probability_distribution.ProbabilityDistribution`
-- ``.amplitudes()`` → :class:`~merlin.core.state_vector.StateVector`
+- ``.probs()`` → :class:`~merlin.core.probability_distribution.ProbabilityDistribution`, an object that regroups all of the possible outcomes and their probabilities.
+For more details, :doc:`/api_reference/api/merlin.algorithms.core.probability_distribution`.
+- ``.amplitudes()`` → :class:`~merlin.core.state_vector.StateVector`, an object that regroups all of the possible state_vectors at the end of the circuit and their basis state decomposition.
+For more details, :doc:`/api_reference/api/merlin.algorithms.core.state_vector`.
 - ``.mode_expectations()`` → ``torch.Tensor``
+
+Even when ``return_object=False``,
+- ``.partial()`` → :class:`~merlin.core.partial_measurement.PartialMeasurement`, an object that regroups all of the measurement results and possible output ``StateVectors``.
+For more details, :doc:`/api_reference/api/merlin.algorithms.core.partial_measurement`.
 
 
 Putting It All Together
