@@ -237,6 +237,11 @@ it is set to False. See the following output matrix to size what to expect as th
 |   PARTIAL_MEASUREMENT    |  PartialMeasurement    |  PartialMeasurement       |
 |   MODE_EXPECTATIONS      |  torch.Tensor          |  torch.Tensor             |
 
+For more information on the typed output capabilities, follow the following links:
+- ``StateVector`` : :doc:`/api_reference/api/merlin.algorithms.core.state_vector`
+- ``ProbabilityDistribution`` : :doc:`/api_reference/api/merlin.algorithms.core.ProbabilityDistribution`
+- ``PartialMeasurement`` : :doc:`/api_reference/api/merlin.algorithms.core.PartialMeasurement`
+
 Most of the typed objects can give the ``torch.Tensor`` as an output with the ``.tensor`` parameter. Only the 
 PartialMeasurement object is a little different. See its according documentation.
 
