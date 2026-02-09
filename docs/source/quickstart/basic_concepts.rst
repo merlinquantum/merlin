@@ -234,8 +234,8 @@ No special constructor flags are needed — just pass the right type.
 Typed outputs with ``return_object=True``
 -----------------------------------------
 
-When ``return_object=True``, the layer returns typed Merlin objects instead of bare
-tensors, carrying metadata such as mode count, photon number, and computation space:
+By default, the output of the QuantumLayer's forward function is a ``torch.Tensor``. Howerver if the parameter ``return_object`` is set to True in the initialization
+(it is False by default), the layer returns typed Merlin objects instead of bare tensors, carrying metadata such as mode count, photon number, and computation space:
 
 - ``.probs()`` → :class:`~merlin.core.probability_distribution.ProbabilityDistribution`, an object that regroups all of the possible outcomes and their probabilities.
 For more details, :doc:`/api_reference/api/merlin.algorithms.core.probability_distribution`.
