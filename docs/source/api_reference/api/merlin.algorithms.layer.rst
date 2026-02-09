@@ -275,4 +275,4 @@ Deprecations
 -------------------------
 .. deprecated:: 0.4
    The use of the ``no_bunching`` flag  is deprecated and will be removed in version 0.4.
-   Use the ``computation_space`` flag inside ``measurement_strategy`` instead. See :ref:`migration_guide`.
+   Use the ``computation_space`` flag inside ``measurement_strategy`` instead. See :doc:`/user_guide/migration_guide`.

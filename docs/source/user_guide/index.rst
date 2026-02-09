@@ -19,3 +19,4 @@ User Guide
    kernels
    feed_forward
    remote_execution
+   migration_guide

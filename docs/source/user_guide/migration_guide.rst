@@ -1,3 +1,5 @@
+.. _user_guide_migration_guide:
+
 Migrating from ``no_bunching`` (deprecated)
 ==========================================
 
