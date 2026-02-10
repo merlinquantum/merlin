@@ -26,9 +26,9 @@ from .base import AbstractComputationProcess
 from .circuit import Circuit
 from .components import BeamSplitter, Component, EntanglingBlock, Rotation
 from .computation_space import ComputationSpace
-from .generators import CircuitGenerator, CircuitType, StateGenerator, StatePattern
 from .probability_distribution import ProbabilityDistribution
 from .process import ComputationProcess, ComputationProcessFactory
+from .state import StatePattern, generate_state
 from .state_vector import StateVector
 
 __all__ = [
@@ -36,10 +36,8 @@ __all__ = [
     "ComputationProcess",
     "ComputationProcessFactory",
     "ComputationSpace",
-    "CircuitType",
     "StatePattern",
-    "CircuitGenerator",
-    "StateGenerator",
+    "generate_state",
     "Component",
     "Rotation",
     "BeamSplitter",

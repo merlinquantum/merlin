@@ -6,8 +6,8 @@
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
+# copies of the Software, and to permit persons to do so, subject to the
+# following conditions:
 #
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
@@ -20,23 +20,14 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""
-Utility subpackages for Merlin.
+import typing as t
 
-This module exposes commonly used utility helpers so they can be imported from
-``merlin.utils``.
-"""
+import pytest
 
-from .combinadics import Combinadics
-from .deprecations import sanitize_parameters
-from .dtypes import resolve_float_complex, to_torch_dtype
-from .grouping import LexGrouping, ModGrouping
+from merlin.core.state import StatePattern, generate_state
 
-__all__ = [
-    "LexGrouping",
-    "ModGrouping",
-    "Combinadics",
-    "sanitize_parameters",
-    "resolve_float_complex",
-    "to_torch_dtype",
-]
+
+def test_generate_state_unknown_pattern_raises() -> None:
+    bogus_pattern = t.cast(StatePattern, "bogus")
+    with pytest.raises(ValueError):
+        generate_state(4, 2, bogus_pattern)

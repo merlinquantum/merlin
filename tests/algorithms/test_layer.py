@@ -503,9 +503,7 @@ class TestQuantumLayer:
             measurement_strategy=ML.MeasurementStrategy.probs(),
         )
 
-        expected_state = ML.StateGenerator.generate_state(
-            circuit.m, 2, ML.StatePattern.SPACED
-        )
+        expected_state = ML.generate_state(circuit.m, 2, ML.StatePattern.SPACED)
         assert layer.input_state == expected_state
 
     def test_gradient_computation(self):

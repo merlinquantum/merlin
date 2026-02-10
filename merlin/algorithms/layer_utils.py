@@ -46,7 +46,7 @@ import torch
 
 from ..builder.circuit_builder import CircuitBuilder
 from ..core.computation_space import ComputationSpace
-from ..core.generators import StateGenerator, StatePattern
+from ..core.state import StatePattern, generate_state
 from ..core.state_vector import StateVector
 from ..measurement.detectors import resolve_detectors
 from ..measurement.photon_loss import resolve_photon_loss
@@ -291,7 +291,7 @@ def prepare_input_state(
                 raise ValueError(
                     "circuit_m must be provided to generate default state when input_state is omitted."
                 )
-            input_state = StateGenerator.generate_state(
+            input_state = generate_state(
                 circuit_m, n_photons, StatePattern.SPACED
             )
 

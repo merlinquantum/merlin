@@ -31,7 +31,7 @@ import torch
 from torch import Tensor
 
 from ..builder.circuit_builder import ANGLE_ENCODING_MODE_ERROR, CircuitBuilder
-from ..core.generators import StateGenerator, StatePattern
+from ..core.state import StatePattern, generate_state
 from ..measurement.autodiff import AutoDiffProcess
 from ..measurement.detectors import DetectorTransform, resolve_detectors
 from ..measurement.photon_loss import PhotonLossTransform, resolve_photon_loss
@@ -604,9 +604,7 @@ class KernelCircuitBuilder:
         if input_state is None:
             n_modes = self._n_modes or max(self._input_size or 2, 4)
             n_photons = self._n_photons or (self._input_size or 2)
-            input_state = StateGenerator.generate_state(
-                n_modes, n_photons, StatePattern.SPACED
-            )
+            input_state = generate_state(n_modes, n_photons, StatePattern.SPACED)
 
         return FidelityKernel(
             feature_map=feature_map,
