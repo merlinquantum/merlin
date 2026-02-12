@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import torch
 import torch.nn as nn
-from _helpers import make_layer
+from ._helpers import make_layer
 
 from merlin.core.computation_space import ComputationSpace
 from merlin.core.merlin_processor import MerlinProcessor

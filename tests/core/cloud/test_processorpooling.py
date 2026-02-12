@@ -5,7 +5,7 @@ import time
 from itertools import combinations
 
 import torch
-from _helpers import make_layer, spin_until
+from ._helpers import make_layer, spin_until
 
 from merlin.core.computation_space import ComputationSpace
 from merlin.core.merlin_processor import MerlinProcessor

@@ -6,7 +6,7 @@ import concurrent.futures as _cf
 import pytest
 import torch
 import torch.nn as nn
-from _helpers import make_layer, spin_until
+from ._helpers import make_layer, spin_until
 
 from merlin.core.computation_space import ComputationSpace
 from merlin.core.merlin_processor import MerlinProcessor
