@@ -26,10 +26,13 @@ jobs:
       - name: Install build tooling
         run: |
           python -m pip install --upgrade pip
-          python -m pip install build twine
+          python -m pip install build twine wheel
+
+      - name: Clean build artifacts
+        run: rm -rf dist build *.egg-info **/*.egg-info    
 
       - name: Build sdist and wheel
-        run: python -m build
+        run: python setup.py sdist bdist_wheel
 
       - name: Twine check
         run: python -m twine check dist/*
