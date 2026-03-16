@@ -17,7 +17,7 @@ Nearest Centroid Classification on a Trapped Ion Quantum Computer
 
    **Reproduction Status**: Complete
 
-   **Reproducer**: [Reproducer Name] ([Reproducer Email])
+   **Reproducer**: [Benjamin Stott] ([benjamin.stott@quandela.com])
 
 Abstract
 ========
