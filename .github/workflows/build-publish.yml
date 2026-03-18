@@ -32,7 +32,7 @@ jobs:
         run: rm -rf dist build *.egg-info **/*.egg-info    
 
       - name: Build sdist and wheel
-        run: python setup.py sdist bdist_wheel
+        run: python -m build --wheel
 
       - name: Twine check
         run: python -m twine check dist/*
