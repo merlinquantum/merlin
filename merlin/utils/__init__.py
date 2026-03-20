@@ -36,6 +36,7 @@ from .normalization import (
     normalize_probabilities_and_amplitudes,
     probabilities_from_amplitudes,
 )
+from .post_selection import post_select_probs
 
 __all__ = [
     "LexGrouping",
@@ -47,4 +48,5 @@ __all__ = [
     "sanitize_parameters",
     "resolve_float_complex",
     "to_torch_dtype",
+    "post_select_probs"
 ]
