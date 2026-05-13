@@ -6,6 +6,7 @@
 [![Docs](https://img.shields.io/badge/docs-merlinquantum.ai-0A7BBB?style=flat-square&logo=readthedocs)](https://merlinquantum.ai)
 [![License](https://img.shields.io/github/license/merlinquantum/merlin?style=flat-square&label=license)](https://github.com/merlinquantum/merlin/blob/main/LICENSE)
 [![arXiv](https://img.shields.io/badge/arXiv-2602.11092-B31B1B?style=flat-square)](https://arxiv.org/abs/2602.11092)
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fmerlinquantum%2Fmerlin.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Fmerlinquantum%2Fmerlin?ref=badge_shield)
 
 MerLin brings quantum computing capabilities to AI practitioners through easy-to-use PyTorch integrations. Named after the legendary wizard, MerLin adds quantum wizardry to your AI toolkit with no quantum expertise required.
 
@@ -166,6 +167,9 @@ See our [Contributing Guide](https://github.com/merlinquantum/merlin/blob/main/C
 ## License
 
 MIT License - see [LICENSE](https://github.com/merlinquantum/merlin/blob/main/LICENSE) for details.
+
+
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fmerlinquantum%2Fmerlin.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Fmerlinquantum%2Fmerlin?ref=badge_large)
 
 ## Support
 
