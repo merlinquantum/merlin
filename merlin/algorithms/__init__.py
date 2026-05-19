@@ -34,6 +34,7 @@ from .feed_forward_legacy import (
 )
 from .kernels import FeatureMap, FidelityKernel
 from .layer import QuantumLayer
+from .lora import QuantumAnsatz, QuantumLoRALayer, convert_to_quantum_lora
 from .loss import NKernelAlignment
 
 __all__ = [
@@ -41,6 +42,9 @@ __all__ = [
     "FidelityKernel",
     "NKernelAlignment",
     "QuantumLayer",
+    "QuantumLoRALayer",
+    "QuantumAnsatz",
+    "convert_to_quantum_lora",
     "FeedForwardBlock",
     "FeedForwardBlockLegacy",
     "PoolingFeedForwardLegacy",

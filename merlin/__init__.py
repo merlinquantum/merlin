@@ -38,6 +38,7 @@ from .algorithms.feed_forward_legacy import (
 )
 from .algorithms.kernels import FeatureMap, FidelityKernel
 from .algorithms.layer import QuantumLayer
+from .algorithms.lora import QuantumAnsatz, QuantumLoRALayer, convert_to_quantum_lora
 from .algorithms.loss import NKernelAlignment
 from .bridge.quantum_bridge import QuantumBridge
 from .builder.circuit_builder import CircuitBuilder
@@ -72,6 +73,9 @@ __description__ = "Photonic Quantum Machine Learning Framework"
 __all__ = [
     # Core classes (most common usage)
     "QuantumLayer",
+    "QuantumLoRALayer",
+    "QuantumAnsatz",
+    "convert_to_quantum_lora",
     "QuantumBridge",
     # Configuration enums
     "ComputationSpace",
