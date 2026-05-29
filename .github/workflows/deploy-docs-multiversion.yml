@@ -3,7 +3,7 @@ name: Deploy Multi-version Docs
 on:
   push:
     branches:
-      - PML-200 # TODO : Replace it by "main"
+      - main # TODO : Replace it by "main"
     tags:
       - 'v*'
     workflow_dispatch: # AJOUT : Permet le déclenchement manuel pour les tests
