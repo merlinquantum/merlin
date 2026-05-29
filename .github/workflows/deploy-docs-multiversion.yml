@@ -7,7 +7,7 @@ on:
     tags:
       - 'v*'
     workflow_dispatch: # AJOUT : Permet le déclenchement manuel pour les tests
-name: Deploy Multi-version Docs
+
 permissions:
   contents: read
   pages: write
