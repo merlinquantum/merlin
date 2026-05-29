@@ -3,7 +3,7 @@ name: Deploy Multi-version Docs
 on:
   push:
     branches:
-      - main # TODO : Replace it by "main"
+      - PML-200 # TODO : Replace it by "main"
     tags:
       - 'v*'
     workflow_dispatch: # AJOUT : Permet le déclenchement manuel pour les tests
@@ -50,7 +50,7 @@ jobs:
 
       - name: Setup default redirect
         run: |
-          echo '<meta http-equiv="refresh" content="0; url=./main/index.html" />' > docs/build/html/index.html
+          echo '<meta http-equiv="refresh" content="0; url=./v0.4.0/index.html" />' > docs/build/html/index.html
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
