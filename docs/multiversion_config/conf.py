@@ -62,7 +62,7 @@ def keep_latest_versions(versions, mini=None):
     for one_version in versions:
         # major_version = re.match(r"v\d+", one_version).group()
 
-        #TODO : for the reviewer, check if this necessary, I added it to provide the runner to build archive/restructuration
+        #TODO : for the reviewer, check if this is necessary, I added it to provide the runner to build archive/restructuration
         if not re.match(r"^\d+\.\d+", one_version):
             continue
         try:
