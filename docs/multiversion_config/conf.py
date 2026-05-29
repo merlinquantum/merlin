@@ -96,7 +96,7 @@ smv_tag_whitelist = versions_regex
 smv_branch_whitelist = None
 
 # Whitelist pattern for remotes (set to None to use local branches only)
-smv_remote_whitelist = None
+smv_remote_whitelist = r'^(origin|upstream)$'
 
 # Pattern for released versions
 smv_released_pattern = r".*"

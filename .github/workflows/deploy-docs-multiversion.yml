@@ -1,0 +1,62 @@
+name: Deploy Multi-version Docs
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+    workflow_dispatch: # AJOUT : Permet le déclenchement manuel pour les tests
+name: Deploy Multi-version Docs
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build-and-deploy:
+    # Déclaration obligatoire pour autoriser le déploiement
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pandoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pandoc
+
+      - name: Install documentation dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[docs]"
+          pip install GitPython # Ajout obligatoire pour le conf.py
+
+      - name: Build multiversion docs
+        # Indication stricte du dossier de travail
+        working-directory: docs
+        run: make multiversion
+
+      - name: Setup default redirect
+        run: |
+          echo '<meta http-equiv="refresh" content="0; url=./main/index.html" />' > docs/build/html/index.html
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/build/html
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
