@@ -7,7 +7,7 @@ on:
     tags:
       - 'v*'
     workflow_dispatch: # AJOUT : Permet le déclenchement manuel pour les tests
-
+# TODO : to suppress
 permissions:
   contents: read
   pages: write
