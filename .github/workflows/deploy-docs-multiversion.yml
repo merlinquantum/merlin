@@ -48,9 +48,9 @@ jobs:
         working-directory: docs
         run: make multiversion
 
-      - name: Setup default redirect
+      - name: Setup default redirect and nojekyll
         run: |
-          echo '<meta http-equiv="refresh" content="0; url=./0.3/index.html" />' > docs/build/html/index.html
+          echo '<meta http-equiv="refresh" content="0; url=./0.3.2/index.html" />' > docs/build/html/index.html
           touch docs/build/html/.nojekyll
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

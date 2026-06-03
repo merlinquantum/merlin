@@ -55,48 +55,49 @@ def version_highter_then(v1, v2):
     return True
 
 
-def keep_latest_versions(versions, mini=None):
-    """keep latest version"""
-    version_dict = {}
+# def keep_latest_versions(versions, mini=None):
+#     """keep latest version"""
+#     version_dict = {}
 
-    for one_version in versions:
-        # major_version = re.match(r"v\d+", one_version).group()
+#     for one_version in versions:
+#         # major_version = re.match(r"v\d+", one_version).group()
 
-        #TODO : for the reviewer, check if this is necessary, I added it to provide the runner to build archive/restructuration
-        if not re.match(r"^\d+\.\d+", one_version):
-            continue
-        try:
-            major_version = re.match(r"v\d+\.(\d+)", one_version).groups()
-        except AttributeError:
-            major_version = "0.0.0"
-        if "-" not in one_version:
-            # filter alpha,beta...
-            if (
-                major_version not in version_dict
-                or one_version > version_dict[major_version]
-            ) and (mini is not None and version_highter_then(one_version, mini)):
-                version_dict[major_version] = one_version
+#         #TODO : for the reviewer, check if this is necessary, I added it to provide the runner to build archive/restructuration
+#         if not re.match(r"^\d+\.\d+", one_version):
+#             continue
+#         try:
+#             major_version = re.match(r"v\d+\.(\d+)", one_version).groups()
+#         except AttributeError:
+#             major_version = "0.0.0"
+#         if "-" not in one_version:
+#             # filter alpha,beta...
+#             if (
+#                 major_version not in version_dict
+#                 or one_version > version_dict[major_version]
+#             ) and (mini is not None and version_highter_then(one_version, mini)):
+#                 version_dict[major_version] = one_version
 
-    latest_versions = list(version_dict.values())
-    return sorted(latest_versions, key=lambda x: tuple(map(int, re.findall(r"\d+", x))))
+#     latest_versions = list(version_dict.values())
+#     return sorted(latest_versions, key=lambda x: tuple(map(int, re.findall(r"\d+", x))))
 
 
 REPO_PATH = Path(__file__).parent.parent.parent.resolve()
 
 repo = Repo(REPO_PATH)
 tags = [tag.name for tag in repo.tags]
-versions = keep_latest_versions(
-    tags, "v0.1"
-)  # TODO: update the version if necessary (PML-29)
-versions_string = "".join([f"({one_version})|" for one_version in versions])[:-1]
-versions_regex = re.compile(f"^{versions_string}$")
+# versions = keep_latest_versions(
+#     tags, "v0.1"
+# )  # TODO: update the version if necessary (PML-29)
+# versions_string = "".join([f"({one_version})|" for one_version in versions])[:-1]
+# versions_regex = re.compile(f"^{versions_string}$")
 
-print(f"Building {versions_regex}")
+# print(f"Building {versions_regex}")
 
 # Whitelist pattern for tags (set to None to ignore all tags)
-smv_tag_whitelist = versions_regex
+# smv_tag_whitelist = versions_regex
 
-# Whitelist pattern for branches (set to None to ignore all branches)
+smv_tag_whitelist = r"^\d+\.\d+"# Whitelist pattern for branches (set to None to ignore all branches)
+
 smv_branch_whitelist = None
 
 # Whitelist pattern for remotes (set to None to use local branches only)
@@ -105,4 +106,5 @@ smv_remote_whitelist = r'^(origin|upstream)$'
 # Pattern for released versions
 smv_released_pattern = r".*"
 
-smv_regex_name = r"(.*)\..*"
+# smv_regex_name = r"(.*)\..*"
+smv_regex_name = r"^(.*)$"
