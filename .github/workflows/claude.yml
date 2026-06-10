@@ -23,12 +23,14 @@ jobs:
         with:
           script: |
             const trustedAssociations = new Set(['OWNER', 'MEMBER']);
+            const trustedPermissions = new Set(['admin', 'maintain', 'write']);
             const eventName = context.eventName;
             const payload = context.payload;
 
             let body = '';
             let authorAssociation = '';
             let isPullRequestEvent = false;
+            let repositoryPermission = 'unknown';
 
             if (eventName === 'issue_comment') {
               body = payload.comment?.body ?? '';
@@ -42,15 +44,41 @@ jobs:
               body = payload.review?.body ?? '';
               authorAssociation = payload.review?.author_association ?? '';
               isPullRequestEvent = true;
+
+              const reviewComments = await github.paginate(
+                'GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}/comments',
+                {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: payload.pull_request.number,
+                  review_id: payload.review.id,
+                  per_page: 100,
+                }
+              );
+              body = [body, ...reviewComments.map((comment) => comment.body ?? '')].join('\n');
+            }
+
+            try {
+              const response = await github.rest.repos.getCollaboratorPermissionLevel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                username: context.actor,
+              });
+              repositoryPermission = response.data.permission;
+            } catch (error) {
+              core.info(`repository_permission_lookup_failed=${error.status ?? error.message}`);
             }
 
             const hasTriggerPhrase = body.toLowerCase().includes('@claude');
-            const isTrustedActor = trustedAssociations.has(authorAssociation);
+            const isTrustedActor =
+              trustedAssociations.has(authorAssociation) ||
+              trustedPermissions.has(repositoryPermission);
             const isAuthorized = isPullRequestEvent && hasTriggerPhrase && isTrustedActor;
 
             core.info(`event_name=${eventName}`);
             core.info(`actor=${context.actor}`);
             core.info(`author_association=${authorAssociation || 'unknown'}`);
+            core.info(`repository_permission=${repositoryPermission}`);
             core.info(`is_pull_request_event=${isPullRequestEvent}`);
             core.info(`has_trigger_phrase=${hasTriggerPhrase}`);
             core.info(`is_trusted_actor=${isTrustedActor}`);
