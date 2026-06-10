@@ -22,10 +22,15 @@ jobs:
     outputs:
       is-member: ${{ steps.check.outputs.is-member }}
     steps:
-      - name: Validate GitHub App private key
+      - name: Validate GitHub App credentials
         env:
+          CLAUDE_APP_CLIENT_ID: ${{ vars.CLAUDE_APP_CLIENT_ID }}
           CLAUDE_APP_PRIVATE_KEY: ${{ secrets.CLAUDE_APP_PRIVATE_KEY }}
         run: |
+          if [ -z "$CLAUDE_APP_CLIENT_ID" ]; then
+            echo "::error::Repository variable CLAUDE_APP_CLIENT_ID is empty or missing."
+            exit 1
+          fi
           if [ -z "$CLAUDE_APP_PRIVATE_KEY" ]; then
             echo "::error::Repository secret CLAUDE_APP_PRIVATE_KEY is empty or missing."
             exit 1
@@ -35,9 +40,8 @@ jobs:
         id: app-token
         uses: actions/create-github-app-token@v3
         with:
-          app-id: 4019885
+          client-id: ${{ vars.CLAUDE_APP_CLIENT_ID }}
           private-key: ${{ secrets.CLAUDE_APP_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
 
       - name: Check if user is organization member
         id: check
