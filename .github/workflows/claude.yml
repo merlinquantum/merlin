@@ -10,23 +10,6 @@ on:
 
 jobs:
   claude:
-    if: |
-      (
-        github.event_name == 'issue_comment' &&
-        github.event.issue.pull_request &&
-        contains(github.event.comment.body, '@claude') &&
-        contains(fromJSON('["OWNER","MEMBER"]'), github.event.comment.author_association)
-      ) ||
-      (
-        github.event_name == 'pull_request_review_comment' &&
-        contains(github.event.comment.body, '@claude') &&
-        contains(fromJSON('["OWNER","MEMBER"]'), github.event.comment.author_association)
-      ) ||
-      (
-        github.event_name == 'pull_request_review' &&
-        contains(github.event.review.body, '@claude') &&
-        contains(fromJSON('["OWNER","MEMBER"]'), github.event.review.author_association)
-      )
     runs-on: ubuntu-latest
     permissions:
       contents: read         # Read-only access to code
@@ -34,12 +17,54 @@ jobs:
       id-token: write        # Required for authentication
       actions: read          # Required for Claude to read CI results on PRs
     steps:
+      - name: Check Claude trigger authorization
+        id: authorize
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const trustedAssociations = new Set(['OWNER', 'MEMBER']);
+            const eventName = context.eventName;
+            const payload = context.payload;
+
+            let body = '';
+            let authorAssociation = '';
+            let isPullRequestEvent = false;
+
+            if (eventName === 'issue_comment') {
+              body = payload.comment?.body ?? '';
+              authorAssociation = payload.comment?.author_association ?? '';
+              isPullRequestEvent = Boolean(payload.issue?.pull_request);
+            } else if (eventName === 'pull_request_review_comment') {
+              body = payload.comment?.body ?? '';
+              authorAssociation = payload.comment?.author_association ?? '';
+              isPullRequestEvent = true;
+            } else if (eventName === 'pull_request_review') {
+              body = payload.review?.body ?? '';
+              authorAssociation = payload.review?.author_association ?? '';
+              isPullRequestEvent = true;
+            }
+
+            const hasTriggerPhrase = body.toLowerCase().includes('@claude');
+            const isTrustedActor = trustedAssociations.has(authorAssociation);
+            const isAuthorized = isPullRequestEvent && hasTriggerPhrase && isTrustedActor;
+
+            core.info(`event_name=${eventName}`);
+            core.info(`actor=${context.actor}`);
+            core.info(`author_association=${authorAssociation || 'unknown'}`);
+            core.info(`is_pull_request_event=${isPullRequestEvent}`);
+            core.info(`has_trigger_phrase=${hasTriggerPhrase}`);
+            core.info(`is_trusted_actor=${isTrustedActor}`);
+
+            core.setOutput('authorized', String(isAuthorized));
+
       - name: Checkout repository
+        if: steps.authorize.outputs.authorized == 'true'
         uses: actions/checkout@v6
         with:
           fetch-depth: 1
 
       - name: Run Claude Code
+        if: steps.authorize.outputs.authorized == 'true'
         id: claude
         uses: anthropics/claude-code-action@v1
         with:
