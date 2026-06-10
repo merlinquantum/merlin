@@ -28,8 +28,8 @@ jobs:
         id: app-token
         uses: actions/create-github-app-token@v2
         with:
-          appId: 4019885
-          privateKey: ${{ secrets.CLAUDE_APP_PRIVATE_KEY }}
+          app-id: 4019885
+          private-key: ${{ secrets.CLAUDE_APP_PRIVATE_KEY }}
 
       - name: Check if user is organization member
         id: check
