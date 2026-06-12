@@ -171,6 +171,7 @@ Arguments:
    The update rule must also handle batch inputs and return a tensor of size ``[batch_size]``, just like the state parameter. The output will be the same as the corresponding :class:`~merlin.algorithms.layer.QuantumLayer` forward.
 - ``initial_state`` (``float``): The initial value of the phase shifter. This will be the value used after each :meth:`~merlin.algorithms.layer.QuantumLayer.reset` call.
 - ``name`` (``str``): Prefix used for the generated memristive phase shifter parameter. Defaults to ``"mem"``.
+- ``detach_at_each_forward`` (``bool``): Controls gradient flow through memristive state recurrence. When ``True`` (default), new states are detached after computation, blocking gradients through the state chain. When ``False``, gradients flow through the entire state history. Default value is ``True``.
 
 
 

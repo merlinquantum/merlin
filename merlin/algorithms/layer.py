@@ -39,7 +39,7 @@ from ..builder.circuit_builder import (
     CircuitBuilder,
 )
 from ..core.computation_space import ComputationSpace
-from ..core.partial_measurement import PartialMeasurement
+from ..core.partial_measurement import PartialMeasurement, PartialMeasurementBranch
 from ..core.probability_distribution import ProbabilityDistribution
 from ..core.process import ComputationProcessFactory
 from ..core.state import StatePattern, generate_state
@@ -63,6 +63,7 @@ from ..utils.grouping import ModGrouping
 from ..utils.normalization import normalize_probabilities_and_amplitudes
 from .layer_utils import (
     InitializationContext,
+    _build_simple_circuit,
     apply_angle_encoding,
     compute_new_memristive_ps_angles,
     feature_count_for_prefix,
@@ -325,6 +326,10 @@ class QuantumLayer(MerlinModule):
             torch.tensor([i["initial_state"]], device=device, dtype=dtype)
             for i in self._memristive_metadata
         ]
+        for i in range(len(self.memristive_state)):
+            if self._memristive_metadata[i]["detach_at_each_forward"]:
+                self.memristive_history[i][0] = self.memristive_history[i][0].detach()
+                self.memristive_state[i] = self.memristive_state[i].detach()
         self._memristive_smaller_last_batch = False
 
         # Phase 12: assign context to self + warnings
@@ -820,6 +825,16 @@ class QuantumLayer(MerlinModule):
         - ``torch.Tensor`` (complex): amplitude encoding
         - :class:`~merlin.core.state_vector.StateVector`: amplitude encoding (preferred for quantum state injection)
 
+        **Memristive State Updates**
+
+        For layers with memristive elements, the state is updated after each forward pass according to the
+        registered update rule. Gradient flow through the memristive recurrence is controlled by the
+        ``detach_at_each_forward`` flag:
+
+        - ``detach_at_each_forward=True`` (default): New states are detached, blocking gradients through
+          the state recurrence. Earlier inputs receive zero gradients from memristive state chains.
+          the entire accumulated state history.
+
         Parameters
         ----------
         input_parameters : torch.Tensor | merlin.core.state_vector.StateVector
@@ -846,6 +861,8 @@ class QuantumLayer(MerlinModule):
             unsupported input type is provided.
         ValueError
             If multiple ``StateVector`` inputs are provided.
+        RuntimeError
+            If batch size is inconsistent with memristive state (call ``reset(batch_size=N)`` to fix).
         """
         # Phase 1: Input classification and validation
         tensor_inputs: list[torch.Tensor] = []
@@ -960,6 +977,10 @@ class QuantumLayer(MerlinModule):
                     self.memristive_state = [
                         x[:batch_dim] for x in self.memristive_state
                     ]
+                    for memristor in range(len(self.memristive_state)):
+                        self.memristive_state[memristor] = self.memristive_state[
+                            memristor
+                        ][:batch_dim]
                 else:
                     raise RuntimeError(
                         "batch size mismatch: call reset(batch_size=N) before starting a new batch"
@@ -1065,41 +1086,72 @@ class QuantumLayer(MerlinModule):
         else:
             output = self.measurement_mapping(results)
 
+        # ================================================================
         # Phase 7: memristive update
+        # ================================================================
+        # This runs AFTER measurement for ALL output types to ensure
+        # memristive states are updated regardless of measurement strategy.
         if len(self.memristive_state) > 0:
-            # Detach output for memristive computation to prevent autograd graph retention.
-            # Return the original output untouched by detaching a separate copy.
+            # Safe output copy (handle all output types)
             output_for_memristive: (
                 torch.Tensor
                 | PartialMeasurement
-                | ProbabilityDistribution
                 | StateVector
+                | ProbabilityDistribution
             )
-            if isinstance(output, torch.Tensor):
-                output_for_memristive = output.detach()
+            if not isinstance(output, PartialMeasurement):
+                output_for_memristive = output.clone()
             else:
-                # StateVector, ProbabilityDistribution, and PartialMeasurement all have .detach()
-                output_for_memristive = output.detach()
+                branches = [
+                    PartialMeasurementBranch(
+                        outcome=b.outcome,
+                        probability=b.probability.clone(),
+                        amplitudes=b.amplitudes.clone(),
+                    )
+                    for b in output.branches
+                ]
+                output_for_memristive = PartialMeasurement(
+                    branches=tuple(branches),
+                    measured_modes=output.measured_modes,
+                    unmeasured_modes=output.unmeasured_modes,
+                    grouping=output.grouping,
+                )
 
-            self.memristive_state = compute_new_memristive_ps_angles(
+            # Compute new states
+            new_states = compute_new_memristive_ps_angles(
                 memristive_metadata=self._memristive_metadata,
                 memristive_state=self.memristive_state,
                 output=output_for_memristive,
             )
 
-            expected_output_shape = torch.Size([batch_dim])
-            for i in range(len(self.memristive_history)):
-                if not (
-                    self.memristive_state[i].shape == expected_output_shape
-                    or self._memristive_smaller_last_batch
-                ):
-                    raise ValueError(
-                        f"""The following memristive phase shifter's update rule does not return a Tensor of shape [batch_dim]. Got {self.memristive_state[i].shape} instead of {expected_output_shape}.
+            # Get batch dimension from output for shape validation
+            output_batch_dim = (
+                output.shape[0]
+                if isinstance(output, torch.Tensor)
+                else output.tensor.shape[0]
+            )
 
-                            Memristive phase-shifter analyzed: {self._memristive_metadata[i]}
-                        """
+            # ============================================================
+            # UPDATE STATE STRUCTURES
+            # ============================================================
+            for i, new_state in enumerate(new_states):
+                # Validate shape
+                expected_shape = torch.Size([output_batch_dim])
+                if new_state.shape != expected_shape:
+                    raise ValueError(
+                        f"Update rule for memristor {i} returned shape {new_state.shape}, "
+                        f"expected {expected_shape}. The update rule must return a tensor "
+                        f"of shape [batch_size].\n\nMemristor metadata: {self._memristive_metadata[i]}"
                     )
-                self.memristive_history[i].append(self.memristive_state[i])
+                self.memristive_history[i].append(new_state)
+                self.memristive_state[i] = new_state
+
+                # If it needs to be detached
+                if self._memristive_metadata[i]["detach_at_each_forward"]:
+                    self.memristive_history[i][-1] = self.memristive_history[i][
+                        -1
+                    ].detach()
+                    self.memristive_state[i] = new_state.detach()
 
         return output
 
@@ -1529,20 +1581,7 @@ class QuantumLayer(MerlinModule):
         n_photons = sum(input_state)
         input_state = pcvl.BasicState(input_state)
 
-        builder = CircuitBuilder(n_modes=n_modes)
-
-        # Trainable entangling layer before encoding
-        builder.add_entangling_layer(trainable=True, name="LI_simple")
-
-        # Angle encoding
-        builder.add_angle_encoding(
-            modes=list(range(input_size)),
-            name="input",
-            subset_combinations=False,
-        )
-
-        # Trainable entangling layer after encoding
-        builder.add_entangling_layer(trainable=True, name="RI_simple")
+        builder = _build_simple_circuit(input_size)
 
         # new API forces explicit measurement strategy definition, so we set it here to match the old default behavior of returning probabilities
         measurement_strategy = MeasurementStrategy.probs(
@@ -1741,15 +1780,60 @@ class QuantumLayer(MerlinModule):
         if runtime_state is not None or self._memristive_metadata:
             self._restore_memristive_runtime_state(runtime_state)
 
+    def detach_memristive_state(self, *, clear_history: bool = False) -> None:
+        """Detach the current memristive state without resetting its value.
+
+        This method is intended for manual truncated backpropagation through
+        time. It cuts the autograd graph carried by the live recurrent
+        memristive state, so future forward passes keep using the same
+        numerical state values without backpropagating through earlier
+        recurrence updates.
+
+        Parameters
+        ----------
+        clear_history : bool
+            Whether to replace each memristive history with only the detached
+            current state. If ``False``, the history length is preserved but
+            stored tensors are detached. Default value is ``False``.
+
+        Returns
+        -------
+        None
+            The layer is updated in place.
+        """
+        if len(self.memristive_state) == 0:
+            return
+
+        self.memristive_state = [state.detach() for state in self.memristive_state]
+
+        if clear_history:
+            self.memristive_history = [[state] for state in self.memristive_state]
+            return
+
+        for index, history in enumerate(self.memristive_history):
+            if len(history) == 0:
+                self.memristive_history[index] = [self.memristive_state[index]]
+                continue
+
+            self.memristive_history[index] = [state.detach() for state in history]
+            self.memristive_history[index][-1] = self.memristive_state[index]
+
     def reset(self, batch_size: int = 1) -> None:
-        """Resets the memristors to their initial state while clearing the history. It also
-        defines the allowed batch size to be ran per forward pass for circuits with memristive phase shifters.
+        """Resets the memristors to their initial state while clearing the history.
+
+        This also defines the allowed batch size to be ran per forward pass for circuits with
+        memristive phase shifters.
 
         Parameters
         ----------
         batch_size : int
-            Batch size that will be used in forward.
+            Batch size that will be used in forward passes. Must be at least 1.
+            Call this before each new batch to ensure memristive states are properly initialized.
 
+        Raises
+        ------
+        ValueError
+            If batch_size < 1.
         """
         if batch_size < 1:
             raise ValueError(f"batch_size must be at least 1, got {batch_size}")
@@ -1767,4 +1851,10 @@ class QuantumLayer(MerlinModule):
                 dtype=self.dtype,
             )
             self.memristive_history[i] = [self.memristive_state[i]]
+
+            # Initial state gradient tracking depends on detach flag
+            if self._memristive_metadata[i]["detach_at_each_forward"]:
+                self.memristive_state[i] = self.memristive_state[i].detach()
+                self.memristive_history[i][-1] = self.memristive_history[i][-1].detach()
+
         return

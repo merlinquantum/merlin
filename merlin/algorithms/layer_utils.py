@@ -525,7 +525,10 @@ def vet_experiment(experiment: pcvl.Experiment) -> dict[str, bool]:
         If the experiment uses unsupported features such as post-selection,
         heralding, feed-forward, time dependence, or minimum-photon filters.
     """
-    has_post_select = not experiment.post_select_fn == pcvl.PostSelect()
+    _post_select_fn = experiment.post_select_fn
+    has_post_select = (
+        _post_select_fn is not None and _post_select_fn != pcvl.PostSelect()
+    )
     has_heralding = bool(experiment.heralds) or bool(experiment.in_heralds)
     has_feedforward = bool(getattr(experiment, "has_feedforward", False))
     has_td_attr = getattr(experiment, "has_td", None)
@@ -905,6 +908,61 @@ def feature_count_for_prefix(
         return len(mapping)
 
     return None
+
+
+def _build_simple_circuit(
+    input_size: int,
+    n_modes: int | None = None,
+    angle_encoding_scale: float = 1.0,
+) -> CircuitBuilder:
+    """Build the canonical *simple* circuit topology for a given mode/input configuration.
+
+    The layout is:
+
+    1. A fully trainable entangling layer (``"LI_simple"``).
+    2. An angle-encoding layer spanning ``range(input_size)`` (``"input"``).
+    3. A fully trainable entangling layer (``"RI_simple"``).
+
+    Both :meth:`~merlin.algorithms.layer.QuantumLayer.simple` and
+    :meth:`~merlin.algorithms.kernels.FeatureMap.simple` delegate to this
+    function so the circuit topology is defined in a single place.
+
+    Parameters
+    ----------
+    input_size : int
+        Number of classical features encoded by the angle-encoding layer.
+        Must satisfy ``input_size <= n_modes``.
+    n_modes : int | None
+        Number of photonic modes for the circuit. If omitted, defaults to
+        ``input_size + 1``.
+    angle_encoding_scale : float
+        Global multiplicative scale applied to angle-encoding features.
+        Default is ``1.0``.
+
+    Returns
+    -------
+    CircuitBuilder
+        Configured builder ready to be consumed by the caller.
+    """
+    if n_modes is None:
+        n_modes = input_size + 1
+    builder = CircuitBuilder(n_modes=n_modes)
+
+    # Trainable entangling layer before encoding
+    builder.add_entangling_layer(trainable=True, name="LI_simple")
+
+    # Angle encoding
+    builder.add_angle_encoding(
+        modes=list(range(input_size)),
+        name="input",
+        subset_combinations=False,
+        scale=angle_encoding_scale,
+    )
+
+    # Trainable entangling layer after encoding
+    builder.add_entangling_layer(trainable=True, name="RI_simple")
+
+    return builder
 
 
 def normalize_output_key(

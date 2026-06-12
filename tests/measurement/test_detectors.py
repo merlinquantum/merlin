@@ -924,11 +924,11 @@ class TestDetectorsWithKernels:
             input_state=input_state,
         )
 
-        keys_pnr = kernel_pnr._detector_transform.output_keys
-        keys_threshold = kernel_threshold._detector_transform.output_keys
+        keys_pnr = kernel_pnr._quantum_layer._detector_transform.output_keys
+        keys_threshold = kernel_threshold._quantum_layer._detector_transform.output_keys
 
-        assert kernel_pnr._detector_transform.output_size == len(keys_pnr)
-        assert kernel_threshold._detector_transform.output_size == len(keys_threshold)
+        assert kernel_pnr._quantum_layer._detector_transform.output_size == len(keys_pnr)
+        assert kernel_threshold._quantum_layer._detector_transform.output_size == len(keys_threshold)
         assert len(keys_pnr) > len(keys_threshold)
         assert all(sum(key) == sum(input_state) for key in keys_pnr)
         assert any(sum(key) < sum(input_state) for key in keys_threshold)

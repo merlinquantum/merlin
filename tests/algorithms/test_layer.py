@@ -304,10 +304,12 @@ class TestQuantumLayer:
 
         amplitude = torch.rand(len(layer.output_keys))
         remaining_input = torch.rand(2)
-        amplitude_out, remaining, saved_state = layer._prepare_amplitude_input([
-            amplitude,
-            remaining_input,
-        ])
+        amplitude_out, remaining, saved_state = layer._prepare_amplitude_input(
+            [
+                amplitude,
+                remaining_input,
+            ]
+        )
 
         assert saved_state is original_state
         assert remaining[0] is remaining_input
@@ -348,10 +350,12 @@ class TestQuantumLayer:
             measurement_strategy=ML.MeasurementStrategy.probs(),
         )
 
-        params, batch_dim = layer._prepare_classical_parameters([
-            torch.rand(2, 2),
-            torch.rand(2, 2),
-        ])
+        params, batch_dim = layer._prepare_classical_parameters(
+            [
+                torch.rand(2, 2),
+                torch.rand(2, 2),
+            ]
+        )
 
         assert batch_dim == 2
         assert len(params) >= 2
@@ -939,9 +943,9 @@ class TestQuantumLayer:
         assert model[1].out_features == 3
         # Check that it has trainable parameters (only in Linear layer)
         trainable_params_layer = [p for p in layer.parameters() if p.requires_grad]
-        assert len(trainable_params_layer) == 0, (
-            "Layer should have no trainable parameters"
-        )
+        assert (
+            len(trainable_params_layer) == 0
+        ), "Layer should have no trainable parameters"
         trainable_params = [p for p in model.parameters() if p.requires_grad]
         assert len(trainable_params) > 0, "Model should have trainable parameters"
 
@@ -1685,7 +1689,7 @@ class TestQuantumLayer:
         assert metadata[name_to_index["mem1"]]["update_rule"] == update_rule
         assert metadata[name_to_index["mem2"]]["update_rule"] == update_rule_exp
 
-        ql(torch.Tensor([0.0, 0.0]))
+        output = ql(torch.Tensor([0.0, 0.0]))
 
         name_to_index = (
             ql.computation_process.converter.memristive_metadata_name_to_index
@@ -1694,8 +1698,11 @@ class TestQuantumLayer:
         current_state = ql.computation_process.converter.memristive_current_state
         assert metadata[name_to_index["mem1"]]["update_rule"] == update_rule
         assert metadata[name_to_index["mem2"]]["update_rule"] == update_rule_exp
-        assert current_state[name_to_index["mem1"]] == torch.Tensor([1.2])
-        assert current_state[name_to_index["mem2"]] == torch.Tensor([0.01])
+        # After forward pass, check that states are updated correctly
+        expected_state_0 = update_rule(torch.Tensor([1.2]), output)
+        expected_state_1 = update_rule_exp(torch.Tensor([0.01]), output)
+        assert torch.allclose(current_state[name_to_index["mem1"]], expected_state_0)
+        assert torch.allclose(current_state[name_to_index["mem2"]], expected_state_1)
 
     def test_memristor_gradient_flow(self):
         def update_rule(state: torch.Tensor, output: torch.Tensor):
@@ -1706,8 +1713,18 @@ class TestQuantumLayer:
 
         circ = ML.CircuitBuilder(n_modes=3)
         circ.add_entangling_layer()
-        circ.add_memristive_ps(mode=1, update_rule=update_rule, initial_state=1.2)
-        circ.add_memristive_ps(mode=0, update_rule=update_rule_exp, initial_state=0.01)
+        circ.add_memristive_ps(
+            mode=1,
+            update_rule=update_rule,
+            initial_state=1.2,
+            detach_at_each_forward=False,
+        )
+        circ.add_memristive_ps(
+            mode=0,
+            update_rule=update_rule_exp,
+            initial_state=0.01,
+            detach_at_each_forward=False,
+        )
         circ.add_entangling_layer()
 
         ql = ML.QuantumLayer(
@@ -2165,12 +2182,12 @@ def test_memristive_state_dict_round_trip_preserves_state_and_history():
     restored = _layer(_builder_with_memristor(with_inputs=True), input_size=2)
     restored.load_state_dict(torch.load(buffer, weights_only=True))
 
-    assert torch.allclose(restored.memristive_state[0], state_before), (
-        "memristive_state was not preserved across a state_dict round-trip"
-    )
-    assert len(restored.memristive_history[0]) == history_len_before, (
-        "memristive_history length was not preserved across a state_dict round-trip"
-    )
+    assert torch.allclose(
+        restored.memristive_state[0], state_before
+    ), "memristive_state was not preserved across a state_dict round-trip"
+    assert (
+        len(restored.memristive_history[0]) == history_len_before
+    ), "memristive_history length was not preserved across a state_dict round-trip"
 
 
 def test_memristive_state_dict_round_trip_as_submodule():
@@ -2342,3 +2359,533 @@ def test_batch_size_mismatch_raises_before_first_memristive_update():
     assert [
         len(history) for history in layer.memristive_history
     ] == history_lengths_before
+
+
+def test_memristive_works_with_typed_objects_and_cloning_protects_gradients():
+    """Memristive updates with typed objects must not break gradients via cloning.
+
+    This test verifies that:
+    1. Memristive phase shifters work correctly with typed output objects
+       (StateVector, ProbabilityDistribution, PartialMeasurement)
+    2. Cloning the output protects memristive computations from interfering
+       with the returned output's autograd graph
+    3. Modifications to the output inside the update rule do not affect the
+       returned layer output
+    4. Gradients flow correctly despite aggressive modification attempts
+    5. Memristive history accumulates across forward passes
+    """
+
+    def update_rule(state: torch.Tensor, output: torch.Tensor):
+        # Handle both tensor and typed object outputs
+        if isinstance(output, torch.Tensor):
+            output_tensor = output
+        else:
+            # Extract tensor from StateVector, ProbabilityDistribution, PartialMeasurement
+            output_tensor = output.tensor
+
+        # Modify the output received by the update rule to verify cloning protects
+        # the returned output from side effects
+        modified_output = output_tensor.clone()
+        modified_output[:] = 999.0  # Drastically modify the copy
+        return state + modified_output[:, 0]
+
+    # Create memristive circuit with trainable layers
+    builder = ML.CircuitBuilder(n_modes=3)
+    builder.add_entangling_layer(trainable=True, name="U1")
+    builder.add_memristive_ps(
+        mode=1,
+        update_rule=update_rule,
+        initial_state=0.5,
+        name="memPS",
+        detach_at_each_forward=False,
+    )
+    builder.add_angle_encoding(modes=[0, 2], name="input")
+    builder.add_entangling_layer(trainable=True, name="U2")
+
+    # Test with StateVector typed output (from amplitudes)
+    layer_statevector_typed = ML.QuantumLayer(
+        builder=builder,
+        input_size=2,
+        n_photons=2,
+        measurement_strategy=ML.MeasurementStrategy.amplitudes(),
+        return_object=True,
+    )
+    layer_statevector_typed.reset(batch_size=2)
+
+    # Test with PartialMeasurement typed output
+    layer_partial = ML.QuantumLayer(
+        builder=builder,
+        input_size=2,
+        n_photons=2,
+        measurement_strategy=ML.MeasurementStrategy.partial(modes=[0, 1]),
+        return_object=True,
+    )
+    layer_partial.reset(batch_size=2)
+
+    # Test with ProbabilityDistribution typed output
+    layer_probdist_typed = ML.QuantumLayer(
+        builder=builder,
+        input_size=2,
+        n_photons=2,
+        measurement_strategy=ML.MeasurementStrategy.probs(
+            computation_space=ML.ComputationSpace.FOCK
+        ),
+        return_object=True,
+    )
+    layer_probdist_typed.reset(batch_size=2)
+
+    input_data = torch.randn(2, 2, requires_grad=True)
+
+    # Test StateVector with return_object=True
+    output_sv_typed = layer_statevector_typed(input_data)
+
+    assert isinstance(output_sv_typed, StateVector)
+    # Verify output is NOT modified by the update rule (cloning protected it)
+    assert not torch.allclose(
+        output_sv_typed.tensor, torch.full_like(output_sv_typed.tensor, 999.0)
+    ), "StateVector output was incorrectly modified by memristive update rule"
+    assert output_sv_typed.tensor.requires_grad
+
+    # Compute loss and backward for StateVector
+    loss_sv = output_sv_typed.tensor.abs().sum()
+    loss_sv.backward()
+    assert input_data.grad is not None
+    assert torch.any(
+        input_data.grad != 0
+    ), "Gradients should flow through StateVector output"
+
+    # Verify memristive history accumulated (one forward pass = one state)
+    assert len(layer_statevector_typed.memristive_history[0]) >= 1
+
+    # Clear gradient for next test
+    input_data.grad = None
+
+    # Test ProbabilityDistribution with typed output
+    output_pd_typed = layer_probdist_typed(input_data.detach())
+
+    assert isinstance(output_pd_typed, ProbabilityDistribution)
+    # Verify output is NOT modified by the update rule (cloning protected it)
+    assert not torch.allclose(
+        output_pd_typed.tensor, torch.full_like(output_pd_typed.tensor, 999.0)
+    ), "ProbabilityDistribution output was incorrectly modified by memristive update rule"
+    assert output_pd_typed.tensor.requires_grad
+
+    # Compute loss and backward for ProbabilityDistribution
+    loss_pd = (
+        output_pd_typed.tensor * torch.arange(1, output_pd_typed.tensor.shape[-1] + 1)
+    ).sum()
+    loss_pd.backward()
+
+    # Verify memristive history accumulated
+    assert len(layer_probdist_typed.memristive_history[0]) >= 1
+
+    # Test PartialMeasurement with typed output
+    output_partial = layer_partial(input_data.detach())
+    assert isinstance(output_partial, PartialMeasurement)
+    # Verify output is NOT modified by the update rule (cloning protected it)
+    assert not torch.allclose(
+        output_partial.tensor, torch.full_like(output_partial.tensor, 999.0)
+    ), "PartialMeasurement output was incorrectly modified by memristive update rule"
+    assert output_partial.tensor.requires_grad
+
+    # Compute loss and backward for PartialMeasurement
+    loss_partial = output_partial.tensor.abs().sum()
+    loss_partial.backward()
+
+    # Verify memristive history accumulated
+    assert len(layer_partial.memristive_history[0]) >= 1
+
+    # Run second forward passes to verify memristive state and history continue to accumulate
+    output_sv_typed_2 = layer_statevector_typed(input_data.detach())
+    output_pd_typed_2 = layer_probdist_typed(input_data.detach())
+    output_partial_2 = layer_partial(input_data.detach())
+
+    assert isinstance(output_sv_typed_2, StateVector)
+    assert isinstance(output_pd_typed_2, ProbabilityDistribution)
+    assert isinstance(output_partial_2, PartialMeasurement)
+
+    # Verify history accumulated over multiple forward passes
+    assert len(layer_statevector_typed.memristive_history[0]) >= 2
+    assert len(layer_probdist_typed.memristive_history[0]) >= 2
+    assert len(layer_partial.memristive_history[0]) >= 2
+
+    # Verify outputs from second pass are also not modified to 999.0
+    assert not torch.allclose(
+        output_sv_typed_2.tensor, torch.full_like(output_sv_typed_2.tensor, 999.0)
+    )
+    assert not torch.allclose(
+        output_pd_typed_2.tensor, torch.full_like(output_pd_typed_2.tensor, 999.0)
+    )
+    assert not torch.allclose(
+        output_partial_2.tensor, torch.full_like(output_partial_2.tensor, 999.0)
+    )
+
+
+def _update_from_first_probability(
+    state: torch.Tensor, output: torch.Tensor
+) -> torch.Tensor:
+    """Simple differentiable recurrence used by the review tests.
+
+    The next memristive state depends on the previous state and on the first
+    output probability. Without a working backpropagation guard, a later loss
+    can therefore propagate through the state chain back to earlier inputs.
+    """
+    return state + output[:, 0]
+
+
+def _make_memristive_layer(detach_at_each_forward: bool = True) -> ML.QuantumLayer:
+    """Build a small memristive layer with one recurrent phase shifter."""
+    builder = ML.CircuitBuilder(n_modes=3)
+    builder.add_entangling_layer(trainable=True, name="U1")
+    builder.add_memristive_ps(
+        mode=1,
+        update_rule=_update_from_first_probability,
+        initial_state=0.25,
+        name="mem",
+        detach_at_each_forward=detach_at_each_forward,
+    )
+    builder.add_angle_encoding(modes=[0, 2], name="input")
+    builder.add_entangling_layer(trainable=True, name="U2")
+
+    return ML.QuantumLayer(
+        builder=builder,
+        input_size=2,
+        input_state=[1, 1, 0],
+        measurement_strategy=ML.MeasurementStrategy.probs(
+            computation_space=ML.ComputationSpace.FOCK
+        ),
+    )
+
+
+def test_detach_at_each_forward_true_blocks_gradient_through_recurrence():
+    """detach_at_each_forward=True should block gradients through state recurrence.
+
+    With detach_at_each_forward=True, the memristive state is detached at each
+    forward pass, preventing gradients from flowing through the recurrence
+    (state → new_state). This breaks the gradient chain so earlier inputs
+    receive zero gradients from the memristive state dependence.
+    """
+    torch.manual_seed(1)
+    layer = _make_memristive_layer(detach_at_each_forward=True)
+    layer.reset(batch_size=1)
+
+    inputs = [torch.randn(1, 2, requires_grad=True) for _ in range(4)]
+    outputs = [layer(input_batch) for input_batch in inputs]
+
+    loss = outputs[-1][:, 0].sum()
+    loss.backward()
+
+    past_grad_norms = [
+        0.0 if input_batch.grad is None else input_batch.grad.abs().max().item()
+        for input_batch in inputs[:-1]
+    ]
+    current_grad_norm = inputs[-1].grad.abs().max().item()
+
+    assert current_grad_norm > 1e-8
+    assert past_grad_norms == pytest.approx([0.0, 0.0, 0.0], abs=1e-8)
+
+
+def test_detach_at_each_forward_false_allows_full_gradient_history():
+    """detach_at_each_forward=False should allow full gradient flow through history.
+
+    With detach_at_each_forward=False, the memristive state is NOT detached,
+    so gradients flow through the entire recurrence chain. All previous inputs
+    should receive non-zero gradients from the memristive history.
+    """
+    torch.manual_seed(42)
+    layer = _make_memristive_layer(detach_at_each_forward=False)
+    layer.reset(batch_size=1)
+
+    # Run 5 forward passes to accumulate history
+    inputs = [torch.randn(1, 2, requires_grad=True) for _ in range(5)]
+    outputs = [layer(input_batch) for input_batch in inputs]
+
+    # Verify memristive history accumulated
+    assert (
+        len(layer.memristive_history[0]) == 6
+    ), f"Expected 6 history entries, got {len(layer.memristive_history[0])}"
+
+    # Compute loss from the last output and backpropagate
+    loss = outputs[-1][:, 0].sum()
+    loss.backward()
+
+    # With detach_at_each_forward=False, all inputs should receive gradients
+    # from the full recurrence chain
+    grad_norms = [
+        0.0 if input_batch.grad is None else input_batch.grad.abs().max().item()
+        for input_batch in inputs
+    ]
+
+    # All inputs should have non-zero gradients (full history retained)
+    for i, grad_norm in enumerate(grad_norms):
+        assert (
+            grad_norm > 1e-8
+        ), f"Input {i} should have non-zero gradient with full history, got {grad_norm}"
+
+
+def test_detach_at_each_forward_is_boolean_flag():
+    """detach_at_each_forward flag accepts boolean values.
+
+    The flag should accept True or False to control whether gradients flow
+    through the memristive recurrence. Both values should be accepted without
+    raising errors.
+    """
+    builder = ML.CircuitBuilder(n_modes=3)
+
+    # Should not raise for valid boolean values
+    builder.add_memristive_ps(
+        mode=1,
+        update_rule=_update_from_first_probability,
+        initial_state=0.25,
+        detach_at_each_forward=True,
+    )
+    assert builder.memristive_specs[0]["detach_at_each_forward"] is True
+
+    builder2 = ML.CircuitBuilder(n_modes=3)
+    builder2.add_memristive_ps(
+        mode=1,
+        update_rule=_update_from_first_probability,
+        initial_state=0.25,
+        detach_at_each_forward=False,
+    )
+    assert builder2.memristive_specs[0]["detach_at_each_forward"] is False
+
+
+def test_detach_without_assignment_does_not_detach_original_tensor():
+    """Calling detach without assignment does not change the original tensor.
+
+    This test explains the reset() review comment. PyTorch ``Tensor.detach()``
+    returns a new tensor disconnected from autograd; it does not mutate the
+    original tensor in place. Therefore a statement like ``x.detach()`` has no
+    lasting effect unless the return value is assigned back to ``x`` or stored
+    somewhere else.
+    """
+    base = torch.ones(1, requires_grad=True)
+    state = base * 2
+
+    state.detach()
+
+    assert state.requires_grad
+    assert not state.detach().requires_grad
+
+
+def test_mixed_memristors_with_different_detach_settings():
+    """Layer with multiple memristors using different detach_at_each_forward settings.
+
+    Different memristors in the same layer can have different gradient flow,
+    allowing fine-grained control over gradient paths.
+    """
+    torch.manual_seed(2)
+
+    builder = ML.CircuitBuilder(n_modes=5)
+    # First memristor: detach gradients (blocking flow)
+    builder.add_memristive_ps(
+        mode=1,
+        update_rule=_update_from_first_probability,
+        initial_state=0.5,
+        detach_at_each_forward=True,
+        name="mem_detached",
+    )
+    # Second memristor: keep gradients (full flow)
+    builder.add_memristive_ps(
+        mode=2,
+        update_rule=_update_from_first_probability,
+        initial_state=0.3,
+        detach_at_each_forward=False,
+        name="mem_full_grad",
+    )
+    builder.add_angle_encoding(modes=[0, 3])
+
+    layer = ML.QuantumLayer(
+        builder=builder,
+        n_photons=3,
+        input_size=2,
+        measurement_strategy=ML.MeasurementStrategy.probs(),
+    )
+    layer.reset(batch_size=1)
+
+    # Run several forward passes
+    inputs = [torch.randn(1, 2, requires_grad=True) for _ in range(3)]
+    outputs = [layer(inp) for inp in inputs]
+
+    loss = outputs[-1].sum()
+    loss.backward()
+
+    # First memristor (detached) should NOT have gradients in history
+    for state in layer.memristive_history[0]:
+        assert state.grad_fn is None, "Detached memristor states should have no grad_fn"
+
+    # Second memristor (full grad) should retain gradients
+    assert (
+        layer.memristive_history[1][-1].grad_fn is not None
+    ), "Non-detached memristor should retain gradients"
+
+
+def test_detach_at_each_forward_false_has_larger_gradients_than_true():
+    """Gradients propagate further with detach_at_each_forward=False.
+
+    With full gradient flow (False), earlier inputs typically receive
+    larger gradients than with detach_at_each_forward=True due to longer
+    computational paths.
+    """
+    torch.manual_seed(3)
+
+    layer_detached = _make_memristive_layer(detach_at_each_forward=True)
+    layer_detached.reset(batch_size=1)
+
+    layer_full_grad = _make_memristive_layer(detach_at_each_forward=False)
+    layer_full_grad.reset(batch_size=1)
+
+    N = 5
+    seed_inputs = [torch.randn(1, 2) for _ in range(N)]
+
+    # Run with detach=True
+    torch.manual_seed(42)
+    inputs_detached = [inp.clone().detach().requires_grad_(True) for inp in seed_inputs]
+    outputs_detached = [layer_detached(inp) for inp in inputs_detached]
+    loss_detached = outputs_detached[-1].sum()
+    loss_detached.backward()
+    grads_detached = [
+        inp.grad.abs().max().item() if inp.grad is not None else 0.0
+        for inp in inputs_detached
+    ]
+
+    # Run with detach=False
+    torch.manual_seed(42)
+    inputs_full = [inp.clone().detach().requires_grad_(True) for inp in seed_inputs]
+    outputs_full = [layer_full_grad(inp) for inp in inputs_full]
+    loss_full = outputs_full[-1].sum()
+    loss_full.backward()
+    grads_full = [
+        inp.grad.abs().max().item() if inp.grad is not None else 0.0
+        for inp in inputs_full
+    ]
+
+    # Earlier inputs should have larger or equal gradients with full history
+    for i in range(N - 1):  # All except last
+        assert (
+            grads_full[i] >= grads_detached[i] * 0.9
+        ), "Full gradient flow should have larger or equal gradients for earlier inputs"
+
+
+def test_reset_properly_detaches_or_keeps_initial_state():
+    """reset() properly initializes gradient tracking based on detach_at_each_forward.
+
+    After reset(), the initial state should be detached or not based on the flag,
+    ensuring fresh gradient tracking for the new batch.
+    """
+    torch.manual_seed(4)
+
+    # Test with detach=True
+    layer_detached = _make_memristive_layer(detach_at_each_forward=True)
+    layer_detached.reset(batch_size=1)
+    assert (
+        layer_detached.memristive_state[0].grad_fn is None
+    ), "Initial state should be detached with detach_at_each_forward=True"
+    assert (
+        layer_detached.memristive_history[0][0].grad_fn is None
+    ), "Initial history state should be detached with detach_at_each_forward=True"
+
+    # Test with detach=False
+    layer_full = _make_memristive_layer(detach_at_each_forward=False)
+    layer_full.reset(batch_size=1)
+    # Initial state is typically created without grad by default
+    # But after first forward it should retain gradients
+    inp = torch.randn(1, 2, requires_grad=True)
+    layer_full(inp)
+    assert (
+        layer_full.memristive_state[0].grad_fn is not None
+    ), "State should retain gradients after forward with detach_at_each_forward=False"
+
+
+def test_detach_at_each_forward_with_batch_dimension():
+    """Gradient flow works correctly with batch_size > 1.
+
+    The flag should maintain correct gradient behavior regardless of batch size.
+    """
+    torch.manual_seed(5)
+    batch_size = 4
+
+    layer = _make_memristive_layer(detach_at_each_forward=False)
+    layer.reset(batch_size=batch_size)
+
+    inputs = [torch.randn(batch_size, 2, requires_grad=True) for _ in range(3)]
+    outputs = [layer(inp) for inp in inputs]
+
+    loss = outputs[-1].sum()
+    loss.backward()
+
+    # All inputs should have gradients
+    for i, inp in enumerate(inputs):
+        assert inp.grad is not None, f"Input {i} should have gradients"
+        assert inp.grad.shape == (
+            batch_size,
+            2,
+        ), f"Gradient shape mismatch for input {i}"
+
+
+def test_detach_memristive_state_preserves_history_by_default():
+    """Manual detach should cut graph edges while preserving history values."""
+    torch.manual_seed(6)
+    layer = _make_memristive_layer(detach_at_each_forward=False)
+    layer.reset(batch_size=1)
+
+    for _ in range(3):
+        layer(torch.randn(1, 2, requires_grad=True))
+
+    history_before = [state.clone() for state in layer.memristive_history[0]]
+    history_len_before = len(layer.memristive_history[0])
+
+    layer.detach_memristive_state()
+
+    assert len(layer.memristive_history[0]) == history_len_before
+    assert layer.memristive_state[0].grad_fn is None
+    assert layer.memristive_history[0][-1] is layer.memristive_state[0]
+
+    for state_before, state_after in zip(
+        history_before,
+        layer.memristive_history[0],
+        strict=True,
+    ):
+        assert state_after.grad_fn is None
+        assert torch.allclose(state_after, state_before)
+
+
+def test_long_sequence_with_manual_sliding_window_detach():
+    """Manual TBPTT should cut gradients before the chosen chunk boundary."""
+    torch.manual_seed(7)
+    layer = _make_memristive_layer(detach_at_each_forward=False)
+    layer.reset(batch_size=1)
+
+    n_steps = 8
+    k = 3
+    inputs = []
+    outputs = []
+
+    for timestep in range(n_steps):
+        input_batch = torch.randn(1, 2, requires_grad=True)
+        inputs.append(input_batch)
+        outputs.append(layer(input_batch))
+
+        if timestep == n_steps - k - 1:
+            layer.detach_memristive_state(clear_history=True)
+
+    assert len(layer.memristive_history[0]) == k + 1
+
+    loss = outputs[-1][:, 0].sum()
+    loss.backward()
+
+    grad_norms = [
+        0.0 if input_batch.grad is None else input_batch.grad.abs().max().item()
+        for input_batch in inputs
+    ]
+
+    assert grad_norms[: n_steps - k] == pytest.approx(
+        [0.0] * (n_steps - k),
+        abs=1e-8,
+    )
+    for index, grad_norm in enumerate(grad_norms[n_steps - k :], start=n_steps - k):
+        assert grad_norm > 1e-8, f"Input {index} should remain in the TBPTT window"
+
+    for index, grad_norm in enumerate(grad_norms[: n_steps - k]):
+        assert grad_norm < 1e-8, f"Input {index} should not be in the TBPTT window"

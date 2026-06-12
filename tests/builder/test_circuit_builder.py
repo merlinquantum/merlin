@@ -577,7 +577,9 @@ def test_memristor_metadata():
     def sum_outputs(state: torch.Tensor, output: torch.Tensor) -> torch.Tensor:
         return state + output[:, 2]
 
-    builder.add_memristive_ps(mode=0, update_rule=exponential_decay, initial_state=1)
+    builder.add_memristive_ps(
+        mode=0, update_rule=exponential_decay, initial_state=1, detach_at_each_forward=False
+    )
     builder.add_memristive_ps(mode=1, update_rule=sum_outputs, initial_state=1000)
     builder.add_memristive_ps(mode=3, update_rule=sum_outputs, initial_state=2)
     builder.add_memristive_ps(mode=2, update_rule=exponential_decay, initial_state=67)
@@ -591,24 +593,28 @@ def test_memristor_metadata():
         "name": "mem1",
         "update_rule": exponential_decay,
         "initial_state": 1,
+        "detach_at_each_forward": False,
     }
     assert metadata[1] == {
         "target_mode": 1,
         "name": "mem2",
         "update_rule": sum_outputs,
         "initial_state": 1000,
+        "detach_at_each_forward": True,
     }
     assert metadata[2] == {
         "target_mode": 3,
         "name": "mem3",
         "update_rule": sum_outputs,
         "initial_state": 2,
+        "detach_at_each_forward": True,
     }
     assert metadata[3] == {
         "target_mode": 2,
         "name": "mem4",
         "update_rule": exponential_decay,
         "initial_state": 67,
+        "detach_at_each_forward": True,
     }
 
     builder.add_memristive_ps(
@@ -624,36 +630,42 @@ def test_memristor_metadata():
         "name": "mem1",
         "update_rule": exponential_decay,
         "initial_state": 1,
+        "detach_at_each_forward": False,
     }
     assert metadata[1] == {
         "target_mode": 1,
         "name": "mem2",
         "update_rule": sum_outputs,
         "initial_state": 1000,
+        "detach_at_each_forward": True,
     }
     assert metadata[2] == {
         "target_mode": 3,
         "name": "mem3",
         "update_rule": sum_outputs,
         "initial_state": 2,
+        "detach_at_each_forward": True,
     }
     assert metadata[3] == {
         "target_mode": 2,
         "name": "mem4",
         "update_rule": exponential_decay,
         "initial_state": 67,
+        "detach_at_each_forward": True,
     }
     assert metadata[5] == {
         "target_mode": 2,
         "name": "mem6",
         "update_rule": sum_outputs,
         "initial_state": 0.0,
+        "detach_at_each_forward": True,
     }
     assert metadata[4] == {
         "target_mode": 2,
         "name": "test5",
         "update_rule": sum_outputs,
         "initial_state": 0.0,
+        "detach_at_each_forward": True,
     }
 
 
@@ -740,10 +752,18 @@ def test_memristive_own_type_of_parameter():
     builder.add_superpositions()
     builder.add_entangling_layer()
 
-    builder.add_memristive_ps(mode=0, update_rule=exponential_decay, initial_state=1)
-    builder.add_memristive_ps(mode=1, update_rule=sum_outputs, initial_state=1000)
-    builder.add_memristive_ps(mode=3, update_rule=sum_outputs, initial_state=2)
-    builder.add_memristive_ps(mode=2, update_rule=exponential_decay, initial_state=67)
+    builder.add_memristive_ps(
+        mode=0, update_rule=exponential_decay, initial_state=1, detach_at_each_forward=False
+    )
+    builder.add_memristive_ps(
+        mode=1, update_rule=sum_outputs, initial_state=1000, detach_at_each_forward=False
+    )
+    builder.add_memristive_ps(
+        mode=3, update_rule=sum_outputs, initial_state=2, detach_at_each_forward=True
+    )
+    builder.add_memristive_ps(
+        mode=2, update_rule=exponential_decay, initial_state=67, detach_at_each_forward=False
+    )
 
     builder.add_angle_encoding()
     builder.add_rotations(trainable=True)
@@ -762,24 +782,28 @@ def test_memristive_own_type_of_parameter():
         "name": "mem1",
         "update_rule": exponential_decay,
         "initial_state": 1,
+        "detach_at_each_forward": False,
     }
     assert metadata[1] == {
         "target_mode": 1,
         "name": "mem2",
         "update_rule": sum_outputs,
         "initial_state": 1000,
+        "detach_at_each_forward": False,
     }
     assert metadata[2] == {
         "target_mode": 3,
         "name": "mem3",
         "update_rule": sum_outputs,
         "initial_state": 2,
+        "detach_at_each_forward": True,
     }
     assert metadata[3] == {
         "target_mode": 2,
         "name": "mem4",
         "update_rule": exponential_decay,
         "initial_state": 67,
+        "detach_at_each_forward": False,
     }
 
     assert "mem" not in builder.input_parameter_prefixes

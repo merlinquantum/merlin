@@ -3,6 +3,7 @@ from __future__ import annotations
 import inspect
 import warnings
 from collections.abc import Callable, Sequence
+from contextvars import ContextVar
 from functools import wraps
 from typing import TYPE_CHECKING, Any, TypeVar, cast, overload
 
@@ -18,6 +19,11 @@ _MEASUREMENT_STRATEGY_ENUM_MIGRATIONS = {
     "MODE_EXPECTATIONS": "mode_expectations(computation_space)",
     "AMPLITUDES": "NONE (amplitudes)",
 }
+
+_ACTIVE_DEPRECATION_MESSAGES: ContextVar[frozenset[str]] = ContextVar(
+    "_ACTIVE_DEPRECATION_MESSAGES",
+    default=frozenset(),
+)
 
 
 _NO_BUNCHING_REMOVED_MESSAGE = (
@@ -174,7 +180,42 @@ DEPRECATION_REGISTRY: dict[
         False,
         _remove_FeatureMap_simple_trainable,
     ),
-    # FidelityKernel.simple deprecations
+    "FeatureMap.compute_unitary": (
+        "compute_unitary is deprecated and will be removed in a future release. "
+        "It uses legacy compiler state stored on FeatureMap. Use FidelityKernel "
+        "for kernel computations; FidelityKernel uses _CCInvQuantumLayer over "
+        "the QuantumLayer backend and treats FeatureMap as a descriptor without "
+        "relying on compute_unitary.",
+        False,
+        None,
+    ),
+    # FeatureMap.simple deprecations
+    "FeatureMap.simple.n_modes": (
+        "The provided value is still honored in 0.4, but this parameter will "
+        "be removed in release 0.5 and the mode count will default to "
+        "'input_size + 1'. "
+        "Use CircuitBuilder directly if you need a different mode count.",
+        False,
+        None,
+    ),
+    # FidelityKernel.simple method-level deprecation
+    # TODO: In release 0.5.x, remove this entry along with FidelityKernel.simple.
+    "FidelityKernel.simple": (
+        "FidelityKernel.simple() is deprecated and will be removed in release 0.5. "
+        "Build a feature map with FeatureMap.simple(input_size=...) and pass it to "
+        "FidelityKernel(feature_map=...) directly.",
+        False,
+        None,
+    ),
+    # FidelityKernel.simple parameter-level deprecations
+    "FidelityKernel.simple.n_modes": (
+        "The provided value is still honored in 0.4, but this parameter will "
+        "be removed in release 0.5 and the mode count will default to "
+        "'input_size + 1'. "
+        "Use CircuitBuilder directly if you need a different mode count.",
+        False,
+        None,
+    ),
     "FidelityKernel.simple.n_photons": (
         "Since merlin >= 0.3, the number of photons is automatically inferred from input dimensionality. Manual control of photons is deprecated.",
         False,
@@ -201,7 +242,29 @@ DEPRECATION_REGISTRY: dict[
         None,
         _reject_no_bunching_init,
     ),
-    # KernelCircuitBuilder.build_fidelity_kernel deprecations
+    # KernelCircuitBuilder deprecations
+    # TODO: In release 0.5.x, remove these entries along with KernelCircuitBuilder.
+    "KernelCircuitBuilder.__init__": (
+        "KernelCircuitBuilder is deprecated and will be removed in release 0.5. "
+        "Use CircuitBuilder with FeatureMap(builder=...) and "
+        "FidelityKernel(feature_map=...) directly.",
+        False,
+        None,
+    ),
+    "KernelCircuitBuilder.build_feature_map": (
+        "KernelCircuitBuilder.build_feature_map() is deprecated and will be removed "
+        "in release 0.5. Use CircuitBuilder with FeatureMap(builder=...) directly.",
+        False,
+        None,
+    ),
+    "KernelCircuitBuilder.build_fidelity_kernel": (
+        "KernelCircuitBuilder.build_fidelity_kernel() is deprecated and will be "
+        "removed in release 0.5. Use CircuitBuilder with FeatureMap(builder=...) "
+        "and FidelityKernel(feature_map=...) directly.",
+        False,
+        None,
+    ),
+    # KernelCircuitBuilder.build_fidelity_kernel parameter-level deprecations
     "KernelCircuitBuilder.build_fidelity_kernel.no_bunching": (
         None,
         None,
@@ -508,22 +571,37 @@ def sanitize_parameters(*args: Any, **_kw: Any) -> Any:
                 warn_msgs, raise_msgs, converters = (
                     _collect_deprecations_and_converters(qual, kwargs)
                 )
-                if raise_msgs:
-                    raise ValueError(" ".join(raise_msgs))
-                if warn_msgs:
-                    warnings.warn(" ".join(warn_msgs), DeprecationWarning, stacklevel=2)
+                active_messages = _ACTIVE_DEPRECATION_MESSAGES.get()
+                visible_warn_msgs = [
+                    message for message in warn_msgs if message not in active_messages
+                ]
+                scoped_messages = (
+                    active_messages | frozenset(warn_msgs) | frozenset(raise_msgs)
+                )
+                deprecation_scope = _ACTIVE_DEPRECATION_MESSAGES.set(scoped_messages)
+                try:
+                    if raise_msgs:
+                        raise ValueError(" ".join(raise_msgs))
+                    if visible_warn_msgs:
+                        warnings.warn(
+                            " ".join(visible_warn_msgs),
+                            DeprecationWarning,
+                            stacklevel=2,
+                        )
 
-                # 2) Apply converters for deprecated params
-                for conv in converters:
-                    kwargs = conv(qual, dict(kwargs))
+                    # 2) Apply converters for deprecated params
+                    for conv in converters:
+                        kwargs = conv(qual, dict(kwargs))
 
-                # 2b) Apply optional processors
-                for proc in processors:
-                    kwargs = proc(qual, dict(kwargs))
+                    # 2b) Apply optional processors
+                    for proc in processors:
+                        kwargs = proc(qual, dict(kwargs))
 
-                # 3) Rely on Python's own signature checking to reject unknown kwargs.
+                    # 3) Rely on Python's own signature checking to reject unknown kwargs.
 
-                return func(*f_args, **kwargs)
+                    return func(*f_args, **kwargs)
+                finally:
+                    _ACTIVE_DEPRECATION_MESSAGES.reset(deprecation_scope)
 
             return wrapper
 

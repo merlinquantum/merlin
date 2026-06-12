@@ -32,7 +32,7 @@ classifiers=[
 
 dependencies = [
     "torch>=2.0.0,<=2.10.0",
-    "perceval-quandela>=0.13.1",
+    "perceval-quandela>=1.2.1",
     "numpy>=2.2.6",
     "pandas",
     "scikit-learn>=1.7.2",

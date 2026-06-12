@@ -43,22 +43,22 @@ MerLin exposes three cooperating components:
   Encodes classical inputs into a photonic circuit and produces the corresponding unitary matrix. You can pass a pre-built :class:`pcvl.Circuit`, a declarative :class:`~merlin.builder.circuit_builder.CircuitBuilder`, or a full :class:`pcvl.Experiment`.
 
 - :class:`~merlin.algorithms.kernels.FidelityKernel`
-  Given a feature map and an input Fock state, computes Gram matrices (train/test) by simulating transition probabilities through SLOS. Supports optional sampling, photon loss and detector transforms.
+  Given a feature map, computes Gram matrices (train/test) by simulating transition probabilities through SLOS. The input Fock state is inferred by default and can be overridden when a specific photon pattern is required. Supports optional sampling, photon loss, and detector transforms.
 
-- :class:`~merlin.algorithms.kernels.KernelCircuitBuilder`
-  A convenience helper to create a :class:`~merlin.algorithms.kernels.FeatureMap` and then a :class:`~merlin.algorithms.kernels.FidelityKernel` with minimal boilerplate.
+- :class:`~merlin.builder.circuit_builder.CircuitBuilder`
+  Declaratively builds circuits with angle-encoding metadata. This is the preferred path when the feature map circuit is created in MerLin.
 
 Quick Start Decision Guide
 --------------------------
 
 **"I want to quickly try quantum kernels on my data"**
-    → Use ``FidelityKernel.simple()`` with default parameters
+    → Build a feature map with :meth:`~merlin.algorithms.kernels.FeatureMap.simple` and pass it to :class:`~merlin.algorithms.kernels.FidelityKernel`
 
 **"I need to customize the circuit architecture"**
-    → Use ``KernelCircuitBuilder`` for declarative circuit construction
+    → Use :class:`~merlin.builder.circuit_builder.CircuitBuilder`, then wrap it in :class:`~merlin.algorithms.kernels.FeatureMap`
 
 **"I have an existing Perceval circuit/experiment"**
-    → Create a ``FeatureMap`` from your circuit, then wrap in ``FidelityKernel``
+    → Create a :class:`~merlin.algorithms.kernels.FeatureMap` from your circuit or experiment, then wrap it in :class:`~merlin.algorithms.kernels.FidelityKernel`
 
 **"I need to model realistic hardware effects"**
     → Create a :class:`pcvl.Experiment` with :class:`pcvl.NoiseModel` and detectors
@@ -69,13 +69,19 @@ Quick Start Decision Guide
 How feature maps encode data
 ----------------------------
 
-The :class:`~merlin.algorithms.kernels.FeatureMap` converts a datapoint into the exact list of circuit parameters required by the underlying circuit/experiment. The encoding pipeline follows this preference order:
+For kernel computation, :class:`~merlin.algorithms.kernels.FidelityKernel`
+treats :class:`~merlin.algorithms.kernels.FeatureMap` as a descriptor and
+delegates encoding to its internal ``_CCInvQuantumLayer`` backend. The supported
+encoding contract is:
 
-1. Builder‑provided metadata (from :class:`~merlin.builder.circuit_builder.CircuitBuilder.add_angle_encoding`) that lists feature combinations and per‑index scales;
-2. A user‑provided callable encoder, if supplied to :class:`~merlin.algorithms.kernels.FeatureMap`;
-3. A deterministic subset‑sum expansion that generates :math:`1`‑to‑:math:`d` order sums of the input until the expected parameter count is reached.
-
-The resulting vector is then sent to the Torch converter (:class:`~merlin.pcvl_pytorch.locirc_to_tensor.CircuitConverter`) to obtain the complex unitary matrix :math:`U(x)`.
+1. For feature maps created from a
+   :class:`~merlin.builder.circuit_builder.CircuitBuilder`, builder-provided
+   angle-encoding metadata defines how raw input features are converted into
+   circuit parameters.
+2. For feature maps created directly from a :class:`pcvl.Circuit` or
+   :class:`pcvl.Experiment`, ``input_size`` must match the number of circuit
+   input parameters selected by ``input_parameters``. Inputs are passed with
+   that parameter dimension.
 
 Detectors, photon loss and experiments
 --------------------------------------
@@ -86,8 +92,6 @@ If no experiment is provided, the kernel constructs one from the circuit (unitar
 
 Parameters and behaviour
 ------------------------
-
-Below is a summary of key constructor arguments and their effects. See the API reference for full signatures.
 
 Below is a summary of key constructor arguments and their effects. See the API reference for full signatures.
 
@@ -126,10 +130,6 @@ FeatureMap Parameters
      - List[str] | None
      - None
      - Additional parameters to expose for gradient training
-   * - ``encoder``
-     - Callable | None
-     - None
-     - Custom encoding: ``(x: Tensor) → param_vector``
    * - ``dtype``
      - torch.dtype
      - torch.float32
@@ -155,13 +155,17 @@ FidelityKernel Parameters
      - *required*
      - The feature map instance to use
    * - ``input_state``
-     - List[int]
-     - *required*
-     - Fock state :math:`|s\rangle`; must match circuit modes
+     - List[int] | None
+     - None
+     - Fock state :math:`|s\rangle`; omit it to infer the state from the circuit size and ``n_photons``
+   * - ``n_photons``
+     - int | None
+     - None
+     - Number of photons used to infer ``input_state`` when ``input_state`` is omitted
    * - ``shots``
-     - int
-     - 0
-     - If > 0, use sampling; 0 means exact probabilities
+     - int | None
+     - None
+     - If positive, use pseudo-sampling; ``None`` or ``0`` means exact probabilities
    * - ``sampling_method``
      - str
      - ``"multinomial"``
@@ -169,7 +173,7 @@ FidelityKernel Parameters
    * - ``computation_space``
      - ComputationSpace | str | None = None
      - None
-     - Chose the computation state between UNBUNCHED (maximum one photon per mode), FOCK (multiple phorons per mode allowed) and DUAL_RAIL
+     - Logical state space: ``FOCK``, ``UNBUNCHED``, or ``DUAL_RAIL``
    * - ``force_psd``
      - bool
      - True
@@ -183,16 +187,29 @@ FidelityKernel Parameters
      - *from feature_map*
      - Simulation device
 
-.. warning:: *Deprecated since version 0.3:*
-   The use of the ``no_bunching`` flag  is deprecated and is removed since version 0.3.0.
-   Use the ``computation_space`` flag instead. See :doc:`/user_guide/migration_guide`.
-
 Implementation highlights
 -------------------------
 
-Internally, :class:`~merlin.algorithms.kernels.FidelityKernel` builds the pairwise circuits :math:`U^{\dagger}(x_2) U(x_1)` in a vectorised way and asks the SLOS graph to compute detection probabilities for the chosen input state. If photon loss and/or detectors are defined, the raw probabilities are transformed accordingly before the scalar kernel is read.
+Internally, :class:`~merlin.algorithms.kernels.FidelityKernel` delegates
+pairwise circuit construction and SLOS evaluation to its ``_CCInvQuantumLayer``
+backend. The backend builds the pairwise circuits
+:math:`U^{\dagger}(x_2) U(x_1)` in a vectorised way and asks the SLOS graph to
+compute detection probabilities for the resolved input state. If photon loss
+and/or detectors are defined, the raw probabilities are transformed accordingly
+before the scalar kernel is read.
 
 When constructing a training Gram matrix (``x2 is None``), only the upper triangle is simulated and mirrored to the lower triangle, then the diagonal is set to 1. With ``force_psd=True``, the matrix is symmetrised and projected to PSD by zeroing negative eigenvalues in an eigendecomposition.
+
+Input state inference
+---------------------
+
+The input state does not need to be provided for standard fidelity kernels.
+When ``input_state`` is omitted, :class:`~merlin.algorithms.kernels.FidelityKernel`
+uses the number of modes in ``feature_map.circuit`` to build an alternating
+single-photon state, for example ``[1, 0, 1, 0, 1]`` for five modes. If
+``n_photons`` is provided, the kernel places that many photons into the inferred
+state, filling alternating positions first. Pass ``input_state`` only when the
+experiment requires an explicit occupation pattern.
 
 Quickstarts and recipes
 -----------------------
@@ -204,13 +221,15 @@ Minimal example (factory)
 
    import torch
    from merlin import ComputationSpace
-   from merlin.algorithms.kernels import FidelityKernel
+   from merlin.algorithms.kernels import FeatureMap, FidelityKernel
 
-   # Build a kernel where inputs of size 2 are encoded in a 4-mode circuit
-   kernel = FidelityKernel.simple(
-       input_size=2,
-       n_modes=4,  # Optional; defaults to input_size + 1
-       computation_space=ComputationSpace.FOCK,  # Allow bunched outcomes if needed
+   # Build a feature map with default circuit topology (n_modes = input_size + 1 = 3)
+   feature_map = FeatureMap.simple(input_size=2)
+
+   # Wrap it in a fidelity kernel
+   kernel = FidelityKernel(
+       feature_map=feature_map,
+       computation_space=ComputationSpace.FOCK,
        dtype=torch.float32,
        device=torch.device("cpu"),
    )
@@ -230,22 +249,25 @@ Custom experiment with detectors and loss
    from merlin import ComputationSpace
    from merlin.algorithms.kernels import FeatureMap, FidelityKernel
 
-   # Circuit and experiment
    circuit = pcvl.Circuit(6)
+   circuit.add(0, pcvl.PS(pcvl.P("px0")))
+   circuit.add(2, pcvl.PS(pcvl.P("px1")))
+   circuit.add(4, pcvl.PS(pcvl.P("px2")))
+
    experiment = pcvl.Experiment(circuit)
    experiment.noise = pcvl.NoiseModel(brightness=0.9, transmittance=0.85)
+   experiment.detectors[0] = pcvl.Detector.threshold()
+   experiment.detectors[2] = pcvl.Detector.threshold()
+   experiment.detectors[4] = pcvl.Detector.threshold()
 
-   # Feature map from the experiment
    fmap = FeatureMap(
        input_size=3,
-       input_parameters=["px"],
+       input_parameters="px",
        experiment=experiment,
    )
 
-   # Fidelity kernel using a spaced input pattern
    kernel = FidelityKernel(
        feature_map=fmap,
-       input_state=[1, 0, 1, 0, 1, 0],
        shots=0,
        computation_space=ComputationSpace.FOCK,
    )
@@ -259,24 +281,38 @@ Declarative builder + kernel
 .. code-block:: python
 
    import torch
-   from merlin.algorithms.kernels import KernelCircuitBuilder
+   from merlin.algorithms.kernels import FeatureMap, FidelityKernel
+   from merlin.builder import CircuitBuilder
 
-   builder = (
-       KernelCircuitBuilder()
-       .input_size(4)
-       .n_modes(6)
-       .angle_encoding(scale=torch.pi)
-       .trainable(enabled=True, prefix="phi")
+   builder = CircuitBuilder(n_modes=6)
+   builder.add_superpositions(depth=1)
+   builder.add_angle_encoding(
+       modes=[0, 1, 2, 3],
+       name="input",
+       scale=float(torch.pi),
    )
-   kernel = builder.build_fidelity_kernel(input_state=[1, 1, 0, 0, 0, 0], shots=0)
+   builder.add_rotations(trainable=True, name="phi")
+   builder.add_superpositions(depth=1)
+
+   feature_map = FeatureMap(
+       builder=builder,
+       input_size=4,
+       input_parameters=None,
+   )
+   kernel = FidelityKernel(
+       feature_map=feature_map,
+       n_photons=2,
+       shots=0,
+   )
 
    X = torch.rand(32, 4)
    K = kernel(X)
 
 .. note::
 
-  ``input_state=[...]`` is accepted for convenience and is converted to a Perceval
-  `pcvl.BasicState <https://perceval.quandela.net/docs/v1.1/reference/utils/states.html>`_ internally.
+  To force a specific photon pattern, pass ``input_state=[...]``. The list is
+  converted to a Perceval
+  `pcvl.BasicState <https://perceval.quandela.net/docs/v1.2/reference/utils/states.html>`_ internally.
 
 Using with scikit‑learn (precomputed kernel)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -298,24 +334,26 @@ Comparing quantum vs classical kernels
     from sklearn.svm import SVC
     from sklearn.metrics.pairwise import rbf_kernel
     import torch
-    import numpy as np
+    from merlin.algorithms.kernels import FeatureMap, FidelityKernel
 
     # Prepare data
     X_train_t = torch.tensor(X_train, dtype=torch.float32)
     X_test_t = torch.tensor(X_test, dtype=torch.float32)
 
     # Quantum kernel
-    qkernel = FidelityKernel.simple(input_size=4, n_modes=6)     # Here the number of modes is optional, if n_modes is not given, n_modes=input_size+1
-    K_train_q = qkernel(X_train_t).numpy()
-    K_test_q = qkernel(X_test_t, X_train_t).numpy()
+    feature_map = FeatureMap.simple(input_size=4)  # n_modes = input_size + 1 = 5
+    qkernel = FidelityKernel(feature_map=feature_map)
+    K_train_q = qkernel(X_train_t).detach().numpy()
+    K_test_q = qkernel(X_test_t, X_train_t).detach().numpy()
 
     clf_q = SVC(kernel="precomputed")
     clf_q.fit(K_train_q, y_train)
     acc_quantum = clf_q.score(K_test_q, y_test)
 
     # Classical RBF kernel
-    K_train_rbf = rbf_kernel(X_train, gamma='scale')
-    K_test_rbf = rbf_kernel(X_test, X_train, gamma='scale')
+    gamma = 1.0 / X_train_t.shape[1]
+    K_train_rbf = rbf_kernel(X_train, gamma=gamma)
+    K_test_rbf = rbf_kernel(X_test, X_train, gamma=gamma)
 
     clf_rbf = SVC(kernel="precomputed")
     clf_rbf.fit(K_train_rbf, y_train)

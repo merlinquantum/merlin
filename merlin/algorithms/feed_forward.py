@@ -177,7 +177,7 @@ class FeedForwardBlock(MerlinModule):
         ``None``).
     input_state : list[int] | pcvl.BasicState | pcvl.StateVector | torch.Tensor | None
         Initial quantum state. May be provided as a Fock occupation list,
-        `pcvl.BasicState <https://perceval.quandela.net/docs/v1.1/reference/utils/states.html>`_, :class:`~exqalibur.StateVector`, or a tensor whose
+        `pcvl.BasicState <https://perceval.quandela.net/docs/v1.2/reference/utils/states.html>`_, :class:`~exqalibur.StateVector`, or a tensor whose
         components represent amplitudes in the experiment Fock basis. The tensor
         form is only required for amplitude-encoding inputs.
     trainable_parameters : list[str] | None

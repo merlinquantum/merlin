@@ -25,40 +25,65 @@ the scalar result.
 Architecture overview
 ---------------------
 
-Three components cooperate to build and evaluate kernels:
+Four components cooperate to build and evaluate kernels:
 
-1. :class:`~merlin.algorithms.kernels.FeatureMap` – embeds classical data into
-	 a photonic circuit and returns unitaries ``U(x)``. It accepts:
+1. :class:`~merlin.algorithms.kernels.FeatureMap` – a descriptor that stores
+	 the photonic circuit and its parameter layout. It accepts:
 
 	 - a :class:`pcvl.Circuit` (manual construction),
 	 - a :class:`~merlin.builder.circuit_builder.CircuitBuilder` (declarative), or
 	 - a :class:`pcvl.Experiment` (unitary circuit + measurement semantics).
 
-2. :class:`~merlin.algorithms.kernels.FidelityKernel` – computes kernel values
-	 from a feature map and an input Fock state using SLOS.
+	 ``FeatureMap`` is a pure descriptor. ``FidelityKernel`` reads its fields
+	 (experiment, parameter prefixes, input size, dtype, device) to configure
+	 the computation backend and does **not** call any method on it for
+	 encoding or unitary construction.
 
-3. :class:`~merlin.algorithms.kernels.KernelCircuitBuilder` – convenience
-	 helper to produce a standard feature map and fidelity kernel.
+2. ``_CCInvQuantumLayer`` – the internal computation backend, a
+	 :class:`~merlin.algorithms.layer.QuantumLayer` subclass constructed by
+	 ``FidelityKernel``. It owns encoding, unitary computation, SLOS
+	 simulation, pairwise kernel-matrix assembly, and the photon-loss/detector
+	 pipeline. All circuit-level work is delegated to this object.
 
-Data encoding pipeline (FeatureMap)
------------------------------------
+3. :class:`~merlin.algorithms.kernels.FidelityKernel` – validates the feature
+	 map, builds ``_CCInvQuantumLayer``, normalizes public inputs, and delegates
+	 kernel-matrix construction to the backend.
 
-``FeatureMap`` takes a datapoint and maps it to the exact parameter vector that
-its circuit expects before calling the Torch converter
-(:class:`~merlin.pcvl_pytorch.locirc_to_tensor.CircuitConverter`) to obtain
-``U(x)``. The encoding logic follows a strict preference order:
+4. :class:`~merlin.builder.circuit_builder.CircuitBuilder` – declarative
+	 helper to build circuits for ``FeatureMap(builder=...)`` (and therefore ``FidelityKernel``).
 
-1. If the feature map was created from a :class:`~merlin.builder.circuit_builder.CircuitBuilder`, use its
+Data encoding pipeline
+----------------------
+
+``FidelityKernel`` encodes datapoints through ``_CCInvQuantumLayer._encode_single``,
+which maps a flat feature tensor to the parameter shape the circuit expects.
+The supported encoding contract has two cases:
+
+1. If the feature map was created from a
+	 :class:`~merlin.builder.circuit_builder.CircuitBuilder`, use its
 	 angle‑encoding metadata (``combinations`` and per‑index ``scales``) to
-	 compute linear forms of the input vector. This guarantees the encoded vector
-	 length matches the converter specification for the declared input prefix.
-2. Otherwise, if the user provided a callable ``encoder(x)``, use it. The
-	 output is validated against the expected length; if invalid or failing, the
-	 code falls back to the deterministic expansion below.
-3. As a final fallback, the deterministic subset‑sum expansion enumerates and
-	 sums non‑empty feature subsets in lexicographic order until the expected
-	 parameter length is reached. This matches the legacy behaviour of older
-	 feature maps.
+	 compute linear forms of the input vector via
+	 ``_prepare_input_encoding``. This guarantees the encoded vector length
+	 matches the converter specification for the declared input prefix.
+2. Otherwise (plain :class:`pcvl.Circuit` or :class:`pcvl.Experiment`
+	 construction), ``FeatureMap.input_size`` must exactly match the number of
+	 circuit input parameters selected by ``FeatureMap.input_parameters``. The
+	 input is passed through with that parameter dimension.
+
+	 For compatibility, direct circuit and experiment feature maps may still use
+	 the legacy ``FeatureMap.encoder`` callable or the legacy subset/truncation
+	 behavior when ``FeatureMap.input_size`` differs from the circuit input
+	 parameter count. This compatibility path emits a ``DeprecationWarning`` and
+	 will be removed in a future release.
+
+.. deprecated:: 0.4
+
+	 The ``encoder`` callable accepted by :class:`~merlin.algorithms.kernels.FeatureMap`
+	 is **only** consulted by the legacy :meth:`~merlin.algorithms.kernels.FeatureMap.compute_unitary`
+	 path (``FeatureMap._encode_x``) and by ``FidelityKernel`` only for
+	 deprecated compatibility with older direct-circuit feature maps. Pass
+	 encoding logic through a :class:`~merlin.builder.circuit_builder.CircuitBuilder`
+	 or pass inputs with the circuit parameter dimension instead.
 
 Unitary construction
 --------------------
@@ -66,15 +91,22 @@ Unitary construction
 The :class:`~merlin.pcvl_pytorch.locirc_to_tensor.CircuitConverter` holds a compiled representation of the photonic
 model (unitary compute graph) and exposes ``to_tensor(...)`` to produce a
 complex matrix on the configured ``device``/``dtype``. When the feature map is
-trainable, extra trainable torch parameters (``torch.nn.Parameter``) are
-registered on the feature map and concatenated after the encoded inputs.
+trainable, the trainable ``torch.nn.Parameter`` objects are registered on
+``_CCInvQuantumLayer`` (accessible via ``QuantumLayer.thetas``) and
+concatenated before the encoded inputs when calling the converter.
+
+.. note::
+
+	 ``FeatureMap._training_dict`` still holds a copy of the trainable
+	 parameters for the deprecated :meth:`~merlin.algorithms.kernels.FeatureMap.compute_unitary`
+	 path. ``FidelityKernel`` does not read this dictionary.
 
 Pairwise circuit evaluation and vectorization
 ---------------------------------------------
 
 Given batches ``X1`` of size :math:`N` and (optionally) ``X2`` of size
-:math:`M`, the kernel evaluates the transition probabilities for all pairs by
-constructing the set of composite circuits
+:math:`M`, ``_CCInvQuantumLayer`` evaluates the transition probabilities for
+all pairs by constructing the set of composite circuits
 ``U_forward @ U_adjoint`` where ``U_forward = U(x1)`` and
 ``U_adjoint = U(x2)^{\dagger}``:
 
@@ -120,9 +152,10 @@ vector when several detection outcomes are compatible with the input pattern.
 
 .. note::
 
-	 ``ComputationSpace.UNBUNCHED`` cannot be combined with experiments that define
-	 detectors. The kernel raises if detectors are present and ``ComputationSpace.UNBUNCHED`` or ``ComputationSpace.FOCK`` is
-	 requested.
+	 Only ``ComputationSpace.FOCK`` can be combined with experiments that define
+	 detectors. The kernel raises a ``RuntimeError`` if at least one
+	 :class:`pcvl.Detector` is present in the experiment and any non-FOCK
+	 computation space (e.g. ``UNBUNCHED`` or ``DUAL_RAIL``) is requested.
 
 Sampling and autodiff
 ---------------------
@@ -172,12 +205,8 @@ Limitations
 	state vectors are not part of this kernel stack.
 * Experiments passed to the kernel must be unitary and without post‑selection
 	or heralding. Non‑unitary experiments are rejected.
-* ``KernelCircuitBuilder.bandwidth_tuning`` is a placeholder in the current
-	release.
 
-Cross‑references
 ----------------
 
 For class/method signatures and basic usage examples, see the API reference:
 :mod:`merlin.algorithms.kernels`.
-

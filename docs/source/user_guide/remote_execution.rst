@@ -16,8 +16,8 @@ With either backend you can:
 
 * Offload **quantum leaves** (e.g. ``QuantumLayer``) to the cloud while keeping
   **classical layers** local.
-* Submit batched inputs; when batches are large, Merlin will **chunk** them and
-  (optionally) **run chunks in parallel**.
+* Submit batched inputs; when remote batches are large, Merlin will **chunk**
+  them and (optionally) **run chunks in parallel**.
 * Drive execution **synchronously** (``forward``) or **asynchronously**
   (``forward_async`` returning a ``torch.futures.Future``).
 * Monitor status, collect **job IDs**, **cancel** jobs, and enforce **timeouts**.
@@ -174,17 +174,27 @@ Instantiation & Options
 .. code-block:: text
 
     MerlinProcessor(
-        remote_processor=None,       # RemoteProcessor — legacy path
+        remote_processor=None,       # RemoteProcessor — deprecated legacy path
         session=None,                # ISession — preferred path
         microbatch_size=32,
         timeout=3600.0,
         max_shots_per_call=None,
         chunk_concurrency=1,
+        token=None,
+        *,
+        processor=None,              # AProcessor — keyword-only local/normalized path
     )
 
-Exactly **one** of ``remote_processor`` or ``session`` must be provided.
+Exactly **one** of ``remote_processor``, ``session``, or ``processor`` must be
+provided.
 
-* **remote_processor (RemoteProcessor | None)**: Quandela Cloud backend.
+.. warning:: *Deprecated since version 0.4:*
+   The ``remote_processor`` constructor argument is deprecated and will be
+   removed in a future release. Pass the same ``RemoteProcessor`` through
+   ``processor=`` instead.
+
+* **remote_processor (RemoteProcessor | None)**: Deprecated Quandela Cloud
+  backend entry point. Pass the same object through ``processor=`` instead.
   Merlin clones it internally per chunk so multiple jobs can run safely in
   parallel without altering your original instance.
 
@@ -203,13 +213,21 @@ Exactly **one** of ``remote_processor`` or ``session`` must be provided.
 
 * **max_shots_per_call (int | None)**: cap for **each** cloud call's
   ``max_shots_per_call`` parameter on the Perceval ``Sampler``. If ``None``,
-  Merlin uses an internal default (10 000). If the requested ``nsample`` for a
-  call exceeds this cap, Merlin automatically raises it to match so that
-  Perceval does not silently clamp the sample count.
+  Merlin uses an internal cap default (100 000). If the requested ``nsample``
+  for a call exceeds this cap, Merlin clamps the submitted sample count to the
+  cap.
 
 * **chunk_concurrency (int)**: maximum number of **chunks** submitted in
   parallel **per quantum leaf**. Default ``1`` (serial). Increase for higher
   throughput when the backend allows it.
+
+* **token (str | None)**: authentication token forwarded to cloned remote
+  processors. If omitted, Merlin extracts it from the ``RemoteProcessor`` RPC
+  handler. Ignored for local and session paths.
+
+* **processor (AProcessor | None)**: keyword-only Perceval processor entry
+  point. Local processors use the local backend path. ``RemoteProcessor``
+  instances passed here are normalized to the remote processor path.
 
 Computation Spaces
 ------------------
@@ -277,10 +295,15 @@ Asynchronous
 Batching & Chunking
 -------------------
 
-* If ``len(X) > microbatch_size``, Merlin splits into chunks of size
-  ``<= microbatch_size`` and submits up to ``chunk_concurrency`` chunk-jobs in
-  parallel **for that quantum leaf**. This applies to both the
+* If ``len(X) > microbatch_size``, Merlin splits remote execution into chunks
+  of size ``<= microbatch_size`` and submits up to ``chunk_concurrency``
+  chunk-jobs in parallel **for that quantum leaf**. This applies to both the
   ``RemoteProcessor`` and ``ISession`` paths.
+* Local ``processor=`` execution does not use remote chunking. Merlin keeps the
+  full PyTorch input together, maps rows to Perceval sampler iterations, and
+  returns a batched tensor. Perceval does not execute a native vectorized batch,
+  so local users control batch size from their PyTorch input batch rather than
+  ``microbatch_size``.
 * The Future aggregates **all job IDs** across leaves in
   ``future.job_ids``. It also exposes chunk counters via ``future.status()``:
 
@@ -311,7 +334,8 @@ Estimating Required Shots
 -------------------------
 
 Merlin includes a helper that proxies Perceval's built-in estimator and **does
-not** submit jobs:
+not** submit jobs. The estimator is available only for remote processor and
+session backends; local ``processor=`` backends raise ``RuntimeError``:
 
 .. code-block:: python
 
@@ -344,8 +368,8 @@ Multiple Quantum Layers
 
 Sequential models with multiple quantum leaves are supported:
 
-* Each quantum leaf is processed in order; each may chunk and run those chunks
-  with its own intra-leaf concurrency (``chunk_concurrency``).
+* Each quantum leaf is processed in order; remote leaves may chunk and run
+  those chunks with their own intra-leaf concurrency (``chunk_concurrency``).
 * ``future.job_ids`` will include all job IDs across all leaves.
 
 Workflow Recipes
@@ -388,7 +412,7 @@ Works with both computation spaces — just adjust the output dimension:
         nn.Softmax(dim=-1),
     ).eval()
 
-    proc = MerlinProcessor(pcvl.RemoteProcessor("sim:slos"))
+    proc = MerlinProcessor(processor=pcvl.RemoteProcessor("sim:slos"))
     X = torch.rand(6, 3)
     y = proc.forward(model, X, nsample=5000)
 
@@ -434,7 +458,7 @@ using SciPy:
                 off += sz
 
     x0 = get_flat().double().numpy()
-    proc = MerlinProcessor(pcvl.RemoteProcessor("sim:slos"))
+    proc = MerlinProcessor(processor=pcvl.RemoteProcessor("sim:slos"))
     X = torch.rand(8, 3)
 
     # Objective: maximise mean scalar output → minimise negative
@@ -456,7 +480,7 @@ Local vs remote A/B (force simulation)
 
     q = QuantumLayer(...).eval()
     X = torch.rand(4, q.input_size)
-    proc = MerlinProcessor(pcvl.RemoteProcessor("sim:slos"))
+    proc = MerlinProcessor(processor=pcvl.RemoteProcessor("sim:slos"))
 
     # Remote path (offloaded)
     y_remote = proc.forward(q, X, nsample=5000)
@@ -525,6 +549,21 @@ Scaleway session with context manager
         # MerlinProcessor context manager cancels any stray jobs on exit.
     # Scaleway session is closed on exit.
 
+Gradient Propagation
+---------------------
+* No gradient can flow through the MerLin processor. When calling backwards directly on a MerlinProcessor's
+  forward pass, this error will be shown::
+
+      element 0 of tensors does not require grad and does not have a grad_fn
+
+* If a MerLin processor is part of a bigger ``Pytorch`` module, the quantum layer's parameter gradient will be None.
+  This also means that every upstream models' (models called before the :class:`~merlin.algorithms.layer.QuantumLayer` in the model's forward) gradient will be None.
+
+* The gradient can not pass through right now as pytorch can not access
+  directly the computation on the QPU.
+
+* Differentiation through the MerLin processor will be implemented in v0.5.
+
 Troubleshooting
 ---------------
 
@@ -532,8 +571,8 @@ Troubleshooting
   Your backend may be very fast, or your layer ran locally (e.g.,
   ``force_local=True``).
 * **"Lowered max_samples" warning from Perceval**:
-  This means ``nsample`` exceeded ``max_shots_per_call``. Merlin now
-  auto-raises the cap, but if you see this with an older version, set
+  This means ``nsample`` exceeded ``max_shots_per_call``. Merlin clamps the
+  submitted sample count, but if you see this with an older version, set
   ``max_shots_per_call`` >= your ``nsample``.
 * **Timeouts in CI**:
   Backends vary. Make tests resilient to fast or slow responses by polling
@@ -544,7 +583,9 @@ API Reference (Summary)
 
 **Constructor**
 
-* ``MerlinProcessor(remote_processor=None, session=None, microbatch_size=32, timeout=3600.0, max_shots_per_call=None, chunk_concurrency=1)``
+* ``MerlinProcessor(remote_processor=None, session=None, microbatch_size=32, timeout=3600.0, max_shots_per_call=None, chunk_concurrency=1, token=None, *, processor=None)``
+  ``remote_processor`` is deprecated; pass remote processors through
+  ``processor=``.
 
 **Execution**
 
@@ -573,9 +614,16 @@ Version Notes
 -------------
 
 * ``session`` parameter added for ``ISession``-based backends (Scaleway).
-  Exactly one of ``remote_processor`` or ``session`` must be provided.
-  Both paths now support chunking and ``chunk_concurrency`` — each chunk
+  Exactly one of ``processor``, ``remote_processor``, or ``session`` must be
+  provided. ``remote_processor`` is deprecated and remains supported for
+  compatibility. A
+  given session then uses its remote processor from the ``session.build_remote_processor()``
+  method to define the available commands. Both remote paths support chunking and ``chunk_concurrency`` — each chunk
   gets an independent ``RemoteProcessor`` via ``session.build_remote_processor()``.
+
+  To see the available commands and backend name, call the ``backend_capabilities`` attribute of the ``MerlinProcessor``.
+* If the probs command is available and nsample is None or 0, the processor will run a probabilities simulations.
+  Otherwise, sampling simulations or quantum executions will be done.
 * ``MeasurementStrategy.probs(computation_space=...)`` replaces the older
   ``no_bunching`` flag and bare ``computation_space`` parameter on
   ``QuantumLayer``. Both ``ComputationSpace.FOCK`` (bunched) and
@@ -583,5 +631,7 @@ Version Notes
 * Default ``chunk_concurrency`` is **1** (serial intra-leaf).
 * Failed chunks are retried up to 3 times with exponential backoff.
   Cancellation and timeout errors propagate immediately.
-* ``max_shots_per_call`` is automatically raised to match ``nsample`` when
-  needed, preventing Perceval from silently clamping the sample count.
+* ``max_shots_per_call`` sets the maximum number of samples sent in a
+   single call. When ``nsample > max_shots_per_call``, the call is limited
+   to ``max_shots_per_call`` samples, which prevents Perceval from silently
+   clamping the requested sample count. The default ``max_shots_per_call`` is 100 000.

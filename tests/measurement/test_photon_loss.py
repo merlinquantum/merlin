@@ -672,11 +672,11 @@ class TestPhotonLossWithFidelityKernel:
             input_state=input_state,
         )
 
-        keys = kernel._detector_transform.output_keys
-        keys_noise = kernel_noise._detector_transform.output_keys
+        keys = kernel._quantum_layer._detector_transform.output_keys
+        keys_noise = kernel_noise._quantum_layer._detector_transform.output_keys
 
-        assert kernel._detector_transform.output_size == len(keys)
-        assert kernel_noise._detector_transform.output_size == len(keys_noise)
+        assert kernel._quantum_layer._detector_transform.output_size == len(keys)
+        assert kernel_noise._quantum_layer._detector_transform.output_size == len(keys_noise)
         assert len(keys) < len(keys_noise)
         assert all(sum(key) == sum(input_state) for key in keys)
         assert any(sum(key) < sum(input_state) for key in keys_noise)

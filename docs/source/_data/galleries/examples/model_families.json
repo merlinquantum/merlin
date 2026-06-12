@@ -1,8 +1,8 @@
 [
   {
     "title": "Kernel Methods: Fidelity kernel classification",
-    "summary": "Introduction to these two encoding strategies and their tradeoffs.",
-    "image": "_static/img/Iris_pipeline.png",
+    "summary": "Build photonic fidelity kernels and inspect SVM decision regions on Iris.",
+    "image": "_static/examples/kernels_iris.png",
     "doc": "notebooks/Kernels.ipynb",
     "tags": ["Tutorial", "Kernels", "FidelityKernel","Iris"]
   },

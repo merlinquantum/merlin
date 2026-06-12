@@ -51,7 +51,10 @@ def pytest_collection_modifyitems(
             item.add_marker(cloud_skip)
 
         # Skip scaleway tests unless --run-scaleway-tests
-        if not run_scaleway and "scaleway_session" in fixturenames:
+        if not run_scaleway and (
+            "scaleway_session" in fixturenames
+            or "scaleway_session_probs" in fixturenames
+        ):
             item.add_marker(scaleway_skip)
 
 
@@ -139,6 +142,62 @@ def scaleway_session(scaleway_credentials):
         project_id=scaleway_credentials["project_id"],
         token=scaleway_credentials["token"],
         deduplication_id="merlin-test-session",
+        max_idle_duration_s=300,
+        max_duration_s=600,
+    ) as session:
+        yield session
+
+
+# Uncomment when there is a probs backend
+@pytest.fixture(scope="module")
+def scaleway_session_probs(scaleway_credentials):
+    """
+    Provide a Scaleway Session connected to a platform that supports the ``probs``
+    command.  The fixture queries the Scaleway platform list at runtime and picks
+    the first Quandela backend that exposes ``probs``; the test is skipped if none
+    is available.
+    """
+    requests = pytest.importorskip("requests")
+    scw = pytest.importorskip("perceval.providers.scaleway")
+
+    token = scaleway_credentials["token"]
+    project_id = scaleway_credentials["project_id"]
+
+    r = requests.get(
+        "https://api.scaleway.com/qaas/v1alpha1/platforms",
+        headers={"X-Auth-Token": token, "Content-Type": "application/json"},
+    )
+    r.raise_for_status()
+
+    probs_platform: str | None = None
+    for p in r.json().get("platforms", []):
+        if p.get("provider_name") != "quandela":
+            continue
+        try:
+            with scw.Session(
+                p["name"],
+                project_id=project_id,
+                token=token,
+                deduplication_id="merlin-probs-probe",
+            ) as probe_session:
+                proc = probe_session.build_remote_processor()
+                if "probs" in proc.available_commands:
+                    probs_platform = p["name"]
+                    break
+        except Exception:
+            continue
+
+    if probs_platform is None:
+        pytest.skip(
+            "No Scaleway Quandela backend with 'probs' support found; "
+            "skipping probs-specific tests."
+        )
+
+    with scw.Session(
+        probs_platform,
+        project_id=project_id,
+        token=token,
+        deduplication_id="merlin-test-probs-session",
         max_idle_duration_s=300,
         max_duration_s=600,
     ) as session:

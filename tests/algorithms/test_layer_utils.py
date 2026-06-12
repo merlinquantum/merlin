@@ -26,6 +26,7 @@ import torch
 
 import merlin as ML
 from merlin.algorithms.layer_utils import (
+    _build_simple_circuit,
     apply_angle_encoding,
     compute_new_memristive_ps_angles,
     feature_count_for_prefix,
@@ -283,3 +284,81 @@ def test_compute_new_memristive_ps_angles():
 
     for x, y in zip(res, expected, strict=True):
         assert torch.allclose(x, y)
+
+
+class TestBuildSimpleCircuit:
+    """Tests for :func:`~merlin.algorithms.layer_utils._build_simple_circuit`."""
+
+    def test_returns_circuit_builder(self):
+        from merlin.builder.circuit_builder import CircuitBuilder
+
+        builder = _build_simple_circuit(input_size=3, n_modes=4)
+        assert isinstance(builder, CircuitBuilder)
+
+    def test_n_modes_propagated(self):
+        builder = _build_simple_circuit(input_size=4, n_modes=5)
+        circuit = builder.to_pcvl_circuit(__import__("perceval"))
+        assert circuit.m == 5
+
+    def test_default_n_modes_is_input_size_plus_one(self):
+        for input_size in (1, 3, 5):
+            builder = _build_simple_circuit(input_size=input_size)
+            circuit = builder.to_pcvl_circuit(__import__("perceval"))
+            assert circuit.m == input_size + 1
+
+    def test_default_scale_is_one(self):
+        builder_default = _build_simple_circuit(input_size=3)
+        builder_explicit = _build_simple_circuit(input_size=3, angle_encoding_scale=1.0)
+        # Both builders should produce the same angle-encoding specs
+        assert (
+            builder_default.angle_encoding_specs
+            == builder_explicit.angle_encoding_specs
+        )
+
+    def test_trainable_prefixes(self):
+        builder = _build_simple_circuit(n_modes=4, input_size=3)
+        assert "LI_simple" in builder.trainable_parameter_prefixes
+        assert "RI_simple" in builder.trainable_parameter_prefixes
+
+    def test_input_prefix(self):
+        builder = _build_simple_circuit(n_modes=4, input_size=3)
+        assert "input" in builder.input_parameter_prefixes
+
+    def test_angle_encoding_scale_stored(self):
+        scale = 2.5
+        builder = _build_simple_circuit(n_modes=4, input_size=3, angle_encoding_scale=scale)
+        specs = builder.angle_encoding_specs
+        # All feature scales in the "input" spec should equal the provided scale
+        input_spec = specs.get("input", {})
+        scales = input_spec.get("scales", {})
+        assert scales, "Expected non-empty scales dict"
+        for v in scales.values():
+            assert v == scale
+
+    def test_produces_identical_circuit_for_layer_and_feature_map(self):
+        """QuantumLayer.simple and FeatureMap.simple must share the same circuit topology."""
+        import merlin as ML
+        from merlin.algorithms.kernels import FeatureMap
+
+        ql = ML.QuantumLayer.simple(input_size=3)
+        fm = FeatureMap.simple(input_size=3)
+
+        ql_circuit = ql.quantum_layer.circuit
+        fm_circuit = fm.circuit
+
+        assert ql_circuit.m == fm_circuit.m
+        # Both circuits encode the same number of modes
+        assert ql_circuit.m == 4  # input_size + 1
+
+    def test_quantum_layer_and_feature_map_share_parameter_names(self):
+        """Both simple factories must expose the same trainable parameter names."""
+        import merlin as ML
+        from merlin.algorithms.kernels import FeatureMap
+
+        ql_params = [k for k, _ in ML.QuantumLayer.simple(input_size=3).quantum_layer.named_parameters()]
+        fm_params = FeatureMap.simple(input_size=3).trainable_parameters
+
+        assert "LI_simple" in ql_params
+        assert "RI_simple" in ql_params
+        assert "LI_simple" in fm_params
+        assert "RI_simple" in fm_params

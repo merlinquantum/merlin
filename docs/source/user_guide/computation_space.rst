@@ -79,7 +79,7 @@ Another parameter is also relevant.
   subspaces such as dual-rail groupings without rebuilding the circuit.
 
 Internally the :class:`~merlin.core.process.ComputationProcessFactory` uses these 
-to build the correct `Perceval <https://perceval.quandela.net/docs/v1.1/>`_ simulation graph.  The same options propagate
+to build the correct `Perceval <https://perceval.quandela.net/docs/v1.2/>`_ simulation graph.  The same options propagate
 through factory-created ansätze and algorithm builders.
 
 Working with QLOQ encodings

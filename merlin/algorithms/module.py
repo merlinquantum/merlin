@@ -22,6 +22,7 @@
 
 from __future__ import annotations
 
+import uuid
 from contextlib import contextmanager
 
 import torch
@@ -53,6 +54,7 @@ class MerlinModule(nn.Module):
     """
 
     # -------------------- Execution policy & helpers --------------------
+    uid = uuid.uuid4()
 
     @property
     def force_local(self) -> bool:

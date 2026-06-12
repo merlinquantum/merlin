@@ -235,7 +235,7 @@ of truth for measurement semantics.
     import perceval as pcvl
 
     # Reuse the circuit produced by the builder
-    circuit = builder.circuit
+    circuit = builder.to_pcvl_circuit()
     experiment = pcvl.Experiment(circuit)
     experiment.noise = pcvl.NoiseModel(brightness=0.95, transmittance=0.9)
     experiment.detectors[0] = pcvl.Detector.threshold()

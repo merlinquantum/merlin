@@ -109,7 +109,7 @@ a good understanding of Perceval.
 .. note::
 
   ``input_state=[...]`` is accepted as a convenience input, but the layer stores it as a Perceval
-  `pcvl.BasicState <https://perceval.quandela.net/docs/v1.1/reference/utils/states.html>`_ (access the occupation vector via ``list(layer.input_state)``).
+  `pcvl.BasicState <https://perceval.quandela.net/docs/v1.2/reference/utils/states.html>`_ (access the occupation vector via ``list(layer.input_state)``).
 
 Experiment-driven
 ~~~~~~~~~~~~~~~~~
