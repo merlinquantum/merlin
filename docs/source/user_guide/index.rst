@@ -12,6 +12,7 @@ Here are a few pages to guide you through your MerLin usage.
    :maxdepth: 1
 
    angle_amplitude_encoding
+   compatibility
    computation_space
    encoding_space
    feed_forward
@@ -20,10 +21,10 @@ Here are a few pages to guide you through your MerLin usage.
    layer
    measurement_strategy
    models/index
-   migration_guide
    noisy_simulations
    quantum_bridge
    remote_execution
+   migration_guide
 
 
 Master the QuantumLayer
@@ -67,6 +68,13 @@ Specific algorithms
 .. merlin-gallery::
    :data: _data/galleries/user_guide/specific_algorithms.json
    :columns: 2
+
+Compatibility
+----------------------------------------
+.. merlin-gallery::
+   :data: _data/galleries/user_guide/compatibility.json
+   :columns: 2
+   :contour-color: #f2994a
 
 Migration guide
 ----------------------------------------
