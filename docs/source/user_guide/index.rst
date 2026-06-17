@@ -22,6 +22,7 @@ Here are a few pages to guide you through your MerLin usage.
    measurement_strategy
    models/index
    noisy_simulations
+   photonic_generator
    quantum_bridge
    remote_execution
    migration_guide
