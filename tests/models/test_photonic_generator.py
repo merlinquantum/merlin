@@ -273,12 +273,12 @@ def test_warns_when_data_size_exceeds_generated_output_space():
 
 def test_generator_accepts_single_layer():
     generator = ML.PhotonicGenerator(
-        layers=[_make_layer(input_size=2)],
+        layers=[_make_layer(input_size=4)],
         output_adapter=ML.VectorAdapter(size=4),
     )
 
     assert len(generator) == 1
-    assert generator.latent_dim == 2
+    assert generator.latent_dim == 4
 
 
 def test_generator_accepts_single_layer_object():
@@ -472,9 +472,9 @@ def test_sample_latent_respects_explicit_dtype():
 
 def test_custom_latent_distribution_is_supported():
     generator = ML.PhotonicGenerator(
-        layers=[_make_layer(input_size=2)],
+        layers=[_make_layer(input_size=3)],
         output_adapter=ML.VectorAdapter(size=4),
-        latent=ConstantLatent(dim=2, value=0.25),
+        latent=ConstantLatent(dim=3, value=0.25),
     )
 
     z = generator.sample_latent(batch_size=3, dtype=torch.float64)
@@ -486,9 +486,9 @@ def test_custom_latent_distribution_is_supported():
 def test_custom_latent_distribution_dimension_must_match_layers():
     with pytest.raises(ValueError, match="Latent dimension"):
         ML.PhotonicGenerator(
-            layers=[_make_layer(input_size=2)],
+            layers=[_make_layer(input_size=3)],
             output_adapter=ML.VectorAdapter(size=4),
-            latent=ConstantLatent(dim=3, value=0.25),
+            latent=ConstantLatent(dim=4, value=0.25),
         )
 
 
@@ -565,7 +565,7 @@ def test_partial_measurement_output_can_use_custom_adapter():
 
 def test_generate_samples_latent_and_forwards():
     generator = ML.PhotonicGenerator(
-        layers=[_make_layer(input_size=2)],
+        layers=[_make_layer(input_size=4)],
         output_adapter=ML.VectorAdapter(size=5),
     )
 
@@ -575,7 +575,7 @@ def test_generate_samples_latent_and_forwards():
 
 
 def test_getitem_returns_quantum_layer():
-    layer = _make_layer(input_size=2)
+    layer = _make_layer(input_size=3)
     generator = ML.PhotonicGenerator(
         layers=[layer],
         output_adapter=ML.VectorAdapter(size=4),
@@ -695,10 +695,10 @@ def test_generator_with_occupancy_readout_uses_reduced_measurement_keys():
         computation_space=ML.ComputationSpace.FOCK,
         occupancy_readout=True,
     )
-    layer = _make_layer(input_size=2, measurement_strategy=strategy)
+    layer = _make_layer(input_size=4, measurement_strategy=strategy)
     generator = ML.PhotonicGenerator(
         layers=layer,
-        count=2,
+        count=4,
         output_adapter=ML.ImageAdapter(shape=(1, 4, 4), headwise=True),
     )
     z = torch.randn(3, generator.latent_dim)
@@ -707,8 +707,8 @@ def test_generator_with_occupancy_readout_uses_reduced_measurement_keys():
     output = generator(z)
 
     assert output.shape == (3, 1, 4, 4)
-    assert len(measurements.outputs) == 2
-    assert len(measurements.output_keys) == 2
+    assert len(measurements.outputs) == 4
+    assert len(measurements.output_keys) == 4
     for head_index, head_output in enumerate(measurements.outputs):
         assert isinstance(head_output, torch.Tensor)
         assert head_output.shape[1] == generator[head_index].output_size
