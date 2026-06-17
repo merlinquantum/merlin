@@ -228,6 +228,48 @@ def test_generator_rejects_non_quantum_layer_objects():
             layers=[bad_layer], output_adapter=ML.VectorAdapter(size=4)
         )
 
+def test_raises_when_number_of_heads_exceeds_data_size_image():
+    layer = _make_layer(input_size=2)
+    adapter = ML.ImageAdapter(shape=(1, 4, 4))
+
+    with pytest.raises(
+        ValueError,
+        match=r"Number of heads \(.*\) must not exceed data size",
+    ):
+        ML.PhotonicGenerator(
+            layers=layer,
+            count=18,
+            output_adapter=adapter,
+        )
+
+def test_raises_when_number_of_heads_exceeds_data_size_vector():
+    layer = _make_layer(input_size=2)
+    adapter = ML.VectorAdapter(size=4)
+
+    with pytest.raises(
+        ValueError,
+        match=r"Number of heads \(.*\) must not exceed data size",
+    ):
+        ML.PhotonicGenerator(
+            layers=layer,
+            count=5,
+            output_adapter=adapter,
+        )
+
+def test_warns_when_data_size_exceeds_generated_output_space():
+    layer = _make_layer(input_size=2)
+    adapter = ML.ImageAdapter(shape=(1, 28, 28))
+
+    with pytest.warns(
+        UserWarning,
+        match=r"Size of data \(.*\) exceeds size of generated output space",
+    ):
+        ML.PhotonicGenerator(
+            layers=layer,
+            output_adapter=adapter,
+            count=2,
+        )
+
 
 def test_generator_accepts_single_layer():
     generator = ML.PhotonicGenerator(

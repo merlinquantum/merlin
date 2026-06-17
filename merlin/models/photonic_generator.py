@@ -11,6 +11,7 @@ generators such as the architecture introduced in
 
 from __future__ import annotations
 
+import warnings
 import copy
 import math
 from abc import ABC, abstractmethod
@@ -454,7 +455,14 @@ class PhotonicGenerator(nn.Module):
     ValueError
         If no layers are provided, if layer input sizes differ, if a layer uses
         amplitude outputs, or if the latent distribution dimension does not
-        match the inferred latent dimension, or if ``count`` is not positive.
+        match the inferred latent dimension, if ``count`` is not positive, or 
+        if number of heads is larger than the size of the data.
+        
+    Warns
+    -----
+    UserWarning
+        When size of data exceeds size of generated output space, as it is 
+        unlikely to yield good results.
     """
 
     layers: nn.ModuleList
@@ -475,7 +483,28 @@ class PhotonicGenerator(nn.Module):
         if not isinstance(output_adapter, nn.Module):
             raise TypeError("output_adapter must be a torch.nn.Module.")
         self.output_adapter = output_adapter
-
+        if isinstance(self.output_adapter, VectorAdapter):
+            max_count = self.output_adapter.size
+        elif isinstance(self.output_adapter, ImageAdapter):
+            max_count = math.prod(self.output_adapter.shape)
+        if isinstance(layers, Sequence):
+            head_count = len(layers)
+            total_output_size = sum(layer._output_size for layer in layers)
+        else:
+            head_count = count
+            total_output_size = layers._output_size
+        if head_count > max_count:
+            raise ValueError(
+                f"Number of heads ({head_count}) must not exceed data size "
+                f"({max_count})."
+            )
+        if max_count > head_count * total_output_size:
+            warnings.warn(
+                f"Size of data ({max_count}) exceeds size of generated "
+                f"output space ({head_count * total_output_size}).",
+                UserWarning,
+                stacklevel=2,
+            )
         inferred_dim = cast(int, validated_layers[0].input_size)
         if latent is None:
             latent = NormalLatent(inferred_dim, std=2 * math.pi)
