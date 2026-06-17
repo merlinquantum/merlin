@@ -487,24 +487,28 @@ class PhotonicGenerator(nn.Module):
             max_count = self.output_adapter.size
         elif isinstance(self.output_adapter, ImageAdapter):
             max_count = math.prod(self.output_adapter.shape)
-        if isinstance(layers, Sequence):
-            head_count = len(layers)
-            total_output_size = sum(layer._output_size for layer in layers)
         else:
-            head_count = count
-            total_output_size = layers._output_size
-        if head_count > max_count:
-            raise ValueError(
-                f"Number of heads ({head_count}) must not exceed data size "
-                f"({max_count})."
-            )
-        if max_count > head_count * total_output_size:
-            warnings.warn(
-                f"Size of data ({max_count}) exceeds size of generated "
-                f"output space ({head_count * total_output_size}).",
-                UserWarning,
-                stacklevel=2,
-            )
+            max_count = None
+        if max_count is not None:
+            if isinstance(layers, Sequence):
+                head_count = len(layers)
+                total_output_size = sum(layer._output_size for layer in layers)
+            else:
+                head_count = count if count is not None else 1
+                total_output_size = layers._output_size * head_count
+            if head_count > max_count:
+                raise ValueError(
+                    f"Number of heads ({head_count}) must not exceed data size "
+                    f"({max_count})."
+                )
+            if max_count > total_output_size:
+                warnings.warn(
+                    f"Size of data ({max_count}) exceeds size of generated "
+                    f"output space ({total_output_size}). Black padding will "
+                    f"be applied.",
+                    UserWarning,
+                    stacklevel=2,
+                )
         inferred_dim = cast(int, validated_layers[0].input_size)
         if latent is None:
             latent = NormalLatent(inferred_dim, std=2 * math.pi)

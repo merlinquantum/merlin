@@ -282,7 +282,7 @@ def test_generator_accepts_single_layer():
 
 
 def test_generator_accepts_single_layer_object():
-    layer = _make_layer(input_size=2)
+    layer = _make_layer(input_size=4)
 
     generator = ML.PhotonicGenerator(
         layers=layer,
@@ -480,7 +480,7 @@ def test_custom_latent_distribution_is_supported():
     z = generator.sample_latent(batch_size=3, dtype=torch.float64)
 
     assert z.dtype == torch.float64
-    assert torch.allclose(z, torch.full((3, 2), 0.25, dtype=torch.float64))
+    assert torch.allclose(z, torch.full((3, 3), 0.25, dtype=torch.float64))
 
 
 def test_custom_latent_distribution_dimension_must_match_layers():
@@ -509,7 +509,7 @@ def test_measure_returns_one_output_per_layer():
     layers = [_make_layer(input_size=2), _make_layer(input_size=2)]
     generator = ML.PhotonicGenerator(
         layers=layers,
-        output_adapter=ML.VectorAdapter(size=8),
+        output_adapter=ML.VectorAdapter(size=6),
     )
     z = torch.randn(3, generator.latent_dim)
 
