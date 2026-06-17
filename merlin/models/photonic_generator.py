@@ -11,9 +11,9 @@ generators such as the architecture introduced in
 
 from __future__ import annotations
 
-import warnings
 import copy
 import math
+import warnings
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -455,13 +455,13 @@ class PhotonicGenerator(nn.Module):
     ValueError
         If no layers are provided, if layer input sizes differ, if a layer uses
         amplitude outputs, or if the latent distribution dimension does not
-        match the inferred latent dimension, if ``count`` is not positive, or 
+        match the inferred latent dimension, if ``count`` is not positive, or
         if number of heads is larger than the size of the data.
-        
+
     Warns
     -----
     UserWarning
-        When size of data exceeds size of generated output space, as it is 
+        When size of data exceeds size of generated output space, as it is
         unlikely to yield good results.
     """
 
