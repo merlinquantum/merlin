@@ -31,19 +31,13 @@ configuration, which can then be reused for multiple unitary evaluations.
 
 import math
 import os
-import warnings
 from collections.abc import Callable
 
 import torch
 import torch.jit as jit
 
-from merlin.algorithms.layer_utils import NoiseGroups
 from merlin.core.computation_space import ComputationSpace
-from merlin.pcvl_pytorch.noisy_slos import (
-    NoisyG2SLOSComputeGraph,
-    NoisySLOSComputeGraph,
-)
-from merlin.utils.deprecations import raise_no_bunching_removed
+from merlin.utils.deprecations import raise_no_bunching_deprecated
 from merlin.utils.dtypes import resolve_float_complex
 from merlin.utils.normalization import (
     normalize_probabilities,
@@ -92,10 +86,7 @@ def prepare_vectorized_operations(operations_list, device=None):
             torch.tensor([], dtype=torch.long, device=device),
         )
 
-    # Each row is one sparse transition in the SLOS dynamic program:
-    # prev_amplitudes[source] * U[mode, injected_photon] -> next[destination].
-    # Splitting the columns lets layer_compute_* gather and scatter in one
-    # vectorized pass instead of iterating over transitions in Python.
+    # Convert operations to tensor format directly on the specified device
     sources = torch.tensor(
         [op[0] for op in operations_list], dtype=torch.long, device=device
     )
@@ -234,23 +225,20 @@ def layer_compute_batch(
     # Determine output size
     next_size = int(destinations.max().item()) + 1
 
-    # p_tensor indexes the injected input mode for each coherent input
-    # component. Expanding it against modes creates one unitary lookup per
-    # sparse transition and per input component.
+    # Convert p to tensor for indexing
     p_tensor = torch.tensor(p, device=unitary.device, dtype=torch.long)
 
-    # Get all U[mode, p] factors used by the sparse transitions.
+    # Get unitary elements for all operations and input states
     # Shape: [batch_size, num_ops, num_input_states]
     modes_expanded = modes.unsqueeze(-1).expand(-1, num_input_states).to(unitary.device)
     p_expanded = p_tensor.unsqueeze(0).expand(modes.shape[0], -1)
     u_elements = unitary[:, modes_expanded, p_expanded]
 
-    # Gather parent amplitudes for every sparse transition. ``sources`` indexes
-    # the previous-layer basis, while the final axis keeps coherent input
-    # components separate until the full SLOS graph has been evaluated.
+    # Get source amplitudes for all operations
+    # Shape: [batch_size, num_ops, num_input_states]
     prev_amps = prev_amplitudes[:, sources.to(prev_amplitudes.device), :]
 
-    # Each contribution is the parent amplitude multiplied by its unitary edge.
+    # Compute contributions
     # Shape: [batch_size, num_ops, num_input_states]
     contributions = u_elements.to(prev_amps.device) * prev_amps
 
@@ -261,8 +249,8 @@ def layer_compute_batch(
         device=destinations.device,
     )
 
-    # Multiple transitions can land on the same child state, so scatter_add
-    # performs the dynamic-programming accumulation over ``destinations``.
+    # Scatter add contributions to result
+    # Need to expand destinations for all input states
     destinations_expanded = (
         destinations.unsqueeze(0).unsqueeze(-1).expand(batch_size, -1, num_input_states)
     )
@@ -359,8 +347,7 @@ class SLOSComputeGraph:
             Number of photons in the input state given to the model during the
             forward pass.
         output_map_func : Callable[[tuple[int, ...]], tuple[int, ...] | None] | None
-            Function applied to output states before aggregation. It changes the output keys directly.
-            The output tensor is not changed nor permuted, only the keys are changed.
+            Function applied to output states before aggregation.
         computation_space : ComputationSpace
             Computation subspace used to build the graph. Default is
             ``ComputationSpace.UNBUNCHED``.
@@ -382,13 +369,6 @@ class SLOSComputeGraph:
         self.m = m
         self.n_photons = n_photons
         self.output_map_func = output_map_func
-        if self.output_map_func is not None:
-            warnings.warn(
-                "torch.jit.script support for output_map_func mapping is deprecated "
-                "and is not supported reliably across PyTorch versions.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
         if computation_space is ComputationSpace.DUAL_RAIL:
             if m % 2 != 0:
                 raise ValueError("dual_rail compute space requires even m")
@@ -485,14 +465,13 @@ class SLOSComputeGraph:
             self.vectorized_operations.append((sources, destinations, modes))
 
         # Store only the final layer combinations if needed for output mapping or keys
-        # Extract both keys and norm factors from the same iteration to ensure consistency
-        keys_and_factors = list(last_combinations.items())
-        if self.keep_keys or self.output_map_func:
-            self.final_keys = [k for k, v in keys_and_factors]
-        else:
-            self.final_keys = None
+        self.final_keys = (
+            list(last_combinations.keys())
+            if self.keep_keys or self.output_map_func
+            else None
+        )
         self.norm_factor_output = torch.tensor(
-            [v[0] for k, v in keys_and_factors], dtype=self.dtype
+            [v[0] for v in last_combinations.values()], dtype=self.dtype
         )
         del last_combinations
 
@@ -1048,61 +1027,18 @@ class SLOSComputeGraph:
 
         return keys, probabilities
 
-    def save(self, path: str | os.PathLike[str]) -> None:
-        """Save the SLOS computation graph to disk.
-
-        Parameters
-        ----------
-        path : str | os.PathLike[str]
-            Destination path for the serialized graph.
-        """
-        dir_path = os.path.dirname(path)
-        if dir_path and not os.path.exists(dir_path):
-            os.makedirs(dir_path)
-
-        metadata = {
-            "m": self.m,
-            "n_photons": self.n_photons,
-            "computation_space": self.computation_space.value,
-            "keep_keys": self.keep_keys,
-            "dtype_str": str(self.dtype),
-            "has_output_map_func": self.output_map_func is not None,
-        }
-
-        torch.save(
-            {
-                "metadata": metadata,
-                "vectorized_operations": self.vectorized_operations,
-                "final_keys": self.final_keys,
-                "mapped_keys": self.mapped_keys,
-                "mapped_indices": (
-                    self.mapped_indices if hasattr(self, "mapped_indices") else None
-                ),
-                "total_mapped_keys": (
-                    self.total_mapped_keys
-                    if hasattr(self, "total_mapped_keys")
-                    else None
-                ),
-                "target_indices": (
-                    self.target_indices if hasattr(self, "target_indices") else None
-                ),
-            },
-            path,
-        )
-
 
 def build_slos_distribution_computegraph(
-    m: int,
-    n_photons: int,
+    m,
+    n_photons,
     output_map_func: Callable[[tuple[int, ...]], tuple[int, ...] | None] | None = None,
     computation_space: ComputationSpace | None = None,
     no_bunching: bool | None = None,
     keep_keys: bool = True,
-    noise_groups: NoiseGroups | None = None,
-    device: torch.device | str | None = None,
+    device=None,
     dtype: torch.dtype = torch.float,
     index_photons: list[tuple[int, ...]] | None = None,
-) -> SLOSComputeGraph | NoisySLOSComputeGraph | NoisyG2SLOSComputeGraph:
+) -> SLOSComputeGraph:
     """Construct a reusable SLOS computation graph.
 
     Parameters
@@ -1112,18 +1048,14 @@ def build_slos_distribution_computegraph(
     n_photons : int
         Total number of photons injected in the circuit.
     output_map_func : Callable[[tuple[int, ...]], tuple[int, ...] | None] | None
-        Mapping applied to each output Fock state, allowing post-processing. It changes
-        the output keys directly. The output tensor is not changed nor permuted, only the
-        keys are changed.
+        Mapping applied to each output Fock state, allowing post-processing.
     computation_space : ComputationSpace | None
         Logical computation subspace used to build the basis and transitions.
         When omitted, defaults to ``ComputationSpace.UNBUNCHED``.
     no_bunching : bool | None
-        Removed legacy flag. Use ``computation_space`` instead.
+        Deprecated legacy flag. Use ``computation_space`` instead.
     keep_keys : bool
-        Whether to keep the list of mapped Fock states. It does not apply for simulations with g2 noise. Default is ``True``.
-    noise_groups : NoiseGroups|None
-        The noise groups defined in the creation of the QuantumLayer. Default is None (no noise).
+        Whether to keep the list of mapped Fock states. Default is ``True``.
     device : torch.device | str | None
         Device on which tensors should be allocated.
     dtype : torch.dtype
@@ -1133,59 +1065,82 @@ def build_slos_distribution_computegraph(
 
     Returns
     -------
-    SLOSComputeGraph | NoisySLOSComputeGraph | NoisyG2SLOSComputeGraph
+    SLOSComputeGraph
         Pre-built computation graph ready for repeated evaluations.
 
     """
 
     if no_bunching is not None:
-        raise_no_bunching_removed()
+        raise_no_bunching_deprecated(stacklevel=2)
 
     if computation_space is None:
         computation_space = ComputationSpace.UNBUNCHED
 
-    compute_graph: SLOSComputeGraph | NoisySLOSComputeGraph | NoisyG2SLOSComputeGraph
+    compute_graph = SLOSComputeGraph(
+        m,
+        n_photons,
+        output_map_func,
+        computation_space,
+        keep_keys,
+        device,
+        dtype,
+        index_photons,
+    )
 
-    # If there is no source noise, use the regular SLOS graph
-    # No noise at all
-    if noise_groups is None:
-        compute_graph = SLOSComputeGraph(
-            m,
-            n_photons,
-            output_map_func,
-            computation_space,
-            keep_keys,
-            device,
-            dtype,
-            index_photons,
+    # Add save method to the returned object
+    def save(path):
+        """
+        Save the SLOS computation graph to a file.
+
+        Parameters
+        ----------
+        path : str | os.PathLike[str]
+            Destination path.
+        """
+        # Create directory if it doesn't exist
+        dir_path = os.path.dirname(path)
+        if dir_path and not os.path.exists(dir_path):
+            os.makedirs(dir_path)
+
+        # Save metadata
+        metadata = {
+            "m": compute_graph.m,
+            "n_photons": compute_graph.n_photons,
+            "computation_space": compute_graph.computation_space.value,
+            "keep_keys": compute_graph.keep_keys,
+            "dtype_str": str(compute_graph.dtype),
+            "has_output_map_func": output_map_func is not None,
+        }
+
+        # Save TorchScript layer functions if possible
+        # For serializable components only
+        torch.save(
+            {
+                "metadata": metadata,
+                "vectorized_operations": compute_graph.vectorized_operations,
+                "final_keys": compute_graph.final_keys,
+                "mapped_keys": compute_graph.mapped_keys,
+                "mapped_indices": (
+                    compute_graph.mapped_indices
+                    if hasattr(compute_graph, "mapped_indices")
+                    else None
+                ),
+                "total_mapped_keys": (
+                    compute_graph.total_mapped_keys
+                    if hasattr(compute_graph, "total_mapped_keys")
+                    else None
+                ),
+                "target_indices": (
+                    compute_graph.target_indices
+                    if hasattr(compute_graph, "target_indices")
+                    else None
+                ),
+            },
+            path,
         )
-    # If there is noise but no source noise
-    elif noise_groups.source is None:
-        compute_graph = SLOSComputeGraph(
-            m,
-            n_photons,
-            output_map_func,
-            computation_space,
-            keep_keys,
-            device,
-            dtype,
-            index_photons,
-        )
-    else:
-        if "g2" in noise_groups.source:
-            compute_graph = NoisyG2SLOSComputeGraph(
-                noise_groups, m, n_photons, computation_space, device, dtype
-            )
-        else:
-            compute_graph = NoisySLOSComputeGraph(
-                noise_groups,
-                m,
-                n_photons,
-                computation_space,
-                keep_keys,
-                device,
-                dtype,
-            )
+
+    # Attach the save method to the compute_graph
+    compute_graph.save = save  # type: ignore[attr-defined]
 
     return compute_graph
 
@@ -1201,7 +1156,7 @@ def load_slos_distribution_computegraph(path):
 
     Returns
     -------
-    SLOSComputeGraph | NoisySLOSComputeGraph | NoisyG2SLOSComputeGraph
+    SLOSComputeGraph
         Loaded computation graph ready for computations.
 
     Examples
@@ -1218,13 +1173,14 @@ def load_slos_distribution_computegraph(path):
         >>> keys, probs = loaded_graph.compute(unitary)
     """
     # Load saved data
-    saved_data = torch.load(path, weights_only=False)
+    saved_data = torch.load(path)
     metadata = saved_data["metadata"]
 
     # Create a minimal graph instance
     m = metadata["m"]
     n_photons = metadata["n_photons"]
     computation_space = ComputationSpace.coerce(metadata.get("computation_space"))
+    keep_keys = metadata["keep_keys"]
 
     # Parse dtype
     dtype_str = metadata.get("dtype_str", "torch.float32")
@@ -1235,53 +1191,34 @@ def load_slos_distribution_computegraph(path):
     else:
         dtype = torch.float32
 
-    noise_groups = metadata.get("noise_groups")
-    is_g2_graph = metadata.get("graph_type") == "noisy_g2_slos"
-    if is_g2_graph:
-        graph = NoisyG2SLOSComputeGraph(
-            noise_groups,
-            m,
-            n_photons,
-            computation_space,
-            dtype=dtype,
-        )
-    elif noise_groups is not None:
-        keep_keys = metadata["keep_keys"]
-        graph = NoisySLOSComputeGraph(
-            noise_groups,
-            m,
-            n_photons,
-            computation_space,
-            keep_keys,
-            dtype=dtype,
-        )
-    else:
-        keep_keys = metadata["keep_keys"]
-        # Create basic graph (without output_map_func for now)
-        graph = SLOSComputeGraph(
-            m, n_photons, None, computation_space, keep_keys, dtype=dtype
-        )
-        # Restore saved attributes
-        graph.vectorized_operations = saved_data["vectorized_operations"]
-        graph.final_keys = saved_data["final_keys"]
-        graph.mapped_keys = saved_data["mapped_keys"]
+    # Create basic graph (without output_map_func for now)
+    graph = SLOSComputeGraph(
+        m, n_photons, None, computation_space, keep_keys, dtype=dtype
+    )
+    # Restore saved attributes
+    graph.vectorized_operations = saved_data["vectorized_operations"]
+    graph.final_keys = saved_data["final_keys"]
+    graph.mapped_keys = saved_data["mapped_keys"]
 
-        # Restore mapping information if it was used
-        if metadata.get("has_output_map_func", False):
-            graph.mapped_indices = saved_data["mapped_indices"]
-            graph.total_mapped_keys = saved_data["total_mapped_keys"]
-            graph.target_indices = saved_data["target_indices"]
+    # Restore mapping information if it was used
+    if metadata.get("has_output_map_func", False):
+        graph.mapped_indices = saved_data["mapped_indices"]
+        graph.total_mapped_keys = saved_data["total_mapped_keys"]
+        graph.target_indices = saved_data["target_indices"]
 
-            # We need to recreate a dummy output_map_func that uses the saved mapping
-            def restored_output_map_func(state):
-                # This function just serves as a placeholder to indicate mapping is used
-                # The actual mapping is handled by the restored mapped_indices
-                return state
+        # We need to recreate a dummy output_map_func that uses the saved mapping
+        def restored_output_map_func(state):
+            # This function just serves as a placeholder to indicate mapping is used
+            # The actual mapping is handled by the restored mapped_indices
+            return state
 
-            graph.output_map_func = restored_output_map_func
+        graph.output_map_func = restored_output_map_func
 
-        # Recreate the TorchScript modules
-        graph._create_torchscript_modules()
+    # Recreate the TorchScript modules
+    graph._create_torchscript_modules()
+
+    # Add save method to the loaded graph
+    graph.save = lambda p: torch.save(saved_data, p)
 
     return graph
 
@@ -1298,7 +1235,7 @@ def compute_slos_distribution(
     Compute a SLOS output distribution with a TorchScript-optimized graph.
 
     This function builds the computation graph first, then uses it to compute
-    the amplitudes. For repeated calculations with the same input
+    the probabilities. For repeated calculations with the same input
     configuration but different unitaries, it is more efficient to use
     ``build_slos_distribution_computegraph`` directly.
 
@@ -1310,8 +1247,7 @@ def compute_slos_distribution(
     input_state : list[int]
         Number of photons in every mode of the circuit.
     output_map_func : Callable[[tuple[int, ...]], tuple[int, ...] | None] | None
-        Function that maps output states. It changes the output keys directly.
-        The output tensor is not changed nor permuted, only the keys are changed.
+        Function that maps output states.
     computation_space : ComputationSpace
         Computation subspace used to build the graph. Default is
         ``ComputationSpace.UNBUNCHED``.
@@ -1323,7 +1259,7 @@ def compute_slos_distribution(
     Returns
     -------
     tuple[list[tuple[int, ...]] | None, torch.Tensor]
-        Output keys and amplitudes tensor.
+        Output keys and probability tensor.
     """
     # Extract device from unitary for graph building
     device = unitary.device if hasattr(unitary, "device") else None
@@ -1337,16 +1273,12 @@ def compute_slos_distribution(
         sum(input_state),
         output_map_func,
         computation_space,
+        no_bunching=None,
         keep_keys=keep_keys,
         device=device,
         dtype=dtype,
         index_photons=index_photons,
     )
-    if isinstance(graph, (NoisySLOSComputeGraph, NoisyG2SLOSComputeGraph)):
-        raise RuntimeError(
-            "compute_slos_distribution does not support source-noise graphs; "
-            "build a noisy graph explicitly and use compute_probs instead."
-        )
     return graph.compute(unitary, input_state)
 
 
@@ -1376,11 +1308,6 @@ if __name__ == "__main__":
         start_time = time.time()
         graph = build_slos_distribution_computegraph(m, n_photons, dtype=dtype)
         build_time = time.time() - start_time
-
-        if isinstance(graph, (NoisySLOSComputeGraph, NoisyG2SLOSComputeGraph)):
-            raise RuntimeError(
-                "Example expected a non-noisy SLOSComputeGraph, but a noisy graph was built."
-            )
 
         # Compute probabilities
         start_time = time.time()

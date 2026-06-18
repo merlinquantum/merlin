@@ -13,10 +13,6 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    env:
-      PIP_NO_CACHE_DIR: "1"
-      PIP_NO_COMPILE: "1"
-      PYTHONDONTWRITEBYTECODE: "1"
     strategy:
       matrix:
         python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
@@ -25,31 +21,14 @@ jobs:
     - uses: actions/checkout@v4
 
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python-version }}
-
-    - name: Free unused runner disk space
-      run: |
-        df -h
-        sudo rm -rf /usr/share/dotnet
-        sudo rm -rf /usr/local/lib/android
-        sudo rm -rf /opt/ghc
-        sudo rm -rf /opt/hostedtoolcache/CodeQL
-        sudo rm -rf /usr/share/swift
-        sudo rm -rf /usr/local/.ghcup
-        sudo apt-get clean
-        df -h
     
     - name: Install dependencies
       run: |
-        df -h
         python -m pip install --upgrade pip
-        df -h
-        pip install --index-url https://download.pytorch.org/whl/cpu "torch>=2.0.0,<=2.10.0"
-        df -h
         pip install -e ".[dev]"
-        df -h
     
     - name: Run code quality checks
       run: |
@@ -59,10 +38,4 @@ jobs:
     
     - name: Run tests with coverage
       run: |
-        pytest -o addopts="--cov=merlin --cov-report=term-missing" tests/ -v
-
-    - name: Clean test artifacts
-      if: always()
-      run: |
-        rm -rf .pytest_cache .mypy_cache .ruff_cache htmlcov coverage.xml build dist *.egg-info
-        find . -type d -name __pycache__ -prune -exec rm -rf {} +
+        pytest tests/ -v

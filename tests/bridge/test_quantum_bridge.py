@@ -9,10 +9,7 @@ from merlin.bridge.quantum_bridge import QuantumBridge
 
 
 def make_identity_layer(
-    m: int,
-    n_photons: int,
-    *,
-    computation_space: ComputationSpace = ComputationSpace.UNBUNCHED,
+    m: int, n_photons: int, *, no_bunching: bool = True
 ) -> QuantumLayer:
     c = pcvl.Circuit(m)  # identity unitary
     layer = QuantumLayer(
@@ -20,8 +17,9 @@ def make_identity_layer(
         n_photons=n_photons,
         device=torch.device("cpu"),
         dtype=torch.float32,
+        amplitude_encoding=True,
         measurement_strategy=MeasurementStrategy.probs(
-            computation_space=computation_space
+            computation_space=ComputationSpace.default(no_bunching=no_bunching)
         ),
     )
     return layer
@@ -267,11 +265,7 @@ def test_bridge_properties_exposed():
 def test_bridge_fock_space_matches_layer_keys():
     groups = [1, 1]
     m = sum(2**g for g in groups)
-    layer = make_identity_layer(
-        m,
-        n_photons=len(groups),
-        computation_space=ComputationSpace.FOCK,
-    )
+    layer = make_identity_layer(m, n_photons=len(groups), no_bunching=False)
     bridge = QuantumBridge(
         qubit_groups=groups,
         n_modes=m,

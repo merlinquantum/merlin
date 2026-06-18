@@ -33,6 +33,22 @@ class ComputationSpace(str, Enum):
     DUAL_RAIL = "dual_rail"
 
     @classmethod
+    def default(cls, *, no_bunching: bool) -> "ComputationSpace":
+        """Derive the default computation space from the legacy flag.
+
+        Parameters
+        ----------
+        no_bunching : bool
+            Legacy flag indicating whether bunching should be disallowed.
+
+        Returns
+        -------
+        ComputationSpace
+            Default computation space matching the legacy behavior.
+        """
+        return cls.UNBUNCHED if no_bunching else cls.FOCK
+
+    @classmethod
     def coerce(cls, value: "ComputationSpace | str") -> "ComputationSpace":
         """Normalize user-provided values (enum instances or case-insensitive strings).
 

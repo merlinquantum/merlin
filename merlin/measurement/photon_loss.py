@@ -26,13 +26,10 @@ import itertools
 import math
 import warnings
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, cast
+from typing import cast
 
 import perceval as pcvl
 import torch
-
-if TYPE_CHECKING:
-    from merlin.algorithms.layer_utils import NoiseGroups
 
 '''def _is_sequence(value: object) -> bool:
     """Return True if the value behaves like a sequence (and is not a string)."""
@@ -349,62 +346,6 @@ class PhotonLossTransform(torch.nn.Module):
 
 
 def resolve_photon_loss(
-    noise_groups: NoiseGroups | None, n_modes: int
-) -> tuple[list[float], bool]:
-    """Resolve photon loss from the layer's noise groups.
-
-    Parameters
-    ----------
-    noise_groups : NoiseGroups|None
-        The noise groups of the current model.
-    n_modes : int
-        Number of photonic modes to cover.
-
-    Returns
-    -------
-    tuple[list[float], bool]
-        Per-mode survival probabilities and a compatibility flag that is True
-        when no post-measurement photon-loss noise was provided.
-    """
-    survival_probs = [1.0] * n_modes  # Default: no loss
-    has_post_measurement_noise = False
-
-    if noise_groups is None:
-        return survival_probs, not has_post_measurement_noise
-
-    if noise_groups.post_measurement is None:
-        survival_probs = [1.0] * n_modes
-    else:
-        if "brightness" not in noise_groups.post_measurement:
-            survival_probs = [
-                float(noise_groups.post_measurement["transmittance"])
-            ] * n_modes
-            has_post_measurement_noise = True
-        elif "transmittance" not in noise_groups.post_measurement:
-            survival_probs = [
-                float(noise_groups.post_measurement["brightness"])
-            ] * n_modes
-            has_post_measurement_noise = True
-        else:
-            survival_probs = [
-                float(noise_groups.post_measurement["brightness"])
-                * float(noise_groups.post_measurement["transmittance"])
-            ] * n_modes
-            has_post_measurement_noise = True
-
-    if not all(0.0 <= prob <= 1.0 for prob in survival_probs):
-        raise ValueError("Photon survival probabilities must be within [0, 1].")
-    if not has_post_measurement_noise and not all(
-        math.isclose(prob, 1.0, rel_tol=1e-12, abs_tol=1e-12) for prob in survival_probs
-    ):
-        raise ValueError(
-            "Inconsistent noise model: marked as empty but contains non-trivial loss parameters."
-        )
-
-    return survival_probs, not has_post_measurement_noise
-
-
-def resolve_photon_loss_kernel(
     experiment: pcvl.Experiment, n_modes: int
 ) -> tuple[list[float], bool]:
     """Resolve photon loss from the experiment's noise model.
@@ -419,43 +360,45 @@ def resolve_photon_loss_kernel(
     Returns
     -------
     tuple[list[float], bool]
-        Per-mode survival probabilities and a compatibility flag that is True
-        when no photon-loss noise was provided.
+        Per-mode survival probabilities and a flag indicating whether an
+        effective noise model was provided.
     """
     survival_probs = [1.0] * n_modes  # Default: no loss
-    has_loss_noise = False
+    empty_noise_model = True
 
-    noise = getattr(experiment, "noise", None)
-    if noise is None:
-        return survival_probs, not has_loss_noise
+    noise_model = getattr(experiment, "noise", None)
+    if noise_model is None:
+        return survival_probs, empty_noise_model
 
-    brightness = cast(float, getattr(noise, "brightness", None))
-    transmittance = cast(float, getattr(noise, "transmittance", None))
+    brightness = cast(float, getattr(noise_model, "brightness", None))
+    transmittance = cast(float, getattr(noise_model, "transmittance", None))
 
     if brightness is None and transmittance is None:
         survival_probs = [1.0] * n_modes
+        empty_noise_model = True
     elif brightness is None:
         warnings.warn(
             "Brightness not specified in noise model; assuming 1.0.", stacklevel=2
         )
         survival_probs = [transmittance] * n_modes
-        has_loss_noise = True
+        empty_noise_model = False
     elif transmittance is None:
         warnings.warn(
             "Transmittance not specified in noise model; assuming 1.0.", stacklevel=2
         )
         survival_probs = [brightness] * n_modes
-        has_loss_noise = True
+        empty_noise_model = False
     else:
         survival_probs = [float(brightness) * float(transmittance)] * n_modes
-        has_loss_noise = True
+        empty_noise_model = False
 
     if not all(0.0 <= prob <= 1.0 for prob in survival_probs):
         raise ValueError("Photon survival probabilities must be within [0, 1].")
-    if not has_loss_noise and not all(
+    if empty_noise_model and not all(
         math.isclose(prob, 1.0, rel_tol=1e-12, abs_tol=1e-12) for prob in survival_probs
     ):
         raise ValueError(
             "Inconsistent noise model: marked as empty but contains non-trivial loss parameters."
         )
-    return survival_probs, not has_loss_noise
+
+    return survival_probs, empty_noise_model

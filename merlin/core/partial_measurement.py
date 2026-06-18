@@ -22,7 +22,6 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from numbers import Integral
 
 import torch
 
@@ -71,13 +70,6 @@ class PartialMeasurement:
         Indices of unmeasured modes in the full system.
     grouping : Callable[[torch.Tensor], torch.Tensor] | None
         Optional callable used to group branch probabilities.
-
-    Raises
-    ------
-    ValueError
-        If ``measured_modes`` and ``unmeasured_modes`` are not disjoint,
-        do not cover exactly ``range(n_modes)``, contain duplicate or invalid
-        indices, or do not match the branch outcome/state metadata.
     """
 
     def __init__(
@@ -99,76 +91,13 @@ class PartialMeasurement:
             Indices of unmeasured modes in the full system.
         grouping : Callable[[torch.Tensor], torch.Tensor] | None
             Optional callable used to group branch probabilities.
-
-        Raises
-        ------
-        ValueError
-            If ``measured_modes`` and ``unmeasured_modes`` are not disjoint,
-            do not cover exactly ``range(n_modes)``, contain duplicate or
-            invalid indices, or do not match the branch outcome/state metadata.
         """
         self.branches = branches
         self.measured_modes = measured_modes
         self.unmeasured_modes = unmeasured_modes
         self.grouping: Callable[[torch.Tensor], torch.Tensor] | None = grouping
 
-        self._validate_mode_partition()
         self.verify_branches_order()
-
-    def _validate_mode_partition(self) -> None:
-        """Validate that mode metadata matches a complete system partition."""
-        measured_modes = self.measured_modes
-        unmeasured_modes = self.unmeasured_modes
-
-        self._validate_mode_tuple("measured_modes", measured_modes)
-        self._validate_mode_tuple("unmeasured_modes", unmeasured_modes)
-
-        measured_set = set(measured_modes)
-        unmeasured_set = set(unmeasured_modes)
-        overlap = tuple(sorted(measured_set & unmeasured_set))
-        if overlap:
-            raise ValueError(
-                "measured_modes and unmeasured_modes must not overlap; "
-                f"overlapping modes: {overlap}."
-            )
-
-        actual_modes = measured_set | unmeasured_set
-        n_modes = max(actual_modes) + 1 if actual_modes else 0
-        expected_modes = set(range(n_modes))
-        if actual_modes != expected_modes:
-            missing = tuple(sorted(expected_modes - actual_modes))
-            unexpected = tuple(sorted(actual_modes - expected_modes))
-            raise ValueError(
-                "measured_modes and unmeasured_modes must cover exactly "
-                f"range({n_modes}); missing modes: {missing}, "
-                f"unexpected modes: {unexpected}."
-            )
-
-        for branch in self.branches:
-            if len(branch.outcome) != len(measured_modes):
-                raise ValueError(
-                    "Branch outcome length must match measured_modes length; "
-                    f"got outcome {branch.outcome} for measured_modes "
-                    f"{measured_modes}."
-                )
-            if branch.amplitudes.n_modes != len(unmeasured_modes):
-                raise ValueError(
-                    "Branch amplitudes n_modes must match unmeasured_modes "
-                    f"length; got {branch.amplitudes.n_modes} for "
-                    f"unmeasured_modes {unmeasured_modes}."
-                )
-
-    @staticmethod
-    def _validate_mode_tuple(name: str, modes: tuple[int, ...]) -> None:
-        """Validate one mode tuple before checking cross-tuple partitioning."""
-        for mode in modes:
-            if not isinstance(mode, Integral) or isinstance(mode, bool) or mode < 0:
-                raise ValueError(
-                    f"{name} must contain non-negative integer mode indices; "
-                    f"got {modes}."
-                )
-        if len(set(modes)) != len(modes):
-            raise ValueError(f"{name} must not contain duplicate modes; got {modes}.")
 
     def verify_branches_order(self) -> None:
         """Verify that branches are ordered lexicographically by their outcomes."""

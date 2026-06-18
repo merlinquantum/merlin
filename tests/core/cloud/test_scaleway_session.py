@@ -43,13 +43,11 @@ def _make_layer(
 ) -> QuantumLayer:
     """Helper to create a QuantumLayer for testing."""
     b = CircuitBuilder(n_modes=n_modes)
-    if n_modes >= 2:
-        b.add_entangling_layer(trainable=False, name="pre_mix")
     if trainable:
         b.add_rotations(trainable=True, name="theta")
     b.add_angle_encoding(modes=list(range(input_size)), name="px")
-    if n_modes >= 2:
-        b.add_entangling_layer(trainable=False, name="post_mix")
+    if n_modes >= 3:
+        b.add_entangling_layer()
     return QuantumLayer(
         input_size=input_size,
         builder=b,
@@ -109,12 +107,12 @@ class TestScalewaySessionBasic:
         print(f"Backend capabilities: {proc.backend_capabilities.available_commands}")
 
         # Confirm probs is available
-        assert "probs" in proc.available_commands, (
-            f"'probs' not in available commands: {proc.available_commands}"
-        )
-        assert "probs" in proc.backend_capabilities.available_commands, (
-            f"'probs' not in backend capabilities: {proc.backend_capabilities.available_commands}"
-        )
+        assert (
+            "probs" in proc.available_commands
+        ), f"'probs' not in available commands: {proc.available_commands}"
+        assert (
+            "probs" in proc.backend_capabilities.available_commands
+        ), f"'probs' not in backend capabilities: {proc.backend_capabilities.available_commands}"
 
     def test_simple_forward_probs_zero(self, scaleway_session_probs):
         """Basic synchronous forward pass with nsample=0 should use probs."""
@@ -234,10 +232,9 @@ class TestScalewaySessionPipeline:
         )
 
         b = CircuitBuilder(n_modes=6)
-        b.add_entangling_layer(trainable=False, name="pre_mix")
         b.add_rotations(trainable=True, name="theta")
         b.add_angle_encoding(modes=[0, 1], name="px")
-        b.add_entangling_layer(trainable=False, name="post_mix")
+        b.add_entangling_layer()
 
         q = QuantumLayer(
             input_size=2,

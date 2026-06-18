@@ -3,9 +3,8 @@ from __future__ import annotations
 import inspect
 import warnings
 from collections.abc import Callable, Sequence
-from contextvars import ContextVar
 from functools import wraps
-from typing import TYPE_CHECKING, Any, NoReturn, TypeVar, cast, overload
+from typing import TYPE_CHECKING, Any, TypeVar, cast, overload
 
 from ..core.computation_space import ComputationSpace
 
@@ -17,39 +16,47 @@ if TYPE_CHECKING:
 _MEASUREMENT_STRATEGY_ENUM_MIGRATIONS = {
     "PROBABILITIES": "probs(computation_space)",
     "MODE_EXPECTATIONS": "mode_expectations(computation_space)",
-    "AMPLITUDES": "amplitudes(computation_space)",
+    "AMPLITUDES": "NONE (amplitudes)",
 }
-
-_ACTIVE_DEPRECATION_MESSAGES: ContextVar[frozenset[str]] = ContextVar(
-    "_ACTIVE_DEPRECATION_MESSAGES",
-    default=frozenset(),
-)
 
 
 _NO_BUNCHING_REMOVED_MESSAGE = (
     "The 'no_bunching' parameter is removed. "
-    "Use MeasurementStrategy.probs(computation_space=ComputationSpace.UNBUNCHED) "
-    "or MeasurementStrategy.probs(computation_space=ComputationSpace.FOCK) "
-    "for QuantumLayer measurements. Use computation_space=ComputationSpace.UNBUNCHED "
-    "or computation_space=ComputationSpace.FOCK for kernels."
+    "Use measurement_strategy=MeasurementStrategy.probs(computation_space=ComputationSpace.UNBUNCHED) "
+    "for no_bunching=True or computation_space=ComputationSpace.FOCK for no_bunching=False."
 )
 
 
-def raise_no_bunching_removed() -> NoReturn:
+def raise_no_bunching_deprecated(*, stacklevel: int = 2) -> None:
     """
-    Raise when the removed ``no_bunching`` flag is used.
+    Warn and raise when deprecated ``no_bunching`` is used.
 
-    Returns
-    -------
-    None
-        This function never returns normally.
+    Parameters
+    ----------
+    stacklevel : int
+        Warning stack level used for the emitted deprecation warning. Default is ``2``.
 
     Raises
     ------
     ValueError
-        Always raised with the 0.4 migration guidance.
+        Always raised after emitting the deprecation warning.
     """
+    warnings.warn(
+        _NO_BUNCHING_REMOVED_MESSAGE,
+        DeprecationWarning,
+        stacklevel=stacklevel,
+    )
     raise ValueError(_NO_BUNCHING_REMOVED_MESSAGE)
+
+
+def _reject_no_bunching_init(
+    method_qualname: str, kwargs: dict[str, Any]
+) -> dict[str, Any]:
+    """Reject deprecated `no_bunching` usage (hard-fail with warning)."""
+    _ = method_qualname
+    if "no_bunching" in kwargs:
+        raise_no_bunching_deprecated(stacklevel=3)
+    return kwargs
 
 
 # ---------------------------------------------------------------------------
@@ -63,20 +70,6 @@ def _remove_QuantumLayer_simple_n_params(
     """Removes the n_params parameter from QuantumLayer.simple()"""
     _ = kwargs.pop("n_params", None)
     return kwargs
-
-
-def _remove_QuantumLayer_computation_space(
-    method_qualname: str, kwargs: dict[str, Any]
-) -> None:
-    """
-    Remove the computation space arg from quantumlayer init
-    """
-    raise AttributeError(
-        "Cannot specify 'computation_space' in QuantumLayer's constructor. "
-        "Move 'computation_space' into the factory method instead. It is no longer supported as of v0.4. "
-        "For example: MeasurementStrategy.probs(computation_space=ComputationSpace.FOCK) "
-        "instead of QuantumLayer(..., computation_space=..., measurement_strategy=...)."
-    )
 
 
 def _remove_FeatureMap_simple_n_photons(
@@ -139,20 +132,15 @@ DEPRECATION_REGISTRY: dict[
         None,
     ),
     "QuantumLayer.__init__.no_bunching": (
-        _NO_BUNCHING_REMOVED_MESSAGE,
-        True,
-        None,
-    ),
-    "QuantumLayer.__init__.computation_space": (
         None,
         None,
-        _remove_QuantumLayer_computation_space,
+        _reject_no_bunching_init,
     ),
     # QuantumLayer.simple deprecations
     "QuantumLayer.simple.no_bunching": (
-        _NO_BUNCHING_REMOVED_MESSAGE,
-        True,
         None,
+        None,
+        _reject_no_bunching_init,
     ),
     "QuantumLayer.simple.computation_space": (
         "The 'computation_space' keyword is deprecated; move it into MeasurementStrategy.probs(computation_space).",
@@ -195,42 +183,16 @@ DEPRECATION_REGISTRY: dict[
         False,
         None,
     ),
-    # FeatureMap.simple deprecations
-    "FeatureMap.simple.n_modes": (
-        "The provided value is still honored in 0.4, but this parameter will "
-        "be removed in release 0.5 and the mode count will default to "
-        "'input_size + 1'. "
-        "Use CircuitBuilder directly if you need a different mode count.",
-        False,
-        None,
-    ),
-    # FidelityKernel.simple method-level deprecation
-    # TODO: In release 0.5.x, remove this entry along with FidelityKernel.simple.
-    "FidelityKernel.simple": (
-        "FidelityKernel.simple() is deprecated and will be removed in release 0.5. "
-        "Build a feature map with FeatureMap.simple(input_size=...) and pass it to "
-        "FidelityKernel(feature_map=...) directly.",
-        False,
-        None,
-    ),
-    # FidelityKernel.simple parameter-level deprecations
-    "FidelityKernel.simple.n_modes": (
-        "The provided value is still honored in 0.4, but this parameter will "
-        "be removed in release 0.5 and the mode count will default to "
-        "'input_size + 1'. "
-        "Use CircuitBuilder directly if you need a different mode count.",
-        False,
-        None,
-    ),
+    # FidelityKernel.simple deprecations
     "FidelityKernel.simple.n_photons": (
         "Since merlin >= 0.3, the number of photons is automatically inferred from input dimensionality. Manual control of photons is deprecated.",
         False,
         _remove_FidelityKernel_simple_n_photons,
     ),
     "FidelityKernel.simple.no_bunching": (
-        _NO_BUNCHING_REMOVED_MESSAGE,
-        True,
         None,
+        None,
+        _reject_no_bunching_init,
     ),
     "FidelityKernel.simple.trainable": (
         "Since merlin >= 0.3, input parameter allocation is automatically inferred from input dimensionality, following Gan et al. (2022) on Fock-space expressivity. Manual control of input/trainable parameters is deprecated.",
@@ -244,37 +206,15 @@ DEPRECATION_REGISTRY: dict[
     ),
     # FidelityKernel.__init__ deprecations
     "FidelityKernel.__init__.no_bunching": (
-        _NO_BUNCHING_REMOVED_MESSAGE,
-        True,
         None,
-    ),
-    # KernelCircuitBuilder deprecations
-    # TODO: In release 0.5.x, remove these entries along with KernelCircuitBuilder.
-    "KernelCircuitBuilder.__init__": (
-        "KernelCircuitBuilder is deprecated and will be removed in release 0.5. "
-        "Use CircuitBuilder with FeatureMap(builder=...) and "
-        "FidelityKernel(feature_map=...) directly.",
-        False,
         None,
+        _reject_no_bunching_init,
     ),
-    "KernelCircuitBuilder.build_feature_map": (
-        "KernelCircuitBuilder.build_feature_map() is deprecated and will be removed "
-        "in release 0.5. Use CircuitBuilder with FeatureMap(builder=...) directly.",
-        False,
-        None,
-    ),
-    "KernelCircuitBuilder.build_fidelity_kernel": (
-        "KernelCircuitBuilder.build_fidelity_kernel() is deprecated and will be "
-        "removed in release 0.5. Use CircuitBuilder with FeatureMap(builder=...) "
-        "and FidelityKernel(feature_map=...) directly.",
-        False,
-        None,
-    ),
-    # KernelCircuitBuilder.build_fidelity_kernel parameter-level deprecations
+    # KernelCircuitBuilder.build_fidelity_kernel deprecations
     "KernelCircuitBuilder.build_fidelity_kernel.no_bunching": (
-        _NO_BUNCHING_REMOVED_MESSAGE,
-        True,
         None,
+        None,
+        _reject_no_bunching_init,
     ),
 }
 
@@ -316,10 +256,7 @@ def _collect_deprecations_and_converters(
         if full_name in DEPRECATION_REGISTRY:
             msg, severity, converter = DEPRECATION_REGISTRY[full_name]
             if msg is not None and severity is not None:
-                if msg == _NO_BUNCHING_REMOVED_MESSAGE:
-                    base = msg
-                else:
-                    base = f"Parameter '{key}' is deprecated. {msg}"
+                base = f"Parameter '{key}' is deprecated. {msg}"
                 if severity is True:
                     raise_msgs.append(base)
                 elif severity is False:
@@ -337,15 +274,21 @@ def _collect_deprecations_and_converters(
 
 def normalize_measurement_strategy(
     measurement_strategy: MeasurementStrategyLike | str | None,
+    computation_space: ComputationSpace | str | None,
 ) -> tuple[MeasurementStrategyLike, ComputationSpace]:
     """
-    Normalize measurement strategy and computation space with deprecation errors.
+    Normalize measurement strategy and computation space with deprecation warnings.
+
+    Enforces the v0.3 requirement that ``computation_space`` must live inside
+    ``MeasurementStrategy`` when using the new factory methods.
 
     Parameters
     ----------
     measurement_strategy : :data:`~merlin.measurement.strategies.MeasurementStrategyLike` | str | None
         Measurement strategy provided by the caller. Supports the modern
         strategy object, legacy enum aliases, legacy strings, or ``None``.
+    computation_space : ComputationSpace | str | None
+        Computation space provided alongside the strategy.
 
     Returns
     -------
@@ -355,7 +298,8 @@ def normalize_measurement_strategy(
     Raises
     ------
     TypeError
-        If the provided strategy is a string: which is an invalid measurement strategy.
+        If the provided strategy is incompatible with the separate
+        ``computation_space`` argument or cannot be normalized.
     ValueError
         If a modern ``MeasurementStrategy`` does not define a computation
         space.
@@ -366,27 +310,51 @@ def normalize_measurement_strategy(
 
     1. If MeasurementStrategy instance (new API) + constructor computation_space provided
        → ERROR: user must move computation_space into the factory method
-    2. If MeasurementStrategy instance only → use its computation_space
-    3. If MeasurementStrategy.NONE -> use amplitudes with the default computation space
-
+    2. If measurement_strategy is None and computation_space provided
+       → OK with deprecation warning (default to MeasurementStrategy.probs(computation_space))
+    3. If legacy enum (PROBABILITIES, etc) + constructor computation_space
+       → OK with deprecation warning (backward compat)
+    4. If MeasurementStrategy instance only → use its computation_space
+    5. If legacy enum only → wrap with computation_space param
     """
     from ..measurement.strategies import (
         MeasurementKind,
         MeasurementStrategy,
+        _LegacyMeasurementStrategy,
     )
 
     # Track whether computation_space was explicitly provided by user
+    computation_space_provided = computation_space is not None
 
     if measurement_strategy is None:
-        computation_space = ComputationSpace.UNBUNCHED
+        if computation_space is None:
+            computation_space = ComputationSpace.UNBUNCHED
+        else:
+            computation_space = ComputationSpace.coerce(computation_space)
+            warnings.warn(
+                "Passing 'computation_space' without an explicit measurement_strategy is deprecated. "
+                "Use MeasurementStrategy.probs(computation_space=...) instead. "
+                "Will be removed in 0.4 (v0.4).",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         measurement_strategy = MeasurementStrategy.probs(computation_space)
         return measurement_strategy, computation_space
 
     if isinstance(measurement_strategy, str):
-        raise TypeError(
-            "Passing measurement_strategy as a string is no longer supported as of v0.4. "
-            "Use MeasurementStrategy.probs(...) instead.",
+        warnings.warn(
+            "Passing measurement_strategy as a string is deprecated. "
+            "Use MeasurementStrategy.probs(...) instead. Will be removed in v0.4.",
+            DeprecationWarning,
+            stacklevel=2,
         )
+        normalized = measurement_strategy.upper()
+        try:
+            measurement_strategy = _LegacyMeasurementStrategy[normalized]
+        except KeyError as exc:
+            raise TypeError(
+                f"Unknown measurement_strategy: {measurement_strategy}"
+            ) from exc
 
     if isinstance(measurement_strategy, MeasurementStrategy):
         # NEW API: MeasurementStrategy instance (e.g., from .probs(), .partial(), etc)
@@ -397,13 +365,24 @@ def normalize_measurement_strategy(
                 "Use MeasurementStrategy.probs(computation_space) instead."
             )
 
+        # CONFLICT CHECK: Constructor computation_space + new factory method
+        if computation_space_provided:
+            raise TypeError(
+                "Cannot specify 'computation_space' in QuantumLayer constructor "
+                "when using MeasurementStrategy.probs(), .mode_expectations(), or .partial(). "
+                "Move 'computation_space' into the factory method instead. "
+                "For example: MeasurementStrategy.probs(computation_space=ComputationSpace.FOCK) "
+                "instead of QuantumLayer(..., computation_space=..., measurement_strategy=...)."
+            )
+
         return measurement_strategy, strategy_space
 
     if isinstance(measurement_strategy, MeasurementKind):
         raise TypeError(
             "MeasurementKind is not a supported public measurement_strategy input. "
             "Use MeasurementStrategy.probs(...), MeasurementStrategy.mode_expectations(...), "
-            "MeasurementStrategy.amplitudes() or MeasurementStrategy.partial() instead"
+            "MeasurementStrategy.amplitudes(), or legacy MeasurementStrategy.PROBABILITIES-style "
+            "aliases instead."
         )
 
     # Only set default if not explicitly provided
@@ -412,11 +391,36 @@ def normalize_measurement_strategy(
     else:
         computation_space = ComputationSpace.coerce(computation_space)
 
+    if isinstance(measurement_strategy, _LegacyMeasurementStrategy):
+        # LEGACY API: Enum-style access (PROBABILITIES, MODE_EXPECTATIONS, AMPLITUDES)
+        # These are allowed with constructor computation_space for backward compat
+        if computation_space_provided:
+            warnings.warn(
+                "Passing 'computation_space' as a separate argument with legacy "
+                "MeasurementStrategy enum values is deprecated. "
+                "Move computation_space into MeasurementStrategy.probs(computation_space=...) instead. "
+                "Will be removed in 0.4 (v0.4).",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
+        if measurement_strategy == _LegacyMeasurementStrategy.PROBABILITIES:
+            measurement_strategy = MeasurementStrategy.probs(computation_space)
+        elif measurement_strategy == _LegacyMeasurementStrategy.MODE_EXPECTATIONS:
+            measurement_strategy = MeasurementStrategy.mode_expectations(
+                computation_space
+            )
+        elif measurement_strategy == _LegacyMeasurementStrategy.AMPLITUDES:
+            measurement_strategy = MeasurementStrategy.amplitudes(computation_space)
+        elif measurement_strategy == _LegacyMeasurementStrategy.NONE:
+            measurement_strategy = MeasurementStrategy.amplitudes(computation_space)
+
     return measurement_strategy, computation_space
 
 
-def error_deprecated_enum_access(owner: str, name: str) -> None:
-    """Fail on deprecated enum-style attribute access.
+def warn_deprecated_enum_access(owner: str, name: str) -> bool:
+    """
+    Warn on deprecated enum-style attribute access.
 
     Parameters
     ----------
@@ -427,21 +431,20 @@ def error_deprecated_enum_access(owner: str, name: str) -> None:
 
     Returns
     -------
-    None
-
-    Raises
-    ------
-    AttributeError
-        If ``owner`` is ``"MeasurementStrategy"`` and ``name`` is one of the
-        deprecated enum-style attributes listed in
-        ``_MEASUREMENT_STRATEGY_ENUM_MIGRATIONS``.
+    bool
+        ``True`` if the access was recognized and handled, ``False``
+        otherwise.
     """
     if owner == "MeasurementStrategy" and name in _MEASUREMENT_STRATEGY_ENUM_MIGRATIONS:
         replacement = _MEASUREMENT_STRATEGY_ENUM_MIGRATIONS[name]
-        raise AttributeError(
+        warnings.warn(
             f"{owner}.{name} is deprecated. Use {owner}.{replacement} instead. "
-            "(No longer supported as of v0.4).",
+            "Will be removed in 0.4 (v0.4).",
+            DeprecationWarning,
+            stacklevel=2,
         )
+        return True
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -514,37 +517,22 @@ def sanitize_parameters(*args: Any, **_kw: Any) -> Any:
                 warn_msgs, raise_msgs, converters = (
                     _collect_deprecations_and_converters(qual, kwargs)
                 )
-                active_messages = _ACTIVE_DEPRECATION_MESSAGES.get()
-                visible_warn_msgs = [
-                    message for message in warn_msgs if message not in active_messages
-                ]
-                scoped_messages = (
-                    active_messages | frozenset(warn_msgs) | frozenset(raise_msgs)
-                )
-                deprecation_scope = _ACTIVE_DEPRECATION_MESSAGES.set(scoped_messages)
-                try:
-                    if raise_msgs:
-                        raise ValueError(" ".join(raise_msgs))
-                    if visible_warn_msgs:
-                        warnings.warn(
-                            " ".join(visible_warn_msgs),
-                            DeprecationWarning,
-                            stacklevel=2,
-                        )
+                if raise_msgs:
+                    raise ValueError(" ".join(raise_msgs))
+                if warn_msgs:
+                    warnings.warn(" ".join(warn_msgs), DeprecationWarning, stacklevel=2)
 
-                    # 2) Apply converters for deprecated params
-                    for conv in converters:
-                        kwargs = conv(qual, dict(kwargs))
+                # 2) Apply converters for deprecated params
+                for conv in converters:
+                    kwargs = conv(qual, dict(kwargs))
 
-                    # 2b) Apply optional processors
-                    for proc in processors:
-                        kwargs = proc(qual, dict(kwargs))
+                # 2b) Apply optional processors
+                for proc in processors:
+                    kwargs = proc(qual, dict(kwargs))
 
-                    # 3) Rely on Python's own signature checking to reject unknown kwargs.
+                # 3) Rely on Python's own signature checking to reject unknown kwargs.
 
-                    return func(*f_args, **kwargs)
-                finally:
-                    _ACTIVE_DEPRECATION_MESSAGES.reset(deprecation_scope)
+                return func(*f_args, **kwargs)
 
             return wrapper
 

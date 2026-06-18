@@ -13,7 +13,6 @@ import numpy as np
 import perceval as pcvl
 import pytest
 import torch
-from exqalibur import FSArray
 from perceval import BasicState, Circuit, Matrix, Unitary
 from perceval.algorithm import Sampler
 from perceval.components import PERM
@@ -22,7 +21,6 @@ from perceval.utils import NoiseModel
 from merlin.algorithms.feed_forward import FeedForwardBlock
 from merlin.algorithms.layer import QuantumLayer
 from merlin.core.computation_space import ComputationSpace
-from merlin.core.state_vector import StateVector
 from merlin.measurement.strategies import MeasurementStrategy
 
 _BASIS_CACHE: dict[tuple[int, int], list[tuple[int, ...]]] = {}
@@ -260,34 +258,18 @@ def test_feedforward_block2_mode_expectations():
     assert torch.allclose(manual, expectation, atol=1e-6, rtol=1e-6)
 
 
-def test_feedforward_block2_rejects_tensor_input_state():
-    exp = _build_balanced_feedforward_experiment()
-    basis = _basis_states(3, 2)
-    amplitudes = torch.zeros(len(basis), dtype=torch.complex64)
-    amplitudes[basis.index((2, 0, 0))] = 1.0
-
-    with pytest.raises(ValueError) as exc_info:
-        FeedForwardBlock(exp, input_state=amplitudes)
-
-    message = str(exc_info.value)
-    assert "torch.Tensor" in message
-    assert "FeedForwardBlock input_state" in message
-    assert "StateVector.from_tensor()" in message
-
-
-def test_feedforward_block2_accepts_merlin_state_vector_input():
+def test_feedforward_block2_accepts_tensor_input_state():
     exp = _build_balanced_feedforward_experiment()
     block_basic = FeedForwardBlock(exp, input_state=[2, 0, 0])
     basis = _basis_states(3, 2)
     amplitudes = torch.zeros(len(basis), dtype=torch.complex64)
     amplitudes[basis.index((2, 0, 0))] = 1.0
-    state_vector = StateVector.from_tensor(amplitudes, n_modes=3, n_photons=2)
-    block_state_vector = FeedForwardBlock(exp, input_state=state_vector)
+    block_tensor = FeedForwardBlock(exp, input_state=amplitudes)
 
     ref_outputs = _as_keyed_tensors(block_basic, block_basic())
-    state_vector_outputs = _as_keyed_tensors(block_state_vector, block_state_vector())
+    tensor_outputs = _as_keyed_tensors(block_tensor, block_tensor())
     for key in block_basic.output_keys:
-        assert torch.allclose(ref_outputs[key], state_vector_outputs[key], atol=1e-6)
+        assert torch.allclose(ref_outputs[key], tensor_outputs[key], atol=1e-6)
 
 
 def test_feedforward_block2_accepts_state_vector_input():
@@ -306,7 +288,6 @@ def test_feedforward_block2_accepts_state_vector_input():
 def test_feedforward_block2_input_and_trainable_parameters_backward():
     exp = pcvl.Experiment()
     root = pcvl.Circuit(2)
-    root.add((0, 1), pcvl.BS())
     root.add(0, pcvl.PS(pcvl.P("phi")))
     root.add((0, 1), pcvl.BS(theta=pcvl.P("theta_1")))
     exp.add(0, root)
@@ -350,9 +331,7 @@ def test_feedforward_block2_forward_without_inputs_matches_explicit_tensor():
 def test_feedforward_block2_requires_classical_features_when_needed():
     exp = pcvl.Experiment()
     circuit = pcvl.Circuit(2)
-    circuit.add(0, pcvl.BS())
     circuit.add(0, pcvl.PS(pcvl.P("phi")))
-    circuit.add(0, pcvl.BS())
     exp.add(0, circuit)
     exp.add(0, pcvl.Detector.pnr())
     provider = pcvl.FFCircuitProvider(1, 0, pcvl.Circuit(1))
@@ -447,244 +426,3 @@ def test_feedforward_block_matches_perceval_distribution():
         assert math.isclose(prob, perceval_probs[key], rel_tol=1e-5, abs_tol=1e-5), (
             f"Mismatch for key {key}: Merlin={prob}, Perceval={perceval_probs[key]}"
         )
-
-
-def test_feedforwardblock_params_only_in_branches():
-    """Verify that trainable parameters are correctly assigned to stages and their layers."""
-    m = 6
-    k = 4
-    n = 2
-
-    possible_measurements = list(FSArray(k, n - 1))
-
-    def gi_func(idx):
-        return (
-            Circuit(2)
-            // pcvl.BS()
-            // pcvl.PS(pcvl.P(f"x{idx}"))
-            // pcvl.BS()
-            // pcvl.PS(pcvl.P(f"A{2 * idx}"))
-            // pcvl.BS()
-            // pcvl.PS(pcvl.P(f"A{2 * idx + 1}"))
-            // pcvl.BS()
-        )
-
-    def g(measurement):
-        return possible_measurements.index(measurement) + 1
-
-    def adaptive_mzi_stage1(measurement):
-        g_val = g(measurement)
-        return Circuit(2) // pcvl.BS() // pcvl.PS(pcvl.P(f"B{g_val - 1}")) // pcvl.BS()
-
-    gi = pcvl.GenericInterferometer(m, gi_func)
-
-    # Stage 1: after first k detectors
-    feedforward_config_1 = pcvl.FFCircuitProvider(k, 0, Circuit(2))
-    for measurement in possible_measurements:
-        feedforward_config_1.add_configuration(
-            measurement, adaptive_mzi_stage1(measurement)
-        )
-
-    experiment = pcvl.Experiment(m)
-    experiment.add(0, gi)
-
-    for i in range(k):
-        experiment.add(i, pcvl.Detector.pnr())
-
-    experiment.add(0, feedforward_config_1)
-
-    ff_block = FeedForwardBlock(
-        experiment,
-        input_state=BasicState([1] * n + [0] * (m - n)),
-        trainable_parameters=["A", "B"],
-        input_parameters=["x"],
-    )
-
-    # Verify single stage was created
-    assert len(ff_block._stage_runtimes) == 1
-    stage_0 = ff_block._stage_runtimes[0]
-
-    # Verify trainable parameters include both unitary ("A") and provider ("B") parameters
-    assert stage_0.trainable_parameters is not None
-    trainable_set = set(stage_0.trainable_parameters)
-    assert "A" in trainable_set, "Stage should have 'A' parameters from unitary"
-    assert "B" in trainable_set, (
-        "Stage should have 'B' parameters from conditional branches"
-    )
-
-    # Verify pre_layer exists and has correct parameters
-    assert stage_0.pre_layer is not None
-    pre_layer_trainable = set(stage_0.pre_layer.trainable_parameters or [])
-    assert "A" in pre_layer_trainable, "Pre-layer should have 'A' from unitary"
-    # Note: "x" is included in the first-stage unitary, so it should be treated as a first-stage input parameter.
-    assert "B" not in pre_layer_trainable, (
-        "Pre-layer should not have 'B' (only in conditional branches)"
-    )
-
-    # Verify conditional circuits exist and contain "B" parameters
-    assert stage_0.conditional_circuits is not None
-    assert len(stage_0.conditional_circuits) > 0, (
-        "Stage should have conditional circuits"
-    )
-    for circuit in stage_0.conditional_circuits.values():
-        circuit_params = circuit.params
-        # At least some conditional circuits should have B parameters
-        if any(p.startswith("B") for p in circuit_params):
-            break
-    else:
-        pytest.fail("No conditional circuit found with 'B' parameters")
-
-    # Verify input parameters are handled by the FeedForwardBlock
-    # Note: "x" was specified as an input_parameter and exists in provider circuits.
-    # However, the first-stage pre_layer is built from the unitary circuit where "x" doesn't exist,
-    # so "x" won't appear in pre_layer.input_parameters. FeedForwardBlock currently consumes
-    # classical inputs in the first stage only; this assertion only verifies prefix mapping.
-
-    # Verify the FeedForwardBlock's input parameter mapping
-    assert ff_block._input_params_to_prefix_mapping is not None
-    assert "x" in ff_block._prefix_to_params_mapping
-    assert any(
-        prefix == "x" for prefix in ff_block._input_params_to_prefix_mapping.values()
-    ), "Input parameter 'x' should be recognized by FeedForwardBlock"
-
-    # Verifying no forward bug
-    ff_block.forward(torch.rand([1, 15]))
-
-
-def test_feedforwardblock_input_at_send_layer_fails():
-    m = 6
-    k = 4
-    n = 4
-
-    possible_measurements = list(FSArray(k, n - 1))
-
-    def gi_func(idx):
-        return (
-            Circuit(2)
-            // pcvl.BS()
-            // pcvl.PS(pcvl.P(f"A{2 * idx}"))
-            // pcvl.BS()
-            // pcvl.PS(pcvl.P(f"A{2 * idx + 1}"))
-            // pcvl.BS()
-        )
-
-    def g(measurement):
-        return possible_measurements.index(measurement) + 1
-
-    def adaptive_mzi_stage1(measurement):
-        g_val = g(measurement)
-        return (
-            Circuit(2)
-            // pcvl.BS()
-            // pcvl.PS(g_val * pcvl.P("x"))
-            // pcvl.BS()
-            // pcvl.PS(pcvl.P(f"B{g_val - 1}"))
-            // pcvl.BS()
-        )
-
-    gi = pcvl.GenericInterferometer(m, gi_func)
-
-    # Stage 1: after first k detectors
-    feedforward_config_1 = pcvl.FFCircuitProvider(k, 0, Circuit(2))
-    for measurement in possible_measurements:
-        feedforward_config_1.add_configuration(
-            measurement, adaptive_mzi_stage1(measurement)
-        )
-
-    experiment = pcvl.Experiment(m)
-    experiment.add(0, gi)
-
-    for i in range(k):
-        experiment.add(i, pcvl.Detector.pnr())
-
-    experiment.add(0, feedforward_config_1)
-    with pytest.raises(
-        ValueError, match="The first stage must use all of the input parameters"
-    ):
-        _ = FeedForwardBlock(
-            experiment,
-            input_state=BasicState([1] * n + [0] * (m - n)),
-            trainable_parameters=["A", "B"],
-            input_parameters=["x"],
-        )
-
-
-def test_feedforwardblock_params_multi_stage():
-    """Verify parameter assignment works correctly across multiple stages."""
-    # Build a 2-stage experiment with distinct parameters per stage
-    # Following the structure of _build_two_stage_experiment()
-    exp = pcvl.Experiment()
-
-    # Stage 0: 4-mode root circuit, measure mode 0, provider with A parameters
-    root = pcvl.Circuit(4)
-    root.add(0, pcvl.BS())
-    exp.add(0, root)
-
-    exp.add(0, pcvl.Detector.pnr())
-    v0_stage0 = Circuit(3) // pcvl.PS(pcvl.P("A0")) // pcvl.BS()
-    v1_stage0 = Circuit(3) // pcvl.PS(pcvl.P("A1")) // pcvl.BS()
-    provider0 = pcvl.FFCircuitProvider(1, 0, v0_stage0)
-    provider0.add_configuration([1], v1_stage0)
-    exp.add(0, provider0)
-
-    # Stage 1: measure mode 3 (remaining after mode 0 measurement), provider with C parameters
-    exp.add(3, pcvl.Detector.pnr())
-    v0_stage1 = Circuit(2) // pcvl.PS(pcvl.P("C0")) // pcvl.BS(theta=pcvl.P("C1"))
-    provider1 = pcvl.FFCircuitProvider(1, -1, v0_stage1)
-    exp.add(3, provider1)
-
-    # Add passive detectors on modes 1, 2 (these don't create feed-forward stages)
-    for mode in (1, 2):
-        exp.add(mode, pcvl.Detector.pnr())
-
-    ff_block = FeedForwardBlock(
-        exp,
-        input_state=[1, 1, 0, 0],
-        trainable_parameters=["A", "C"],
-    )
-
-    # Verify two stages were created
-    assert len(ff_block._stage_runtimes) == 2, (
-        f"Expected 2 stages, got {len(ff_block._stage_runtimes)}. Stages: {[s.measured_modes for s in ff_block._stage_runtimes]}"
-    )
-    stage_0 = ff_block._stage_runtimes[0]
-    stage_1 = ff_block._stage_runtimes[1]
-
-    # Stage 0: should have only "A" parameters
-    assert stage_0.trainable_parameters is not None
-    stage_0_params = set(stage_0.trainable_parameters)
-    assert "A" in stage_0_params, "Stage 0 should have 'A' parameters"
-    assert "C" not in stage_0_params, (
-        "Stage 0 should not have 'C' parameters (belongs to stage 1)"
-    )
-
-    # Stage 1: should have only "C" parameters
-    assert stage_1.trainable_parameters is not None
-    stage_1_params = set(stage_1.trainable_parameters)
-    assert "C" in stage_1_params, "Stage 1 should have 'C' parameters"
-    assert "A" not in stage_1_params, (
-        "Stage 1 should not have 'A' parameters (belongs to stage 0)"
-    )
-
-    # Verify each stage has its runtime objects (pre_layer may be None if root circuit has no parameters)
-    assert stage_0.pre_layer is not None, "Stage 0 should have pre_layer"
-    # Note: stage_1.pre_layer can be None if the root circuit for stage 1 has no parameters
-
-    # Verify each stage has conditional circuits with their respective parameters
-    assert stage_0.conditional_circuits is not None
-    assert len(stage_0.conditional_circuits) > 0, (
-        "Stage 0 should have conditional circuits"
-    )
-    assert any(
-        any(p.startswith("A") for p in circuit.params)
-        for circuit in stage_0.conditional_circuits.values()
-    ), "Stage 0 conditional circuits should contain 'A' parameters"
-
-    assert stage_1.conditional_circuits is not None
-    assert len(stage_1.conditional_circuits) > 0, (
-        "Stage 1 should have conditional circuits"
-    )
-    assert any(
-        any(p.startswith("C") for p in circuit.params)
-        for circuit in stage_1.conditional_circuits.values()
-    ), "Stage 1 conditional circuits should contain 'C' parameters"

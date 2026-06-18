@@ -55,12 +55,6 @@ def _expected_dist_size(space: ComputationSpace, m: int, n: int) -> int:
     raise ValueError(f"Unsupported computation space: {space}")
 
 
-def _add_beam_splitter_chain(circuit: pcvl.Circuit, n_modes: int) -> None:
-    """Add fixed nearest-neighbor mixing to keep phase encodings non-passive."""
-    for mode in range(n_modes - 1):
-        circuit.add(mode, pcvl.BS())
-
-
 def _make_perceval_circuit_single_prefix(
     n_logical: int, n_physical: int | None = None, prefix: str = "px"
 ):
@@ -68,12 +62,10 @@ def _make_perceval_circuit_single_prefix(
         n_physical = n_logical
 
     U = pcvl.Matrix.random_unitary(n=n_physical)
-    circuit = pcvl.Circuit(n_physical)
-    circuit.add(0, pcvl.Unitary(U))
+    c_var = pcvl.Circuit(n_physical)
     for i in range(n_logical):
-        circuit.add(i, pcvl.PS(pcvl.P(f"{prefix}{i + 1}")))
-    circuit.add(0, pcvl.Unitary(U.copy()))
-    return circuit
+        c_var.add(i, pcvl.PS(pcvl.P(f"{prefix}{i + 1}")))
+    return pcvl.Unitary(U) // c_var // pcvl.Unitary(U.copy())
 
 
 def _make_perceval_layer(
@@ -123,13 +115,11 @@ def _make_perceval_layer_two_prefixes(prefixes: list[str], counts: list[int], m:
     assert len(prefixes) == len(counts)
     c = pcvl.Circuit(m)
 
-    _add_beam_splitter_chain(c, m)
     mode = 0
     for pref, n in zip(prefixes, counts, strict=True):
         for i in range(n):
             c.add(mode, pcvl.PS(pcvl.P(f"{pref}{i + 1}")))
             mode += 1
-    _add_beam_splitter_chain(c, m)
 
     input_state = [0] * m
     input_state[0] = 1
@@ -155,11 +145,9 @@ def _make_builder_layer(
     computation_space: ComputationSpace = ComputationSpace.UNBUNCHED,
 ):
     b = CircuitBuilder(n_modes=n_modes)
-    b.add_entangling_layer(trainable=False, name="pre_mix")
     if include_trainable:
         b.add_entangling_layer(trainable=True, name="W")
     b.add_angle_encoding(modes=list(range(n_modes)), name="px", scale=scale)
-    b.add_entangling_layer(trainable=False, name="post_mix")
 
     layer = QuantumLayer(
         input_size=n_modes,
@@ -293,9 +281,9 @@ class TestBuilderDeclarative:
         _assert_config_contract(cfg)
 
         for name in cfg.input_param_order:
-            assert not name.startswith("W"), (
-                f"trainable leaked into input_param_order: {name}"
-            )
+            assert not name.startswith(
+                "W"
+            ), f"trainable leaked into input_param_order: {name}"
 
     def test_builder_input_only_no_trainables(self):
         layer, _b = _make_builder_layer(8, include_trainable=False, scale=1.0)
@@ -462,12 +450,10 @@ class TestCloudMultiPrefixBothSpaces:
         n_photons = 2  # cloud-acceptable minimum
 
         c = pcvl.Circuit(total_modes)
-        _add_beam_splitter_chain(c, total_modes)
         for i in range(n_each):
             c.add(i, pcvl.PS(pcvl.P(f"a{i + 1}")))
         for i in range(n_each):
             c.add(i + n_each, pcvl.PS(pcvl.P(f"b{i + 1}")))
-        _add_beam_splitter_chain(c, total_modes)
 
         input_state = [0] * total_modes
         input_state[0] = 1

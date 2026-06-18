@@ -12,12 +12,5 @@
     "image": "_static/img/Circ_simple.png",
     "doc": "user_guide/angle_amplitude_encoding",
     "tags": ["Encodings", "Comparison","Amplitude","Angle"]
-  },
-  {
-    "title": "Encoding Spaces",
-    "summary": "Interpret PyTorch amplitude tensors with EncodingSpace.",
-    "image": "_static/img/computation_space.png",
-    "doc": "user_guide/encoding_space",
-    "tags": ["Encodings", "StateVector", "Fock"]
   }
 ]

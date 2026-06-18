@@ -29,7 +29,6 @@ from collections.abc import Callable
 import torch
 
 from merlin.core.partial_measurement import DetectorTransformOutput, PartialMeasurement
-from merlin.core.sectored_distribution import SectoredDistribution
 
 
 class SamplingProcess:
@@ -67,7 +66,7 @@ class SamplingProcess:
         self.method = method
 
     def pcvl_sampler(
-        self, distribution: torch.Tensor, shots: int, method: str | None = None
+        self, distribution: torch.Tensor, shots: int, method: str = None
     ) -> torch.Tensor:
         """Apply sampling noise to a probability distribution.
 
@@ -133,111 +132,6 @@ class SamplingProcess:
         raise ValueError(
             f"Invalid sampling method: {method}. Valid options are: {self.valid_methods}"
         )
-
-    def pcvl_sampler_g2(
-        self, distribution: SectoredDistribution, shots: int, method: str | None = None
-    ) -> SectoredDistribution:
-        """Apply sampling noise to a SectoredDistribution.
-
-        Parameters
-        ----------
-        distribution : SectoredDistribution
-            Input probability distribution object.
-        shots : int
-            Number of measurement shots to simulate.
-        method : str | None
-            Sampling method to use ('multinomial', 'binomial', or 'gaussian'),
-            defaults to the initialized method
-
-        Returns
-        -------
-        SectoredDistribution
-            Noisy probability distribution after sampling.
-
-        Raises
-        ------
-        ValueError
-            If ``method`` is not one of the valid options.
-        """
-        if shots <= 0:
-            return distribution
-
-        if method is None:
-            method = self.method
-
-        # Flattening the vectors into one sole vector
-        one_dimension_vector = None
-        one_dimension_counts = None
-        indexes = []
-        for sector in distribution.sectors:
-            if one_dimension_vector is None:
-                one_dimension_vector = sector.tensor
-                if one_dimension_vector.dim() == 1:
-                    augment_input = True
-                    one_dimension_vector = one_dimension_vector.unsqueeze(0)
-                else:
-                    augment_input = False
-                indexes.append((0, one_dimension_vector.size(1)))
-            else:
-                if augment_input:
-                    one_dimension_vector = torch.cat(
-                        [one_dimension_vector, sector.tensor.unsqueeze(0)], dim=1
-                    )
-                else:
-                    one_dimension_vector = torch.cat(
-                        [one_dimension_vector, sector.tensor], dim=1
-                    )
-                indexes.append((indexes[-1][-1], one_dimension_vector.size(1)))
-
-        # Sampling
-        if method == "multinomial":
-            batch_size = one_dimension_vector.shape[0]
-            noisy_dists = []
-            for i in range(batch_size):
-                sampled_counts = torch.multinomial(
-                    one_dimension_vector[i], num_samples=shots, replacement=True
-                )
-                noisy_dist = torch.zeros_like(one_dimension_vector[i])
-                for idx in sampled_counts:
-                    noisy_dist[idx] += 1
-                noisy_dists.append(noisy_dist / shots)
-            one_dimension_counts = torch.stack(noisy_dists)
-
-        elif method == "binomial":
-            one_dimension_counts = (
-                torch.distributions.Binomial(shots, one_dimension_vector).sample()
-                / shots
-            )
-
-        elif method == "gaussian":
-            std_dev = torch.sqrt(
-                one_dimension_vector * (1 - one_dimension_vector) / shots
-            )
-            noise = torch.randn_like(one_dimension_vector) * std_dev
-            noisy_dist = one_dimension_vector + noise
-            noisy_dist = torch.clamp(noisy_dist, 0, 1)
-            noisy_dist = noisy_dist / noisy_dist.sum(dim=-1, keepdim=True)
-            one_dimension_counts = noisy_dist
-
-        if one_dimension_counts is None:
-            raise ValueError(
-                f"Invalid sampling method: {method}. Valid options are: {self.valid_methods}"
-            )
-
-        # Reformatting the output
-        sectors = []
-        for sector, index_splits in zip(distribution.sectors, indexes, strict=True):
-            sectors.append(sector.clone())
-            if augment_input:
-                sectors[-1].tensor = one_dimension_counts[
-                    :, index_splits[0] : index_splits[1]
-                ].squeeze(dim=0)
-            else:
-                sectors[-1].tensor = one_dimension_counts[
-                    :, index_splits[0] : index_splits[1]
-                ]
-
-        return SectoredDistribution(tuple(sectors))
 
 
 def partial_measurement(

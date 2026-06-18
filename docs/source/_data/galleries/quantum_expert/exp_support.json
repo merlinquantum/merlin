@@ -5,12 +5,5 @@
     "image": "_static/img/noise_measure.png",
     "doc": "quantum_expert_area/experiment_support.rst",
     "tags": ["Perceval Experiment", "QuantumLayer", "FeatureMap","Noise"]
-  },
-  {
-    "title": "Noisy simulations",
-    "summary": "The guidelines and limitations on running noisy simulations with MerLin",
-    "image": "_static/img/noisy_simulations.png",
-    "doc": "quantum_expert_area/noisy_simulations.rst",
-    "tags": ["QuantumLayer", "Noise", "Circuit Noise","Source Noise","Post Measurement Noise"]
   }
 ]

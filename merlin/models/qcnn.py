@@ -13,7 +13,7 @@ from ..algorithms import QuantumLayer
 from ..core import ComputationSpace, StateVector
 from ..core.partial_measurement import PartialMeasurement
 from ..measurement import MeasurementStrategy
-
+import warnings
 
 class QCNNClassifier(torch.nn.Module):
     """Quantum convolutional neural network classifier.
@@ -141,6 +141,8 @@ class QCNNClassifier(torch.nn.Module):
             self._build_amplitude_basis_indices(),
             persistent=False,
         )
+        if input_shape[0] * input_shape[1] >= 576:
+            warnings.warn("Too many dimensions for QCNN, the program may crash", UserWarning)
 
     @property
     def input_shape(self) -> tuple[int, int]:

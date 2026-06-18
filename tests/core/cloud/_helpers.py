@@ -27,13 +27,11 @@ def make_layer(
     trainable: bool = True,
 ) -> QuantumLayer:
     b = CircuitBuilder(n_modes=m)
-    if m >= 2:
-        b.add_entangling_layer(trainable=False, name="pre_mix")
     if trainable:
         b.add_rotations(trainable=True, name="theta")
+    if m >= 3:
+        b.add_entangling_layer()
     b.add_angle_encoding(modes=list(range(input_size)), name="px")
-    if m >= 2:
-        b.add_entangling_layer(trainable=False, name="post_mix")
     return QuantumLayer(
         input_size=input_size,
         builder=b,

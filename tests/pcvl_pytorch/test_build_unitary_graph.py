@@ -56,22 +56,17 @@ class TestBuildCircuitUnitaryComputegraph:
         """Create a more complex circuit with multiple parameter groups."""
         circuit = pcvl.Circuit(n_modes)
 
-        for i in range(n_modes - 1):
-            circuit.add(i, pcvl.BS())
-
-        # Add multiple components with different parameter prefixes after mixing.
+        # Add multiple components with different parameter prefixes
         for i in range(n_modes):
             circuit.add(i, pcvl.PS(pcvl.P(f"theta_{i}")))
 
+        # Add beam splitters
         for i in range(n_modes - 1):
             circuit.add(i, pcvl.BS())
 
         # Add more phase shifters with different prefix
         for i in range(n_modes):
             circuit.add(i, pcvl.PS(pcvl.P(f"phi_{i}")))
-
-        for i in range(n_modes - 1):
-            circuit.add(i, pcvl.BS())
 
         return circuit
 
@@ -86,9 +81,7 @@ class TestBuildCircuitUnitaryComputegraph:
 
         # Add sub-circuit to main circuit (without name parameter)
         main_circuit.add(0, sub_circuit)
-        main_circuit.add(2, pcvl.BS())
         main_circuit.add(2, pcvl.PS(pcvl.P("main_phi")))
-        main_circuit.add(2, pcvl.BS())
 
         return main_circuit
 
@@ -402,8 +395,6 @@ class TestIntegration:
     def create_medium_circuit(self):
         """Create a medium-sized circuit for performance testing."""
         circuit = pcvl.Circuit(6)
-        for i in range(5):
-            circuit.add(i, pcvl.BS())
         for i in range(6):
             circuit.add(i, pcvl.PS(pcvl.P(f"theta_{i}")))
         for i in range(5):

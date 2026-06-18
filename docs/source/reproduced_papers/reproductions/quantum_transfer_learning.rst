@@ -99,7 +99,8 @@ for flexible input/output dimensionality:
        circuit=circuit,
        trainable_parameters=["phi"],
        input_parameters=["theta"],
-       measurement_strategy=MeasurementStrategy.probs(computation_space=ComputationSpace.UNBUNCHED),
+       computation_space=ComputationSpace.UNBUNCHED,
+       measurement_strategy=MeasurementStrategy.probs(),
    )
 
    # Dressed quantum circuit: classical -> quantum -> classical

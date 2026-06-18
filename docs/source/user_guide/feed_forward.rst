@@ -116,14 +116,6 @@ Example
 When the experiment does not expose classical inputs you may call ``block()``
 without passing a tensor (an empty feature tensor is injected automatically).
 
-.. note::
-
-   ``FeedForwardBlock(input_state=...)`` accepts Fock occupation lists,
-   ``pcvl.BasicState``, ``pcvl.StateVector``, or
-   :class:`~merlin.core.state_vector.StateVector`. Raw ``torch.Tensor`` values
-   are not accepted as ``input_state``; wrap amplitude tensors with
-   :meth:`~merlin.core.state_vector.StateVector.from_tensor` first.
-
 
 Further Reading
 ---------------

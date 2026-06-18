@@ -21,7 +21,6 @@
 # SOFTWARE.
 
 import perceval as pcvl
-import pytest
 import torch
 
 from merlin.core.partial_measurement import PartialMeasurement, PartialMeasurementBranch
@@ -45,20 +44,6 @@ class TestPartialMeasurementBranch:
 
 
 class TestPartialMeasurement:
-    @staticmethod
-    def _branch(
-        *,
-        outcome: tuple[int, ...] = (1, 0),
-        n_unmeasured_modes: int = 2,
-    ) -> PartialMeasurementBranch:
-        tensor = torch.randn(1, 3, dtype=torch.cfloat)
-        state = StateVector(tensor=tensor, n_modes=n_unmeasured_modes, n_photons=1)
-        return PartialMeasurementBranch(
-            outcome=outcome,
-            probability=torch.tensor([1.0]),
-            amplitudes=state,
-        )
-
     def test_constructor_orders_branches(self):
         # Outcomes intentionally out of order
         prob_a = torch.tensor([0.14, 0.20], dtype=torch.float32)
@@ -85,51 +70,6 @@ class TestPartialMeasurement:
         assert [b.outcome for b in result.branches] == [(0, 2), (1, 0)], (
             "Branches are not ordered lexicographically by outcome"
         )
-
-    def test_constructor_rejects_overlapping_measured_and_unmeasured_modes(self):
-        """measured_modes and unmeasured_modes must be disjoint mode sets."""
-        with pytest.raises(ValueError, match="must not overlap"):
-            PartialMeasurement(
-                branches=(self._branch(),),
-                measured_modes=(0, 1),
-                unmeasured_modes=(0, 1),
-            )
-
-    def test_constructor_rejects_non_contiguous_mode_partition(self):
-        """The two mode tuples must cover exactly range(n_modes)."""
-        with pytest.raises(ValueError, match="cover exactly"):
-            PartialMeasurement(
-                branches=(self._branch(),),
-                measured_modes=(0, 1),
-                unmeasured_modes=(3, 4),
-            )
-
-    def test_constructor_rejects_duplicate_modes(self):
-        """Each mode tuple must contain unique mode indices."""
-        with pytest.raises(ValueError, match="duplicate"):
-            PartialMeasurement(
-                branches=(self._branch(),),
-                measured_modes=(0, 0),
-                unmeasured_modes=(1, 2),
-            )
-
-    def test_constructor_rejects_branch_outcome_length_mismatch(self):
-        """Each branch outcome length must match the measured mode count."""
-        with pytest.raises(ValueError, match="outcome length"):
-            PartialMeasurement(
-                branches=(self._branch(outcome=(1,)),),
-                measured_modes=(0, 1),
-                unmeasured_modes=(2, 3),
-            )
-
-    def test_constructor_rejects_branch_unmeasured_mode_count_mismatch(self):
-        """Each branch StateVector mode count must match unmeasured mode count."""
-        with pytest.raises(ValueError, match="amplitudes n_modes"):
-            PartialMeasurement(
-                branches=(self._branch(n_unmeasured_modes=1),),
-                measured_modes=(0, 1),
-                unmeasured_modes=(2, 3),
-            )
 
     def test_constructor_orders_branches_with_duplicate_outcomes(self):
         prob_first = torch.tensor([0.10, 0.11], dtype=torch.float32)

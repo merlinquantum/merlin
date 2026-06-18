@@ -1,4 +1,3 @@
-import re
 import warnings
 
 import numpy as np
@@ -15,29 +14,10 @@ from merlin.algorithms.kernels import (
     FidelityKernel,
     KernelCircuitBuilder,
     _CCInvQuantumLayer,
-    _require_angle_encoding_spec,
 )
 from merlin.algorithms.loss import NKernelAlignment
 from merlin.builder import CircuitBuilder
-from merlin.builder.circuit_builder import ANGLE_ENCODING_MODE_ERROR
 from merlin.core.computation_space import ComputationSpace
-from merlin.pcvl_pytorch.noisy_slos import (
-    NoisyG2SLOSComputeGraph,
-    NoisySLOSComputeGraph,
-)
-
-
-def _two_mode_mixed_feature_map(
-    x1: pcvl.P, x2: pcvl.P, theta: pcvl.P | None = None
-) -> pcvl.Circuit:
-    """Build a two-mode circuit with interleaved mixing and phase encodings."""
-    circuit = pcvl.Circuit(2)
-    circuit.add(0, pcvl.BS(theta) if theta is not None else pcvl.BS())
-    circuit.add(0, pcvl.PS(x1))
-    circuit.add(0, pcvl.BS(theta) if theta is not None else pcvl.BS())
-    circuit.add(0, pcvl.PS(x2))
-    circuit.add(0, pcvl.BS(theta) if theta is not None else pcvl.BS())
-    return circuit
 
 
 class TestCCInvBackend:
@@ -46,7 +26,13 @@ class TestCCInvBackend:
     def setup_method(self):
         x1, x2 = pcvl.P("x1"), pcvl.P("x2")
         theta = pcvl.P("theta")
-        self.circuit = _two_mode_mixed_feature_map(x1, x2, theta)
+        self.circuit = (
+            pcvl.Circuit(2)
+            // pcvl.PS(x1)
+            // pcvl.BS(theta)
+            // pcvl.PS(x2)
+            // pcvl.BS(theta)
+        )
         self.feature_map = FeatureMap(
             circuit=self.circuit,
             input_size=2,
@@ -70,12 +56,10 @@ class TestCCInvBackend:
 
     def test_kernel_unitary_is_identity_when_x1_eq_x2(self):
         """U(x) @ U†(x) must be the identity."""
-        identity = torch.eye(len(self.input_state), dtype=torch.complex64)
-        for x in [
-            torch.tensor([0.1, 0.4]),
-            torch.tensor([1.2, 0.0]),
-            torch.tensor([0.0, 0.0]),
-        ]:
+        identity = torch.eye(
+            len(self.input_state), dtype=torch.complex64
+        )
+        for x in [torch.tensor([0.1, 0.4]), torch.tensor([1.2, 0.0]), torch.tensor([0.0, 0.0])]:
             K_unitary = self.layer._compute_kernel_unitary(
                 x.to(self.layer.dtype),
                 x.to(self.layer.dtype),
@@ -91,7 +75,9 @@ class TestCCInvBackend:
         loss = K.sum()
         loss.backward()
         for name, param in self.kernel.named_parameters():
-            assert param.grad is not None, f"No gradient for parameter '{name}'"
+            assert param.grad is not None, (
+                f"No gradient for parameter '{name}'"
+            )
 
     def test_k_train_is_symmetric(self):
         """Training kernel matrix must be symmetric."""
@@ -109,7 +95,9 @@ class TestCCInvBackend:
             dtype=torch.float32,
         )
         K = self.kernel(X)
-        assert torch.allclose(torch.diag(K), torch.ones(3, dtype=K.dtype), atol=1e-4)
+        assert torch.allclose(
+            torch.diag(K), torch.ones(3, dtype=K.dtype), atol=1e-4
+        )
 
     def test_new_backend_transition_prob_matches_perceval_slos(self):
         """Transition probability from the new backend must match Perceval SLOS.
@@ -178,176 +166,6 @@ class TestCCInvBackend:
         perceval_value = results.get(key, 0.0)
 
         assert merlin_value == pytest.approx(perceval_value, rel=1e-5, abs=1e-6)
-
-    @pytest.mark.parametrize(
-        "noise",
-        [
-            pcvl.NoiseModel(g2=0.05, g2_distinguishable=False),
-            pcvl.NoiseModel(g2=0.05, g2_distinguishable=False, brightness=0.8),
-        ],
-    )
-    def test_kernel_backend_accepts_g2_sectored_outputs(
-        self,
-        noise: pcvl.NoiseModel,
-    ):
-        """FidelityKernel should handle NoisyG2SLOS sectored probabilities."""
-        circuit = pcvl.Circuit(2)
-        circuit.add(0, pcvl.PS(pcvl.P("x0")))
-        circuit.add((0, 1), pcvl.BS.H())
-        experiment = pcvl.Experiment(circuit)
-        experiment.noise = noise
-        feature_map = FeatureMap(
-            experiment=experiment,
-            input_size=1,
-            input_parameters="x",
-        )
-        kernel = FidelityKernel(
-            feature_map=feature_map,
-            input_state=[1, 0],
-            force_psd=False,
-        )
-
-        assert isinstance(
-            kernel._quantum_layer.computation_process.simulation_graph,
-            NoisyG2SLOSComputeGraph,
-        )
-        assert kernel._quantum_layer._noise_groups is not None
-        assert kernel._quantum_layer._noise_groups.source is not None
-        assert kernel._quantum_layer._noise_groups.source["g2"] == pytest.approx(0.05)
-
-        x = torch.tensor([[0.0], [0.3]], dtype=torch.float32)
-        kernel_matrix = kernel(x)
-
-        assert kernel_matrix.shape == (2, 2)
-        assert torch.isfinite(kernel_matrix).all()
-        assert torch.allclose(kernel_matrix, kernel_matrix.T, atol=1e-6)
-        assert torch.allclose(
-            torch.diag(kernel_matrix),
-            torch.ones(2, dtype=kernel_matrix.dtype),
-            atol=1e-6,
-        )
-
-    def test_kernel_backend_uses_noisy_slos_for_indistinguishability(self):
-        """FidelityKernel should propagate indistinguishability into SLOS."""
-        circuit = pcvl.Circuit(2)
-        circuit.add(0, pcvl.PS(pcvl.P("x0")))
-        circuit.add((0, 1), pcvl.BS.H())
-        experiment = pcvl.Experiment(circuit)
-        experiment.noise = pcvl.NoiseModel(indistinguishability=0.4)
-        feature_map = FeatureMap(
-            experiment=experiment,
-            input_size=1,
-            input_parameters="x",
-        )
-        kernel = FidelityKernel(
-            feature_map=feature_map,
-            input_state=[1, 1],
-            force_psd=False,
-        )
-
-        assert isinstance(
-            kernel._quantum_layer.computation_process.simulation_graph,
-            NoisySLOSComputeGraph,
-        )
-        assert kernel._quantum_layer._noise_groups is not None
-        assert kernel._quantum_layer._noise_groups.source is not None
-        assert kernel._quantum_layer._noise_groups.source[
-            "indistinguishability"
-        ] == pytest.approx(0.4)
-
-        value = kernel(torch.tensor([0.0]), torch.tensor([0.3]))
-
-        assert isinstance(value, float)
-        assert np.isfinite(value)
-
-    def test_kernel_backend_propagates_phase_imprecision_to_converter(self):
-        """FidelityKernel should pass deterministic phase noise to the converter."""
-        circuit = pcvl.Circuit(2)
-        circuit.add((0, 1), pcvl.BS.H())
-        circuit.add(0, pcvl.PS(pcvl.P("x0")))
-        circuit.add((0, 1), pcvl.BS.H())
-        experiment = pcvl.Experiment(circuit)
-        experiment.noise = pcvl.NoiseModel(phase_imprecision=0.5)
-        feature_map = FeatureMap(
-            experiment=experiment,
-            input_size=1,
-            input_parameters="x",
-            dtype=torch.float64,
-        )
-        kernel = FidelityKernel(
-            feature_map=feature_map,
-            input_state=[1, 0],
-            force_psd=False,
-        )
-
-        assert kernel._quantum_layer._noise_groups is not None
-        assert kernel._quantum_layer._noise_groups.circuit is not None
-        assert kernel._quantum_layer._noise_groups.circuit[
-            "phase_imprecision"
-        ] == pytest.approx(0.5)
-        converter = kernel._quantum_layer.computation_process.converter
-        assert converter._phase_imprecision == pytest.approx(0.5)
-
-        quantized_value = kernel(torch.tensor([0.74]), torch.tensor([0.0]))
-
-        noiseless_feature_map = FeatureMap(
-            circuit=circuit,
-            input_size=1,
-            input_parameters="x",
-            dtype=torch.float64,
-        )
-        noiseless_kernel = FidelityKernel(
-            feature_map=noiseless_feature_map,
-            input_state=[1, 0],
-            force_psd=False,
-        )
-        expected_value = noiseless_kernel(torch.tensor([0.5]), torch.tensor([0.0]))
-
-        assert quantized_value == pytest.approx(expected_value, rel=1e-6, abs=1e-6)
-
-    def test_kernel_backend_applies_phase_error_during_unitary_conversion(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-    ):
-        """FidelityKernel should activate stochastic phase noise when present."""
-        circuit = pcvl.Circuit(2)
-        circuit.add((0, 1), pcvl.BS.H())
-        circuit.add(0, pcvl.PS(pcvl.P("x0")))
-        circuit.add((0, 1), pcvl.BS.H())
-        experiment = pcvl.Experiment(circuit)
-        experiment.noise = pcvl.NoiseModel(phase_error=0.2)
-        feature_map = FeatureMap(
-            experiment=experiment,
-            input_size=1,
-            input_parameters="x",
-            dtype=torch.float64,
-        )
-        kernel = FidelityKernel(
-            feature_map=feature_map,
-            input_state=[1, 0],
-            force_psd=False,
-        )
-        converter = kernel._quantum_layer.computation_process.converter
-        original_to_tensor = converter.to_tensor
-        apply_phase_error_calls: list[bool] = []
-
-        def record_apply_phase_error(*args, **kwargs):
-            apply_phase_error_calls.append(bool(kwargs.get("apply_phase_error", False)))
-            return original_to_tensor(*args, **kwargs)
-
-        monkeypatch.setattr(converter, "to_tensor", record_apply_phase_error)
-
-        torch.manual_seed(123)
-        value = kernel(torch.tensor([0.0]), torch.tensor([0.0]))
-
-        assert isinstance(value, float)
-        assert np.isfinite(value)
-        assert kernel._quantum_layer._noise_groups is not None
-        assert kernel._quantum_layer._noise_groups.circuit is not None
-        assert kernel._quantum_layer._noise_groups.circuit[
-            "phase_error"
-        ] == pytest.approx(0.2)
-        assert any(apply_phase_error_calls)
 
     def test_new_backend_matches_perceval_slos_unbunched(self):
         """New backend with UNBUNCHED space must match Perceval thresholded probability.
@@ -431,7 +249,9 @@ class TestFidelityKernelInternals:
 
     def setup_method(self):
         x1, x2 = pcvl.P("x1"), pcvl.P("x2")
-        circuit = _two_mode_mixed_feature_map(x1, x2)
+        circuit = (
+            pcvl.Circuit(2) // pcvl.PS(x1) // pcvl.BS() // pcvl.PS(x2) // pcvl.BS()
+        )
         self.feature_map = FeatureMap(
             circuit=circuit,
             input_size=2,
@@ -469,28 +289,13 @@ class TestFidelityKernelInternals:
 
         assert torch.allclose(actual, expected, atol=1e-6)
 
-    def test_raw_keys_are_sectored_detects_nested_key_layout(self):
-        """_raw_keys_are_sectored should detect g2-style nested raw keys."""
-        assert _CCInvQuantumLayer._raw_keys_are_sectored([[(1, 0)], [(1, 1)]])
-        assert not _CCInvQuantumLayer._raw_keys_are_sectored([(1, 0), (0, 1)])
-        assert not _CCInvQuantumLayer._raw_keys_are_sectored([])
-
-    def test_build_input_detection_seed_rejects_missing_input_state(self):
-        """Kernel backend should fail clearly if the input state is absent from raw keys."""
-        layer = self.kernel._quantum_layer
-        original_raw_output_keys = layer._raw_output_keys
-        layer._raw_output_keys = [(0, 2), (1, 1)]
-        try:
-            with pytest.raises(ValueError, match="Input state is not present"):
-                layer._build_input_detection_seed([2, 0], layer.device)
-        finally:
-            layer._raw_output_keys = original_raw_output_keys
-
 
 class TestFidelityKernel:
     def setup_method(self):
         x1, x2 = pcvl.P("x1"), pcvl.P("x2")
-        circuit = _two_mode_mixed_feature_map(x1, x2)
+        circuit = (
+            pcvl.Circuit(2) // pcvl.PS(x1) // pcvl.BS() // pcvl.PS(x2) // pcvl.BS()
+        )
         self.feature_map = FeatureMap(
             circuit=circuit,
             input_size=2,
@@ -510,18 +315,16 @@ class TestFidelityKernel:
         assert self.quantum_kernel.force_psd
         assert not self.quantum_kernel.is_trainable
 
-    def test_input_state_property_returns_copy(self):
-        input_state = self.quantum_kernel.input_state
-        input_state[0] = 0
-
-        assert self.quantum_kernel.input_state == [2, 0]
-        assert self.quantum_kernel.input_state is not input_state
-        assert self.quantum_kernel._quantum_layer._kernel_input_state == [2, 0]
-
     def test_fidelity_kernel_with_trainable_feature_map(self):
         theta = pcvl.P("theta")
         x1, x2 = pcvl.P("x1"), pcvl.P("x2")
-        circuit = _two_mode_mixed_feature_map(x1, x2, theta)
+        circuit = (
+            pcvl.Circuit(2)
+            // pcvl.PS(x1)
+            // pcvl.BS(theta)
+            // pcvl.PS(x2)
+            // pcvl.BS(theta)
+        )
 
         feature_map = FeatureMap(
             circuit=circuit,
@@ -538,6 +341,27 @@ class TestFidelityKernel:
 
         assert kernel.is_trainable
         assert "_quantum_layer.theta" in dict(kernel.named_parameters())
+
+    def test_kernel_rejects_no_bunching(self):
+        with pytest.warns(DeprecationWarning):
+            with pytest.raises(ValueError) as exc_info:
+                FidelityKernel(
+                    feature_map=self.feature_map,
+                    input_state=[2, 0],
+                    no_bunching=True,
+                )
+        assert "no_bunching" in str(exc_info.value)
+
+        with pytest.warns(DeprecationWarning):
+            with pytest.raises(ValueError) as exc_info:
+                FidelityKernel.simple(input_size=2, no_bunching=True)
+        assert "no_bunching" in str(exc_info.value)
+
+        builder = KernelCircuitBuilder().input_size(2).n_modes(4)
+        with pytest.warns(DeprecationWarning):
+            with pytest.raises(ValueError) as exc_info:
+                builder.build_fidelity_kernel(no_bunching=True)
+        assert "no_bunching" in str(exc_info.value)
 
     def test_kernel_scalar_computation(self):
         x1 = torch.tensor([0.5, 1.0])
@@ -606,7 +430,7 @@ class TestFidelityKernel:
 
     def test_input_state_circuit_size_mismatch(self):
         x1 = pcvl.P("x1")
-        circuit = pcvl.Circuit(3) // pcvl.BS() // pcvl.PS(x1) // pcvl.BS()
+        circuit = pcvl.Circuit(3) // pcvl.PS(x1)  # 3 modes
         feature_map = FeatureMap(
             circuit=circuit,
             input_size=1,
@@ -622,15 +446,75 @@ class TestFidelityKernel:
                 computation_space=ComputationSpace.FOCK,
             )
 
+    def test_kernel_warns_and_uses_feature_map_encoder(self):
+        circuit = pcvl.Circuit(3)
+        for mode in range(3):
+            circuit.add(mode, pcvl.PS(pcvl.P(f"x{mode}")))
+
+        def encoder(x):
+            return torch.stack([x[0], x[1], x[0] + x[1]])
+
+        feature_map = FeatureMap(
+            circuit=circuit,
+            input_size=2,
+            input_parameters="x",
+            encoder=encoder,
+        )
+
+        with pytest.warns(
+            DeprecationWarning,
+            match="FeatureMap.encoder support inside FidelityKernel is deprecated",
+        ) as warning_record:
+            kernel = FidelityKernel(
+                feature_map=feature_map,
+                input_state=[1, 0, 0],
+                computation_space=ComputationSpace.FOCK,
+            )
+        warning_message = str(warning_record[0].message)
+        assert "CircuitBuilder.add_angle_encoding" in warning_message
+        assert "pre-encoding the data" in warning_message
+        assert "input_size equal to the encoded circuit-parameter count" in warning_message
+
+        encoded = kernel._quantum_layer._encode_single(torch.tensor([0.2, 0.3]))
+        expected = torch.tensor([0.2, 0.3, 0.5], dtype=encoded.dtype)
+        assert torch.allclose(encoded, expected)
+
+    def test_kernel_warns_and_uses_direct_circuit_subset_expansion(self):
+        circuit = pcvl.Circuit(3)
+        for mode in range(3):
+            circuit.add(mode, pcvl.PS(pcvl.P(f"x{mode}")))
+
+        feature_map = FeatureMap(
+            circuit=circuit,
+            input_size=2,
+            input_parameters="x",
+        )
+
+        with pytest.warns(
+            DeprecationWarning,
+            match="input_size differs from the circuit input parameter count",
+        ) as warning_record:
+            kernel = FidelityKernel(
+                feature_map=feature_map,
+                input_state=[1, 0, 0],
+                computation_space=ComputationSpace.FOCK,
+            )
+        warning_message = str(warning_record[0].message)
+        assert "CircuitBuilder.add_angle_encoding" in warning_message
+        assert "pre-encoding the data" in warning_message
+        assert "input_size equal to the encoded circuit-parameter count" in warning_message
+
+        encoded = kernel._quantum_layer._encode_single(torch.tensor([0.2, 0.3]))
+        expected = torch.tensor([0.2, 0.3, 0.5], dtype=encoded.dtype)
+        assert torch.allclose(encoded, expected)
+
     def test_kernel_uses_builder_subset_encoding_without_deprecation(self):
         builder = CircuitBuilder(n_modes=3)
-        builder.add_entangling_layer(trainable=False, name="pre_mix")
         builder.add_angle_encoding(
             modes=[0, 1],
             name="input",
             subset_combinations=True,
         )
-        builder.add_entangling_layer(trainable=False, name="post_mix")
         feature_map = FeatureMap(
             builder=builder,
             input_size=2,
@@ -651,13 +535,11 @@ class TestFidelityKernel:
 
     def test_kernel_backend_preserves_builder_angle_encoding_scale(self):
         builder = CircuitBuilder(n_modes=3)
-        builder.add_entangling_layer(trainable=False, name="pre_mix")
         builder.add_angle_encoding(
             modes=[0, 1],
             name="input",
             scale=0.5,
         )
-        builder.add_entangling_layer(trainable=False, name="post_mix")
         feature_map = FeatureMap(
             builder=builder,
             input_size=2,
@@ -674,16 +556,25 @@ class TestFidelityKernel:
         expected = torch.tensor([0.1, 0.2], dtype=encoded.dtype)
         assert torch.allclose(encoded, expected)
 
+    def test_simple_kernel_backend_preserves_angle_encoding_scale(self):
+        kernel = FidelityKernel.simple(
+            input_size=2,
+            n_modes=4,
+            angle_encoding_scale=0.5,
+        )
+
+        encoded = kernel._quantum_layer._encode_single(torch.tensor([0.2, 0.4]))
+        expected = torch.tensor([0.1, 0.2], dtype=encoded.dtype)
+        assert torch.allclose(encoded, expected)
+
     def test_kernel_backend_preserves_builder_subset_scale(self):
         builder = CircuitBuilder(n_modes=3)
-        builder.add_entangling_layer(trainable=False, name="pre_mix")
         builder.add_angle_encoding(
             modes=[0, 1],
             name="input",
             scale=0.5,
             subset_combinations=True,
         )
-        builder.add_entangling_layer(trainable=False, name="post_mix")
         feature_map = FeatureMap(
             builder=builder,
             input_size=2,
@@ -701,19 +592,20 @@ class TestFidelityKernel:
         assert torch.allclose(encoded, expected)
 
     def test_simple_kernel_rejects_missing_angle_encoding_specs(self):
-        feature_map = FeatureMap.simple(input_size=2)
+        feature_map = FeatureMap.simple(input_size=2, n_modes=4)
         feature_map._angle_encoding_specs = {}
 
         with pytest.raises(RuntimeError, match="missing angle_encoding_specs"):
             FidelityKernel(
                 feature_map=feature_map,
-                input_state=[1, 0, 1],
+                input_state=[1, 0, 1, 0],
                 computation_space=ComputationSpace.FOCK,
             )
 
     def test_simple_kernel_rejects_missing_angle_encoding_scales(self):
         feature_map = FeatureMap.simple(
             input_size=2,
+            n_modes=4,
             angle_encoding_scale=0.5,
         )
         feature_map._angle_encoding_specs["input"]["scales"] = {}
@@ -721,7 +613,7 @@ class TestFidelityKernel:
         with pytest.raises(RuntimeError, match="missing angle-encoding scale entries"):
             FidelityKernel(
                 feature_map=feature_map,
-                input_state=[1, 0, 1],
+                input_state=[1, 0, 1, 0],
                 computation_space=ComputationSpace.FOCK,
             )
 
@@ -746,163 +638,13 @@ class TestFidelityKernel:
         )
 
 
-class TestFidelityKernelInputStateDerivation:
-    """Tests for automatic input_state derivation and n_photons parameter."""
-
-    def _make_feature_map(self, n_modes: int) -> FeatureMap:
-        params = [pcvl.P(f"x{i}") for i in range(n_modes)]
-        circuit = pcvl.Circuit(n_modes)
-        for p in params:
-            circuit //= pcvl.PS(p)
-        return FeatureMap(
-            circuit=circuit,
-            input_size=n_modes,
-            input_parameters="x",
-        )
-
-    # ------------------------------------------------------------------
-    # input_state=None (no n_photons)
-    # ------------------------------------------------------------------
-
-    def test_default_input_state_is_alternating(self):
-        """input_state=None defaults to [1, 0, 1, 0, ...] of length circuit.m."""
-        fm = self._make_feature_map(4)
-        kernel = FidelityKernel(feature_map=fm)
-        assert kernel.input_state == [1, 0, 1, 0]
-
-    def test_default_input_state_odd_modes(self):
-        """For odd mode count, alternating default ends on 1."""
-        fm = self._make_feature_map(5)
-        kernel = FidelityKernel(feature_map=fm)
-        assert kernel.input_state == [1, 0, 1, 0, 1]
-
-    # ------------------------------------------------------------------
-    # n_photons with input_state=None
-    # ------------------------------------------------------------------
-
-    def test_n_photons_alternating_pattern(self):
-        """n_photons below the alternating slot count uses alternating positions."""
-        fm = self._make_feature_map(6)
-        kernel = FidelityKernel(feature_map=fm, n_photons=2)
-        assert kernel.input_state == [1, 0, 1, 0, 0, 0]
-        assert sum(kernel.input_state) == 2
-
-    def test_n_photons_fills_all_alternating_positions(self):
-        """n_photons == ceil(m / 2) exactly fills the alternating pattern."""
-        fm = self._make_feature_map(6)
-        kernel = FidelityKernel(feature_map=fm, n_photons=3)
-        assert kernel.input_state == [1, 0, 1, 0, 1, 0]
-        assert sum(kernel.input_state) == 3
-
-    def test_n_photons_fills_all_odd_mode_alternating_positions_without_warning(self):
-        """n_photons == ceil(m / 2) exactly fills an odd-mode alternating pattern."""
-        fm = self._make_feature_map(5)
-        kernel = FidelityKernel(feature_map=fm, n_photons=3)
-        assert kernel.input_state == [1, 0, 1, 0, 1]
-        assert sum(kernel.input_state) == 3
-
-    def test_n_photons_overflow_fills_even_then_odd(self):
-        """n_photons above the alternating slot count fills remaining positions."""
-        fm = self._make_feature_map(6)
-        with pytest.warns(UserWarning, match="Alternating positions are filled first"):
-            kernel = FidelityKernel(feature_map=fm, n_photons=4)
-        assert kernel.input_state == [1, 1, 1, 0, 1, 0]
-        assert sum(kernel.input_state) == 4
-
-    def test_n_photons_all_modes_warns(self):
-        """n_photons == m fills all modes and warns."""
-        fm = self._make_feature_map(4)
-        with pytest.warns(UserWarning, match="Alternating positions are filled first"):
-            kernel = FidelityKernel(
-                feature_map=fm,
-                n_photons=4,
-                computation_space=ComputationSpace.FOCK,
-            )
-        assert kernel.input_state == [1, 1, 1, 1]
-
-    def test_n_photons_one_photon(self):
-        """n_photons=1 places a single photon in mode 0."""
-        fm = self._make_feature_map(4)
-        kernel = FidelityKernel(feature_map=fm, n_photons=1)
-        assert kernel.input_state == [1, 0, 0, 0]
-
-    # ------------------------------------------------------------------
-    # n_photons with explicit input_state
-    # ------------------------------------------------------------------
-
-    def test_n_photons_matches_input_state_accepted(self):
-        """Providing matching n_photons and input_state is accepted."""
-        fm = self._make_feature_map(4)
-        kernel = FidelityKernel(
-            feature_map=fm,
-            input_state=[1, 0, 1, 0],
-            n_photons=2,
-        )
-        assert kernel.input_state == [1, 0, 1, 0]
-
-    def test_n_photons_mismatch_input_state_raises(self):
-        """n_photons that disagrees with sum(input_state) raises ValueError."""
-        fm = self._make_feature_map(4)
-        with pytest.raises(ValueError, match="n_photons=3 does not match"):
-            FidelityKernel(
-                feature_map=fm,
-                input_state=[1, 0, 1, 0],
-                n_photons=3,
-            )
-
-    def test_tensor_input_state_raises_statevector_guidance(self):
-        """Tensor input_state is rejected with StateVector migration guidance."""
-        fm = self._make_feature_map(4)
-        tensor_state = torch.zeros(6, dtype=torch.complex64)
-
-        with pytest.raises(ValueError) as exc_info:
-            FidelityKernel(
-                feature_map=fm,
-                input_state=tensor_state,
-            )
-
-        message = str(exc_info.value)
-        assert "torch.Tensor" in message
-        assert "FidelityKernel input_state" in message
-        assert "Fock occupation list" in message
-        assert "StateVector.from_tensor()" in message
-        assert "QuantumLayer" in message
-
-    # ------------------------------------------------------------------
-    # Invalid n_photons values
-    # ------------------------------------------------------------------
-
-    def test_n_photons_zero_raises(self):
-        """n_photons=0 raises ValueError."""
-        fm = self._make_feature_map(4)
-        with pytest.raises(ValueError, match="n_photons must be between"):
-            FidelityKernel(feature_map=fm, n_photons=0)
-
-    def test_n_photons_negative_raises(self):
-        """Negative n_photons raises ValueError."""
-        fm = self._make_feature_map(4)
-        with pytest.raises(ValueError, match="n_photons must be between"):
-            FidelityKernel(feature_map=fm, n_photons=-1)
-
-    def test_n_photons_exceeds_modes_raises(self):
-        """n_photons > m raises ValueError."""
-        fm = self._make_feature_map(4)
-        with pytest.raises(ValueError, match="n_photons must be between"):
-            FidelityKernel(feature_map=fm, n_photons=5)
-
-
 class TestFeatureMapDescriptor:
     """FeatureMap descriptor behavior used by the new FidelityKernel path."""
 
     def setup_method(self):
         x1, x2 = pcvl.P("x1"), pcvl.P("x2")
         self.circuit = (
-            pcvl.Circuit(2)
-            // pcvl.BS()
-            // pcvl.PS(x1)
-            // pcvl.BS()
-            // pcvl.PS(x2)
-            // pcvl.BS()
+            pcvl.Circuit(2) // pcvl.PS(x1) // pcvl.BS() // pcvl.PS(x2) // pcvl.BS()
         )
         self.feature_map = FeatureMap(
             circuit=self.circuit,
@@ -920,7 +662,6 @@ class TestFeatureMapDescriptor:
         theta = pcvl.P("theta")
         circuit = (
             pcvl.Circuit(2)
-            // pcvl.BS()
             // pcvl.PS(pcvl.P("x1"))
             // pcvl.BS(theta)
             // pcvl.PS(pcvl.P("x2"))
@@ -951,136 +692,6 @@ class TestFeatureMapDescriptor:
             FeatureMap(
                 circuit=self.circuit, input_size=2, input_parameters=["x1", "x2"]
             )
-
-    def test_feature_map_requires_exactly_one_circuit_source(self):
-        """FeatureMap should reject missing or ambiguous circuit sources."""
-        with pytest.raises(ValueError, match="Provide exactly one"):
-            FeatureMap(input_size=1, input_parameters="x")
-
-        with pytest.raises(ValueError, match="Provide exactly one"):
-            FeatureMap(
-                circuit=self.circuit,
-                experiment=pcvl.Experiment(self.circuit),
-                input_size=1,
-                input_parameters="x",
-            )
-
-    def test_feature_map_requires_input_size(self):
-        """FeatureMap should fail clearly when input_size is omitted."""
-        with pytest.raises(TypeError, match="input_size"):
-            FeatureMap(circuit=self.circuit, input_parameters="x")
-
-    def test_feature_map_requires_input_parameter_prefix(self):
-        """Direct circuit FeatureMap should require input_parameters."""
-        with pytest.raises(ValueError, match="input_parameters must be provided"):
-            FeatureMap(circuit=self.circuit, input_size=2, input_parameters=None)
-
-    def test_require_angle_encoding_spec_rejects_missing_prefix(self):
-        """Builder metadata validation should reject missing input prefixes."""
-        with pytest.raises(RuntimeError, match="missing an input parameter prefix"):
-            _require_angle_encoding_spec({}, None)
-
-    @pytest.mark.parametrize(
-        ("spec", "message"),
-        [
-            ({"combinations": [], "scales": {}}, "combinations"),
-            ({"combinations": [(0,)], "scales": []}, "scales"),
-            ({"combinations": [(0, 1)], "scales": {0: 1.0}}, "missing"),
-        ],
-    )
-    def test_require_angle_encoding_spec_rejects_malformed_metadata(
-        self,
-        spec,
-        message,
-    ):
-        """Builder metadata validation should reject malformed specs."""
-        with pytest.raises(RuntimeError, match=message):
-            _require_angle_encoding_spec({"input": spec}, "input")
-
-    def test_subset_sum_expand_handles_padding_and_empty_input(self):
-        """Legacy subset expansion should pad or return zeros when needed."""
-        padded = self.feature_map._subset_sum_expand(torch.tensor([1.0, 2.0]), 4)
-        assert torch.allclose(padded, torch.tensor([1.0, 2.0, 3.0, 0.0]))
-
-        empty = self.feature_map._subset_sum_expand(torch.tensor([]), 3)
-        assert torch.allclose(empty, torch.zeros(3))
-
-    def test_legacy_encode_uses_encoder_outputs_and_fallbacks(self):
-        """Legacy FeatureMap encoding should cover encoder success and fallback paths."""
-        circuit = pcvl.Circuit(3)
-        circuit.add(0, pcvl.PS(pcvl.P("x0")))
-        circuit.add(1, pcvl.PS(pcvl.P("x1")))
-        circuit.add(2, pcvl.PS(pcvl.P("x2")))
-
-        feature_map = FeatureMap(
-            circuit=circuit,
-            input_size=2,
-            input_parameters="x",
-            encoder=lambda x: np.array([1.0, 2.0, 3.0]),
-        )
-        assert torch.allclose(
-            feature_map._encode_x(torch.tensor([0.1, 0.2])),
-            torch.tensor([1.0, 2.0, 3.0]),
-        )
-
-        feature_map._encoder = lambda x: torch.tensor([9.0])
-        assert torch.allclose(
-            feature_map._encode_x(torch.tensor([0.1, 0.2])),
-            torch.tensor([0.1, 0.2, 0.3]),
-        )
-
-        def failing_encoder(x):
-            raise ValueError("encoder failed")
-
-        feature_map._encoder = failing_encoder
-        assert torch.allclose(
-            feature_map._encode_x(torch.tensor([0.1, 0.2])),
-            torch.tensor([0.1, 0.2, 0.3]),
-        )
-
-    def test_legacy_encode_with_specs_rejects_invalid_metadata(self):
-        """Legacy angle metadata encoder should reject invalid specs."""
-        with pytest.raises(ValueError, match="combinations"):
-            self.feature_map._encode_with_specs(
-                torch.tensor([0.1]),
-                {"combinations": "bad", "scales": {}},
-            )
-
-        with pytest.raises(ValueError, match="scales"):
-            self.feature_map._encode_with_specs(
-                torch.tensor([0.1]),
-                {"combinations": [(0,)], "scales": []},
-            )
-
-        with pytest.raises(ValueError, match="insufficient"):
-            self.feature_map._encode_with_specs(
-                torch.tensor([0.1]),
-                {"combinations": [(0, 1)], "scales": {0: 1.0, 1: 1.0}},
-            )
-
-        empty = self.feature_map._encode_with_specs(
-            torch.tensor([0.1]),
-            {"combinations": [], "scales": {}},
-        )
-        assert empty.numel() == 0
-
-    def test_is_datapoint_scalar_and_invalid_shapes(self):
-        """FeatureMap.is_datapoint should cover scalar and invalid-shape paths."""
-        scalar_feature_map = FeatureMap(
-            circuit=pcvl.Circuit(1) // pcvl.PS(pcvl.P("x")),
-            input_size=1,
-            input_parameters="x",
-        )
-
-        assert scalar_feature_map.is_datapoint(0.5)
-        assert not scalar_feature_map.is_datapoint(torch.tensor([[0.5]]))
-
-        with pytest.raises(ValueError, match="does not match data shape"):
-            self.feature_map.is_datapoint(0.5)
-        with pytest.raises(ValueError, match="does not match data shape"):
-            self.feature_map.is_datapoint(torch.ones(1, 1, 2))
-        with pytest.raises(ValueError, match="does not match data shape"):
-            self.feature_map.is_datapoint(torch.ones(3))
 
 
 class TestNKernelAlignment:
@@ -1169,13 +780,11 @@ class TestFeatureMapFactoryMethods:
 
     def test_angle_encoding_respects_scale_in_feature_map(self):
         builder = CircuitBuilder(n_modes=4)
-        builder.add_entangling_layer(trainable=False, name="pre_mix")
         builder.add_angle_encoding(
             modes=[0, 1, 2],
             name="input",
             scale=0.5,
         )
-        builder.add_entangling_layer(trainable=False, name="post_mix")
 
         feature_map = FeatureMap(
             builder=builder,
@@ -1194,7 +803,9 @@ class TestFeatureMapFactoryMethods:
     def test_from_pcvl_circuit(self):
         """FeatureMap can be built directly from a pcvl.Circuit."""
         x1, x2 = pcvl.P("x1"), pcvl.P("x2")
-        circuit = _two_mode_mixed_feature_map(x1, x2)
+        circuit = (
+            pcvl.Circuit(2) // pcvl.PS(x1) // pcvl.BS() // pcvl.PS(x2) // pcvl.BS()
+        )
 
         feature_map = FeatureMap(
             circuit=circuit,
@@ -1207,44 +818,45 @@ class TestFeatureMapFactoryMethods:
 
     def test_simple_factory_method(self):
         """Test the simple FeatureMap factory method."""
-        feature_map = FeatureMap.simple(input_size=2)
+        feature_map = FeatureMap.simple(input_size=2, n_modes=6)
 
         assert feature_map.input_size == 2
-        assert feature_map.circuit.m == 3  # input_size + 1
+        assert feature_map.circuit.m == 6
         assert feature_map.is_trainable
         assert "LI_simple" in feature_map.trainable_parameters
         assert "RI_simple" in feature_map.trainable_parameters
 
     def test_simple_factory_default_photons(self):
-        """Test simple factory with default n_modes (should equal input_size + 1)."""
-        feature_map = FeatureMap.simple(input_size=3)
+        """Test simple factory with default n_photons (should equal input_size)."""
+        feature_map = FeatureMap.simple(input_size=3, n_modes=6)
 
         assert feature_map.input_size == 3
-        assert feature_map.circuit.m == 4  # input_size + 1
+        # Should default to a 3-photon configuration
+
+    def test_simple_factory_raises_when_input_exceeds_modes(self):
+        with pytest.raises(
+            ValueError, match="You cannot encore more features than mode with Builder"
+        ):
+            FeatureMap.simple(input_size=5, n_modes=4)
+
+    def test_simple_factory_raises_when_input_or_modes_exceeds_20(self):
+        with pytest.raises(ValueError):
+            FeatureMap.simple(input_size=21, n_modes=21)
+        with pytest.raises(ValueError):
+            FeatureMap.simple(input_size=21)
+
+    def test_simple_num_photons_modes_and_input_state(self):
+        for i in range(1, 15):
+            kernel = FeatureMap.simple(input_size=i)
+            assert kernel.circuit.m == i + 1
+        for i in range(1, 15):
+            kernel = FeatureMap.simple(input_size=1, n_modes=i + 1)
+            assert kernel.circuit.m == i + 1
 
     def test_simple_trainable(self):
         for i in range(1, 20):
             kernel = FeatureMap.simple(input_size=i)
             assert kernel.is_trainable
-
-    @pytest.mark.parametrize(
-        ("input_size", "n_modes", "message"),
-        [
-            (1, 1, "at least 2"),
-            (20, None, "too large"),
-            (0, 2, "at least 1"),
-            (3, 2, ANGLE_ENCODING_MODE_ERROR),
-        ],
-    )
-    def test_simple_factory_rejects_invalid_dimensions(
-        self,
-        input_size,
-        n_modes,
-        message,
-    ):
-        """Simple FeatureMap factory should reject invalid size combinations."""
-        with pytest.raises(ValueError, match=re.escape(message)):
-            FeatureMap.simple(input_size=input_size, n_modes=n_modes)
 
 
 class TestFidelityKernelFactoryMethods:
@@ -1275,7 +887,9 @@ class TestFidelityKernelFactoryMethods:
     def test_from_feature_map_pcvl_circuit(self):
         """FidelityKernel can wrap a FeatureMap built from pcvl.Circuit."""
         x1, x2 = pcvl.P("x1"), pcvl.P("x2")
-        circuit = _two_mode_mixed_feature_map(x1, x2)
+        circuit = (
+            pcvl.Circuit(2) // pcvl.PS(x1) // pcvl.BS() // pcvl.PS(x2) // pcvl.BS()
+        )
         feature_map = FeatureMap(
             circuit=circuit,
             input_size=2,
@@ -1459,14 +1073,11 @@ class TestKernelCircuitBuilder:
 
         x = torch.tensor([0.1, 0.2, 0.3], dtype=torch.float32)
         encoded = feature_map._encode_x(x)
-        assert torch.allclose(
-            encoded,
-            torch.tensor([0.05, 0.1, 0.15], dtype=feature_map.dtype),
-        )
 
+        assert encoded.shape == (3,)
 
-class TestCircuitBuilderKernelIntegration:
-    """Tests for kernels built with the current CircuitBuilder API."""
+        expected = torch.tensor([0.05, 0.1, 0.15], dtype=torch.float32)
+        assert torch.allclose(encoded.detach(), expected, atol=1e-6)
 
     def test_kernel_supports_entangling_layer(self):
         builder = CircuitBuilder(n_modes=4)
@@ -1598,7 +1209,9 @@ class TestKernelIntegration:
 
         # Set up kernel
         x1, x2 = pcvl.P("x1"), pcvl.P("x2")
-        circuit = _two_mode_mixed_feature_map(x1, x2)
+        circuit = (
+            pcvl.Circuit(2) // pcvl.PS(x1) // pcvl.BS() // pcvl.PS(x2) // pcvl.BS()
+        )
         feature_map = FeatureMap(
             circuit=circuit,
             input_size=2,
@@ -1630,7 +1243,13 @@ class TestKernelIntegration:
         # Trainable kernel
         theta = pcvl.P("theta")
         x1, x2 = pcvl.P("x1"), pcvl.P("x2")
-        circuit = _two_mode_mixed_feature_map(x1, x2, theta)
+        circuit = (
+            pcvl.Circuit(2)
+            // pcvl.PS(x1)
+            // pcvl.BS(theta)
+            // pcvl.PS(x2)
+            // pcvl.BS(theta)
+        )
 
         feature_map = FeatureMap(
             circuit=circuit,
@@ -1950,8 +1569,6 @@ def test_iris_with_supported_constructors():
         try:
             params = [pcvl.P(f"x{i + 1}") for i in range(4)]
             circuit = pcvl.Circuit(4)
-            circuit.add(0, pcvl.BS())
-            circuit.add(2, pcvl.BS())
             for mode, param in enumerate(params):
                 circuit.add(mode, pcvl.PS(param))
             circuit.add(0, pcvl.BS())
@@ -2141,8 +1758,7 @@ def test_kernel_constructor_performance_comparison():
 
     # Time Method 1: Simple factory
     start = time.time()
-    with pytest.warns(DeprecationWarning, match="n_modes"):
-        kernel1 = FidelityKernel.simple(input_size=3, n_modes=4)
+    kernel1 = FidelityKernel.simple(input_size=3, n_modes=4)
     time1 = time.time() - start
     methods.append("FidelityKernel.simple()")
     times.append(time1)
@@ -2151,8 +1767,6 @@ def test_kernel_constructor_performance_comparison():
     start = time.time()
     params = [pcvl.P(f"x{i + 1}") for i in range(3)]
     circuit = pcvl.Circuit(4)
-    circuit.add(0, pcvl.BS())
-    circuit.add(2, pcvl.BS())
     for mode, param in enumerate(params):
         circuit.add(mode, pcvl.PS(param))
     circuit.add(0, pcvl.BS())
@@ -2225,8 +1839,6 @@ def test_fidelity_kernel_gpu_execution_all_constructors(cuda_device, constructor
     elif constructor == "manual":
         params = [pcvl.P(f"x{i + 1}") for i in range(4)]
         circuit = pcvl.Circuit(4)
-        circuit.add(0, pcvl.BS())
-        circuit.add(2, pcvl.BS())
         for mode, param in enumerate(params):
             circuit.add(mode, pcvl.PS(param))
         circuit.add(0, pcvl.BS())

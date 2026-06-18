@@ -27,13 +27,11 @@ def _make_layer(
 ) -> QuantumLayer:
     """Helper that mirrors the builder pattern used in the docs."""
     b = CircuitBuilder(n_modes=n_modes)
-    if n_modes >= 2:
-        b.add_entangling_layer(trainable=False, name="pre_mix")
     if trainable:
         b.add_rotations(trainable=True, name="theta")
     b.add_angle_encoding(modes=list(range(input_size)), name="px")
-    if n_modes >= 2:
-        b.add_entangling_layer(trainable=False, name="post_mix")
+    if n_modes >= 3:
+        b.add_entangling_layer()
     return QuantumLayer(
         input_size=input_size,
         builder=b,
@@ -67,10 +65,9 @@ class TestUserGuideExamples:
 
         # Build quantum layer & model exactly like the doc
         b = CircuitBuilder(n_modes=6)
-        b.add_entangling_layer(trainable=False, name="pre_mix")
         b.add_rotations(trainable=True, name="theta")
         b.add_angle_encoding(modes=[0, 1], name="px")
-        b.add_entangling_layer(trainable=False, name="post_mix")
+        b.add_entangling_layer()
 
         q = QuantumLayer(
             input_size=2,

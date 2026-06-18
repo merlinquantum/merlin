@@ -164,7 +164,7 @@ class TestDetectorsWithQuantumLayer:
 
         with pytest.raises(
             RuntimeError,
-            match=r"measurement_strategy=MeasurementStrategy\.amplitudes\(\) does not support experiments with detectors",
+            match="MeasurementStrategy\\.AMPLITUDES does not support experiments with detectors",
         ):
             ML.QuantumLayer(
                 input_size=0,
@@ -328,7 +328,6 @@ class TestDetectorsWithQuantumLayer:
 
     def test_experiment_missing_detectors_default_pnr(self):
         circuit = pcvl.Circuit(2)
-        circuit.add((0, 1), pcvl.BS())
         circuit.add(1, pcvl.PS(torch.pi / 2))
         circuit.add((0, 1), pcvl.BS())
         experiment = pcvl.Experiment(circuit)
@@ -491,11 +490,11 @@ class TestDetectorsWithQuantumLayer:
         """Detector transforms must preserve autograd support."""
 
         circuit = pcvl.Circuit(2)
-        circuit.add(0, pcvl.BS())
         circuit.add(0, pcvl.PS(pcvl.P("theta_1")))
-        circuit.add(0, pcvl.PS(pcvl.P("phi")))
-        circuit.add(0, pcvl.PS(pcvl.P("theta_2")))
         circuit.add(0, pcvl.BS())
+        circuit.add(0, pcvl.PS(pcvl.P("phi")))
+        circuit.add(0, pcvl.BS())
+        circuit.add(0, pcvl.PS(pcvl.P("theta_2")))
         experiment = pcvl.Experiment(circuit)
         experiment.detectors[0] = pcvl.Detector.threshold()
         experiment.detectors[1] = pcvl.Detector.threshold()
@@ -928,12 +927,8 @@ class TestDetectorsWithKernels:
         keys_pnr = kernel_pnr._quantum_layer._detector_transform.output_keys
         keys_threshold = kernel_threshold._quantum_layer._detector_transform.output_keys
 
-        assert kernel_pnr._quantum_layer._detector_transform.output_size == len(
-            keys_pnr
-        )
-        assert kernel_threshold._quantum_layer._detector_transform.output_size == len(
-            keys_threshold
-        )
+        assert kernel_pnr._quantum_layer._detector_transform.output_size == len(keys_pnr)
+        assert kernel_threshold._quantum_layer._detector_transform.output_size == len(keys_threshold)
         assert len(keys_pnr) > len(keys_threshold)
         assert all(sum(key) == sum(input_state) for key in keys_pnr)
         assert any(sum(key) < sum(input_state) for key in keys_threshold)
@@ -943,7 +938,6 @@ class TestDetectorsWithKernels:
         """FidelityKernel should inherit detector configuration provided via FeatureMap."""
 
         circuit = pcvl.Circuit(2)
-        circuit.add((0, 1), pcvl.BS())
         circuit.add(0, pcvl.PS(pcvl.P("px")))
         circuit.add((0, 1), pcvl.BS())
 

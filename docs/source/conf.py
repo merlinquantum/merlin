@@ -46,26 +46,13 @@ from datetime import datetime
 from importlib.metadata import metadata
 from pathlib import Path
 
-# ``build_multiversion.py`` builds exported tag trees with this current config.
-# These overrides point Sphinx at the versioned source tree while keeping this
-# config file as the shared build entry point.
-DOCS_SOURCE_PATH = Path(
-    os.environ.get("MERLIN_DOCS_SOURCE_PATH", Path(__file__).parent)
-).resolve()
-CONFIG_SOURCE_PATH = Path(__file__).parent.resolve()
-REPO_PATH = Path(
-    os.environ.get("MERLIN_DOCS_REPO_PATH", DOCS_SOURCE_PATH.parent.parent)
-).resolve()
-
-sys.path.insert(0, str(REPO_PATH))
-# Older tags may not contain newer docs extensions. Keep the current extension
-# directory available, while still preferring extension files from the tag when
-# they exist.
-sys.path.insert(0, str(CONFIG_SOURCE_PATH / "_ext"))
-sys.path.insert(0, str(DOCS_SOURCE_PATH / "_ext"))
+sys.path.insert(0, os.path.realpath("../../"))
+sys.path.insert(0, os.path.abspath("_ext"))
 
 
 merlin_metadata = metadata("merlinquantum")
+
+REPO_PATH = Path(__file__).parent.parent.parent.resolve()
 
 build_directory = os.path.join(REPO_PATH, "docs", "build")
 if not os.path.exists(build_directory):
@@ -76,7 +63,7 @@ author = merlin_metadata["Author"].capitalize()
 project = merlin_metadata["Name"]
 copyright = f"{datetime.now().year}, {author}"
 
-release = os.environ.get("MERLIN_DOCS_VERSION", merlin_metadata["Version"])
+release = merlin_metadata["Version"]
 
 # -- General configuration ---------------------------------------------------
 
@@ -120,19 +107,12 @@ nitpick_ignore = [
 ]
 
 suppress_warnings = ["autosectionlabel.*"]
-configured_bibtex_bibfiles = [
+bibtex_bibfiles = [
     "references.bib",
     "QML_library/QML_library_other_papers.bib",
     "QML_library/QML_library_reproduced_papers.bib",
     "QML_library/QML_library_reproduced_papers_to_do.bib",
     "QML_library/QML_library_reproduced_papers_in_progress.bib",
-]
-# Historical docs tags do not all contain the same bibliography files. Use only
-# files present in the source tree currently being built.
-bibtex_bibfiles = [
-    bibtex_file
-    for bibtex_file in configured_bibtex_bibfiles
-    if (DOCS_SOURCE_PATH / bibtex_file).exists()
 ]
 bibtex_default_style = "alpha"
 bibtex_reference_style = "author_year"
@@ -155,9 +135,8 @@ napoleon_use_rtype = True
 # Suppress duplicate object warnings for re-exported classes
 suppress_warnings.extend(["autodoc.import_object"])
 
-# Use absolute paths so exported tag trees load their own templates and static
-# assets instead of the files next to this shared config.
-templates_path = [str(DOCS_SOURCE_PATH / "_templates")]
+# Add any paths that contain templates here, relative to this directory.
+templates_path = ["_templates"]
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
@@ -176,7 +155,7 @@ html_theme = "renku"
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = [str(DOCS_SOURCE_PATH / "_static")]
+html_static_path = ["_static"]
 
 html_theme_options = {
     "navigation_depth": 4,
@@ -185,8 +164,8 @@ html_theme_options = {
 }
 
 html_style = "css/style.css"
-html_logo = str(DOCS_SOURCE_PATH / "_static/img/Merlin logo white 160x160.png")
-html_favicon = str(DOCS_SOURCE_PATH / "_static/img/Merlin icon white 32x32.ico")
+html_logo = "_static/img/Merlin logo white 160x160.png"
+html_favicon = "_static/img/Merlin icon white 32x32.ico"
 
 nbsphinx_execute_arguments = [
     "--InlineBackend.figure_formats={'svg', 'pdf'}",

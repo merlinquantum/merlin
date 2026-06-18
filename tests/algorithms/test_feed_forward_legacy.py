@@ -25,7 +25,6 @@ Tests for the FeedForward class.
 """
 
 import pytest
-import perceval as pcvl
 import torch
 
 from merlin.algorithms.feed_forward_legacy import (
@@ -33,12 +32,6 @@ from merlin.algorithms.feed_forward_legacy import (
     PoolingFeedForwardLegacy,
     define_layer_no_input,
 )
-from merlin.algorithms.layer import QuantumLayer
-from merlin.core.computation_space import ComputationSpace
-from merlin.core.encoding_space import EncodingSpace
-from merlin.core.state import StatePattern, generate_state
-from merlin.core.state_vector import StateVector
-from merlin.measurement.strategies import MeasurementStrategy
 
 
 class TestFeedForwardBlockLegacy:
@@ -62,54 +55,6 @@ class TestFeedForwardBlockLegacy:
         )
         assert ff.n_cond == 2
         assert all(isinstance(k, tuple) for k in ff.layers.keys())
-
-    def test_custom_fock_layers_receive_fock_encoded_branch_states(self):
-        """Custom FOCK layers should receive branch tensors in their own basis."""
-
-        def make_fock_layer(n_modes: int, n_photons: int) -> QuantumLayer:
-            input_state = list(generate_state(n_modes, n_photons, StatePattern.SPACED))
-            return QuantumLayer(
-                input_size=0,
-                circuit=pcvl.Circuit(n_modes),
-                n_photons=n_photons,
-                input_state=input_state,
-                measurement_strategy=MeasurementStrategy.amplitudes(
-                    ComputationSpace.FOCK
-                ),
-            )
-
-        root_circuit = pcvl.Circuit(4)
-        root_circuit.add(0, pcvl.PS(pcvl.P("pl_0")))
-        root_layer = QuantumLayer(
-            input_size=1,
-            circuit=root_circuit,
-            n_photons=2,
-            input_state=list(generate_state(4, 2, StatePattern.SPACED)),
-            measurement_strategy=MeasurementStrategy.amplitudes(ComputationSpace.FOCK),
-            input_parameters=["pl"],
-        )
-        branch_zero_layer = make_fock_layer(3, 2)
-        branch_one_layer = make_fock_layer(3, 1)
-        ff = FeedForwardBlockLegacy(
-            input_size=1,
-            n=2,
-            m=4,
-            depth=1,
-            conditional_modes=[0],
-            layers=[root_layer, branch_zero_layer, branch_one_layer],
-        )
-
-        output = ff(torch.zeros(2, 1))
-
-        expected_branch_zero_size = len(
-            branch_zero_layer.computation_process.simulation_graph.mapped_keys
-        )
-        assert output.shape[0] == 2
-        assert branch_zero_layer.input_state.encoding is EncodingSpace.FOCK
-        assert (
-            branch_zero_layer.input_state.tensor.shape[-1]
-            == expected_branch_zero_size
-        )
 
     def test_generate_possible_tuples(self):
         """Ensure generated tuples are non-empty and valid."""
@@ -399,14 +344,7 @@ class TestPoolingFeedForwardLegacy:
         post_layer = define_layer_no_input(8, 2)
         amplitudes = pre_layer()
         amplitudes = pff(amplitudes)
-        post_layer.set_input_state(
-            StateVector.from_tensor(
-                amplitudes,
-                n_modes=post_layer.circuit.m,
-                n_photons=post_layer.n_photons,
-                encoding=EncodingSpace.UNBUNCHED,
-            )
-        )
+        post_layer.set_input_state(amplitudes)
         res = post_layer()
         assert isinstance(res, torch.Tensor)
         assert res.requires_grad
@@ -424,14 +362,7 @@ class TestPoolingFeedForwardLegacy:
         for _ in range(3):
             amplitudes = pre_layer()
             amplitudes = pff(amplitudes)
-            post_layer.set_input_state(
-                StateVector.from_tensor(
-                    amplitudes,
-                    n_modes=post_layer.circuit.m,
-                    n_photons=post_layer.n_photons,
-                    encoding=EncodingSpace.UNBUNCHED,
-                )
-            )
+            post_layer.set_input_state(amplitudes)
             res = post_layer().abs().pow(2).sum()
             res.backward()
             optimizer.step()

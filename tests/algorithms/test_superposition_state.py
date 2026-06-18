@@ -11,15 +11,9 @@ import pytest
 import torch
 
 from merlin.algorithms.layer import QuantumLayer
-from merlin.core import ComputationSpace, EncodingSpace, StateVector
+from merlin.core import ComputationSpace
 from merlin.measurement.strategies import MeasurementStrategy
 from merlin.utils.combinadics import Combinadics
-
-
-def _add_beam_splitter_chain(circuit: pcvl.Circuit, n_modes: int) -> None:
-    """Add deterministic nearest-neighbor mixing before parameterized phases."""
-    for mode in range(n_modes - 1):
-        circuit.add(mode, pcvl.BS())
 
 
 def classical_method(layer, input_state, *x):
@@ -47,17 +41,6 @@ def classical_method(layer, input_state, *x):
     return output_probs[1]
 
 
-def _encoding_for_computation_space(
-    computation_space: ComputationSpace,
-) -> EncodingSpace:
-    """Return the logical tensor encoding for a computation space."""
-    if computation_space is ComputationSpace.UNBUNCHED:
-        return EncodingSpace.UNBUNCHED
-    if computation_space is ComputationSpace.DUAL_RAIL:
-        return EncodingSpace.DUAL_RAIL
-    return EncodingSpace.FOCK
-
-
 class TestOutputSuperposedState:
     """Test cases for measurement-driven outputs in QuantumLayer.simple()."""
 
@@ -77,12 +60,6 @@ class TestOutputSuperposedState:
         sum_values = (input_state**2).sum(dim=-1, keepdim=True)
 
         input_state = input_state / sum_values
-        statevector = StateVector.from_tensor(
-            input_state,
-            n_modes=circuit.m,
-            n_photons=n_photons,
-            encoding=EncodingSpace.UNBUNCHED,
-        )
 
         layer = QuantumLayer(
             circuit=circuit,
@@ -90,7 +67,7 @@ class TestOutputSuperposedState:
             measurement_strategy=MeasurementStrategy.probs(
                 computation_space=ComputationSpace.UNBUNCHED
             ),
-            input_state=statevector,
+            input_state=input_state,
             trainable_parameters=["phi"],
             input_parameters=[],
             dtype=torch.float64,
@@ -125,12 +102,6 @@ class TestOutputSuperposedState:
         sum_values = (input_state**2).sum(dim=-1, keepdim=True)
 
         input_state = input_state / torch.sqrt(sum_values)
-        statevector = StateVector.from_tensor(
-            input_state,
-            n_modes=circuit.m,
-            n_photons=n_photons,
-            encoding=EncodingSpace.UNBUNCHED,
-        )
 
         layer = QuantumLayer(
             circuit=circuit,
@@ -138,7 +109,7 @@ class TestOutputSuperposedState:
             measurement_strategy=MeasurementStrategy.probs(
                 computation_space=ComputationSpace.UNBUNCHED
             ),
-            input_state=statevector,
+            input_state=input_state,
             trainable_parameters=["phi"],
             input_parameters=[],
             dtype=torch.float64,
@@ -171,12 +142,6 @@ class TestOutputSuperposedState:
         input_state = torch.rand(2, expected_states, dtype=torch.float64)
         sum_values = (input_state**2).sum(dim=-1, keepdim=True)
         input_state = input_state / sum_values
-        statevector = StateVector.from_tensor(
-            input_state,
-            n_modes=circuit.m,
-            n_photons=n_photons,
-            encoding=EncodingSpace.UNBUNCHED,
-        )
 
         layer = QuantumLayer(
             input_size=0,
@@ -185,7 +150,7 @@ class TestOutputSuperposedState:
             measurement_strategy=MeasurementStrategy.probs(
                 computation_space=ComputationSpace.UNBUNCHED
             ),
-            input_state=statevector,
+            input_state=input_state,
             trainable_parameters=["phi"],
             input_parameters=[],
             dtype=torch.float64,
@@ -246,12 +211,6 @@ class TestOutputSuperposedState:
         input_state = torch.rand(1, expected_states, dtype=torch.float64)
         sum_values = (input_state**2).sum(dim=-1, keepdim=True)
         input_state = input_state / sum_values
-        statevector = StateVector.from_tensor(
-            input_state,
-            n_modes=circuit.m,
-            n_photons=n_photons,
-            encoding=EncodingSpace.UNBUNCHED,
-        )
 
         layer = QuantumLayer(
             input_size=0,
@@ -260,7 +219,7 @@ class TestOutputSuperposedState:
             measurement_strategy=MeasurementStrategy.probs(
                 computation_space=ComputationSpace.UNBUNCHED
             ),
-            input_state=statevector,
+            input_state=input_state,
             trainable_parameters=["phi"],
             input_parameters=[],
             dtype=torch.float64,
@@ -311,22 +270,14 @@ class TestOutputSuperposedState:
 
     def test_superposition_state_classical_batch(self):
         circuit = pcvl.Circuit(3)
-        _add_beam_splitter_chain(circuit, circuit.m)
         circuit.add(0, pcvl.PS(pcvl.P("px_0")))
         circuit.add(1, pcvl.PS(pcvl.P("px_1")))
         circuit.add(2, pcvl.PS(pcvl.P("px_2")))
-        _add_beam_splitter_chain(circuit, circuit.m)
 
         n_photons = 1
         expected_states = math.comb(circuit.m, n_photons)
         input_state = torch.rand(2, expected_states, dtype=torch.float64)
         input_state = input_state / input_state.norm(p=2, dim=1, keepdim=True)
-        statevector = StateVector.from_tensor(
-            input_state,
-            n_modes=circuit.m,
-            n_photons=n_photons,
-            encoding=EncodingSpace.UNBUNCHED,
-        )
 
         layer = QuantumLayer(
             circuit=circuit,
@@ -334,7 +285,7 @@ class TestOutputSuperposedState:
             measurement_strategy=MeasurementStrategy.probs(
                 computation_space=ComputationSpace.UNBUNCHED
             ),
-            input_state=statevector,
+            input_state=input_state,
             trainable_parameters=[],
             input_parameters=["px"],
             dtype=torch.float64,
@@ -415,7 +366,6 @@ class TestOutputSuperposedState:
         n_photons: int,
     ):
         circuit = pcvl.Circuit(n_modes)
-        _add_beam_splitter_chain(circuit, n_modes)
         for mode in range(n_modes):
             circuit.add(mode, pcvl.PS(pcvl.P(f"theta_{mode}")))
 
@@ -442,12 +392,6 @@ class TestOutputSuperposedState:
         )
         phases = torch.rand(1, expected_states, dtype=torch.float64) * (2 * math.pi)
         input_state = torch.polar(magnitudes, phases)
-        statevector = StateVector.from_tensor(
-            input_state,
-            n_modes=n_modes,
-            n_photons=n_photons,
-            encoding=_encoding_for_computation_space(computation_space),
-        )
 
         amplitude_layer = QuantumLayer(
             circuit=circuit,
@@ -455,7 +399,7 @@ class TestOutputSuperposedState:
             measurement_strategy=MeasurementStrategy.amplitudes(
                 computation_space=computation_space
             ),
-            input_state=statevector,
+            input_state=input_state,
             input_parameters=["theta"],
             trainable_parameters=["phi"],
             dtype=torch.float64,
@@ -555,7 +499,6 @@ class TestOutputSuperposedState:
         n_photons = 5
 
         circuit = pcvl.Circuit(n_modes)
-        _add_beam_splitter_chain(circuit, n_modes)
         for mode in range(n_modes):
             circuit.add(mode, pcvl.PS(pcvl.P(f"theta_{mode}")))
 

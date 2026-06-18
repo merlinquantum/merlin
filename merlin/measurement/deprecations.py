@@ -26,6 +26,6 @@ Can be removed when MeasurementStrategy enum is fully deprecated."""
 
 from __future__ import annotations
 
-from ..utils.deprecations import error_deprecated_enum_access
+from ..utils.deprecations import warn_deprecated_enum_access
 
-__all__ = ["error_deprecated_enum_access"]
+__all__ = ["warn_deprecated_enum_access"]

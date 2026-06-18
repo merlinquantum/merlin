@@ -22,24 +22,9 @@ Factory methods (preferred):
 
    from merlin.core.computation_space import ComputationSpace
    from merlin.measurement.strategies import MeasurementStrategy
-   from merlin.utils.grouping import LexGrouping
 
    # Full measurement probabilities
    strategy = MeasurementStrategy.probs(ComputationSpace.FOCK)
-
-   # Collapse count-resolved Fock outputs to occupied/unoccupied readout bins
-   strategy = MeasurementStrategy.probs(
-       ComputationSpace.FOCK,
-       occupancy_readout=True,
-   )
-
-   # Grouping can still be applied after the occupancy readout
-   # input_size must match the occupancy-reduced output width for the layer.
-   strategy = MeasurementStrategy.probs(
-       ComputationSpace.FOCK,
-       grouping=LexGrouping(input_size=16, output_size=4),
-       occupancy_readout=True,
-   )
 
    # Per-mode expectations
    strategy = MeasurementStrategy.mode_expectations(ComputationSpace.UNBUNCHED)

@@ -43,7 +43,6 @@ Experiment support
    :maxdepth: 1
 
    experiment_support
-   noisy_simulations
 
 .. merlin-gallery::
    :data: _data/galleries/quantum_expert/exp_support.json
@@ -85,3 +84,16 @@ Quantum Expert Area Pages
    :maxdepth: 1
 
    building_intuition
+
+
+Scaling study of QCNN
+=========================
+.. toctree::
+   :hidden:
+   :maxdepth: 1
+
+   scaling_study_of_qcnn
+
+
+.. merlin-gallery::
+   :data: _data/galleries/quantum_expert/scaling_study.json

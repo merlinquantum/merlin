@@ -61,10 +61,9 @@ def test_add_rotations_input_custom_prefix_uses_global_counter():
 
 def test_complex_builder_pipeline_exports_pcvl_circuit():
     builder = CircuitBuilder(n_modes=3)
-    builder.add_superpositions(depth=1, name="pre_ent")
     builder.add_angle_encoding(name="input")
+    builder.add_superpositions(depth=1, name="ent")
     builder.add_rotations(modes=1, angle=0.25)
-    builder.add_superpositions(depth=1, name="post_ent")
 
     pcvl_circuit = builder.to_pcvl_circuit(pcvl)
     assert isinstance(pcvl_circuit, pcvl.Circuit)
@@ -118,7 +117,6 @@ def test_pcvl_export_keeps_theta_and_phi_fallback_names_distinct():
 
 def test_to_pcvl_circuit_supports_gradient_backpropagation():
     builder = CircuitBuilder(n_modes=2)
-    builder.add_superpositions(targets=(0, 1))
     builder.add_rotations(trainable=True, name="theta")
     builder.add_superpositions(
         targets=(0, 1),
@@ -153,7 +151,6 @@ def test_to_pcvl_circuit_supports_gradient_backpropagation():
 
 def test_builder_integrates_directly_with_quantum_layer():
     builder = CircuitBuilder(n_modes=3)
-    builder.add_superpositions(depth=1)
     builder.add_angle_encoding(name="input")
     builder.add_rotations(trainable=True, name="theta")
     builder.add_superpositions(depth=1)
@@ -232,13 +229,11 @@ def test_angle_encoding_subset_combinations_extend_metadata():
 
 def test_angle_encoding_applies_scaling_in_quantum_layer():
     builder = CircuitBuilder(n_modes=4)
-    builder.add_entangling_layer(trainable=False, name="pre_mix")
     builder.add_angle_encoding(
         modes=[0, 1, 2],
         name="input",
         scale=0.5,
     )
-    builder.add_entangling_layer(trainable=False, name="post_mix")
 
     layer = QuantumLayer(
         input_size=3,
@@ -262,14 +257,12 @@ def test_angle_encoding_applies_scaling_in_quantum_layer():
 
 def test_angle_encoding_subset_combinations_in_quantum_layer():
     builder = CircuitBuilder(n_modes=8)
-    builder.add_entangling_layer(trainable=False, name="pre_mix")
     builder.add_angle_encoding(
         modes=[0, 1, 2],
         name="input",
         subset_combinations=True,
         max_order=2,
     )
-    builder.add_entangling_layer(trainable=False, name="post_mix")
 
     layer = QuantumLayer(
         input_size=3,
@@ -414,7 +407,6 @@ def test_entangling_layer_model_selection_to_pcvl(model):
 @pytest.mark.parametrize("model", ["mzi", "bell"])
 def test_entangling_layer_models_forward_backward(model):
     builder = CircuitBuilder(n_modes=4)
-    builder.add_entangling_layer(trainable=False, name="pre_mix")
     builder.add_angle_encoding(modes=[0, 1, 2, 3], name="input")
     builder.add_entangling_layer(model=model, trainable=True, name=f"{model}_ent")
     builder.add_rotations(trainable=True, name="theta")
@@ -451,7 +443,6 @@ def test_entangling_layer_to_pcvl_registers_parameters():
 
 def test_entangling_layer_layer_trains():
     builder = CircuitBuilder(n_modes=4)
-    builder.add_entangling_layer(trainable=False, name="pre_mix")
     builder.add_angle_encoding(modes=[0, 1, 2, 3], name="input")
     builder.add_entangling_layer(trainable=True, name="gi")
 
@@ -477,7 +468,6 @@ def test_entangling_layer_layer_trains():
 
 def test_entangling_layer_with_additional_components_trains():
     builder = CircuitBuilder(n_modes=5)
-    builder.add_entangling_layer(trainable=False, name="pre_mix")
     builder.add_angle_encoding(modes=[0, 1, 2, 3, 4], name="input")
     builder.add_entangling_layer(trainable=True, name="core", modes=[2])
     builder.add_rotations(trainable=True, name="theta")
@@ -510,7 +500,6 @@ def test_entangling_layer_models_on_gpu(model):
 
     device = torch.device("cuda")
     builder = CircuitBuilder(n_modes=4)
-    builder.add_entangling_layer(trainable=False, name="pre_mix")
     builder.add_angle_encoding(modes=[0, 1, 2, 3], name="input")
     builder.add_entangling_layer(model=model, trainable=True, name=f"{model}_ent")
     builder.add_rotations(trainable=True, name="theta")
@@ -589,10 +578,7 @@ def test_memristor_metadata():
         return state + output[:, 2]
 
     builder.add_memristive_ps(
-        mode=0,
-        update_rule=exponential_decay,
-        initial_state=1,
-        detach_at_each_forward=False,
+        mode=0, update_rule=exponential_decay, initial_state=1, detach_at_each_forward=False
     )
     builder.add_memristive_ps(mode=1, update_rule=sum_outputs, initial_state=1000)
     builder.add_memristive_ps(mode=3, update_rule=sum_outputs, initial_state=2)
@@ -760,7 +746,6 @@ def test_memristive_own_type_of_parameter():
     def sum_outputs(state: torch.Tensor, output: torch.Tensor) -> torch.Tensor:
         return state + output[:, 2]
 
-    builder.add_superpositions(depth=1, name="pre_mix_a")
     builder.add_angle_encoding()
     builder.add_rotations(trainable=True)
     builder.add_rotations(trainable=False)
@@ -768,28 +753,18 @@ def test_memristive_own_type_of_parameter():
     builder.add_entangling_layer()
 
     builder.add_memristive_ps(
-        mode=0,
-        update_rule=exponential_decay,
-        initial_state=1,
-        detach_at_each_forward=False,
+        mode=0, update_rule=exponential_decay, initial_state=1, detach_at_each_forward=False
     )
     builder.add_memristive_ps(
-        mode=1,
-        update_rule=sum_outputs,
-        initial_state=1000,
-        detach_at_each_forward=False,
+        mode=1, update_rule=sum_outputs, initial_state=1000, detach_at_each_forward=False
     )
     builder.add_memristive_ps(
         mode=3, update_rule=sum_outputs, initial_state=2, detach_at_each_forward=True
     )
     builder.add_memristive_ps(
-        mode=2,
-        update_rule=exponential_decay,
-        initial_state=67,
-        detach_at_each_forward=False,
+        mode=2, update_rule=exponential_decay, initial_state=67, detach_at_each_forward=False
     )
 
-    builder.add_superpositions(depth=1, name="pre_mix_b")
     builder.add_angle_encoding()
     builder.add_rotations(trainable=True)
     builder.add_rotations(trainable=False)

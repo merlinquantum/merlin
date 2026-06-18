@@ -35,11 +35,11 @@
     "tags": ["Reproduced paper","Variational", "Number of Photons","Moons","Circles","Linear"]
   },
   {
-    "title": "Computer Vision: ReservoirClassifier on MNIST",
-    "summary": "Benchmarking the frozen photonic reservoir classifier on MNIST and Fashion-MNIST with PCA-compressed inputs.",
-    "image": "_static/img/reservoir_scheme.png",
-    "doc": "notebooks/ReservoirClassifier",
-    "tags": ["Hybrid","Reservoir","Computer vision","MNIST","Fashion-MNIST"]
+    "title": "Computer Vision: Image Classification with QuantumLayers",
+    "summary": "Exploration of the hybrid classical-quantum pipeline for image classification.",
+    "image": "_static/img/merlin_black.png",
+    "doc": "examples/index",
+    "tags": ["Hybrid","Computer vision","DATASET", "Coming soon!"]
   },
   {
     "title": "Computer Vision: Image Classification with a Photonic QCNN",
@@ -47,13 +47,6 @@
     "image": "_static/reproduced_papers/PhotonicQCNN_state_injection.png",
     "doc": "notebooks/reproduced_papers/photonic_QCNN.ipynb",
     "tags": ["QCNN","Computer vision","Reproduced paper", "MNIST"]
-  },
-  {
-    "title": "Reproduced Paper: Photonic QCNN with State Injection",
-    "summary": "Photonic quantum convolutional architecture with adaptive state injection for vision tasks.",
-    "image": "_static/reproduced_papers/PhotonicQCNN.png",
-    "doc": "reproduced_papers/reproductions/photonic_qcnn",
-    "tags": ["QCNN", "Computer vision", "Reproduced paper", "Monbroussou et al."]
   },
   {
     "title": "Generative Models: Photonic QGAN",

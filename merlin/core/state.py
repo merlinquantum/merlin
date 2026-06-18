@@ -32,8 +32,6 @@ from enum import Enum
 
 import perceval as pcvl  # type: ignore
 
-from .computation_space import ComputationSpace
-
 
 class StatePattern(str, Enum):
     """Enumeration of supported input photon state patterns."""
@@ -42,34 +40,6 @@ class StatePattern(str, Enum):
     SPACED = "spaced"
     SEQUENTIAL = "sequential"
     PERIODIC = "periodic"
-
-
-def _generate_default_input_state(
-    n_modes: int,
-    n_photons: int,
-    computation_space: ComputationSpace,
-) -> list[int]:
-    """Generate the fixed default occupation for a computation space."""
-    if n_modes <= 0:
-        raise ValueError(f"n_modes must be positive, got {n_modes}")
-
-    if n_photons < 0:
-        raise ValueError(f"n_photons must be non-negative, got {n_photons}")
-
-    if n_photons > n_modes:
-        raise ValueError(
-            "Cannot derive a default input_state when n_photons is greater than "
-            "n_modes. Provide an explicit input_state."
-        )
-
-    if computation_space is ComputationSpace.DUAL_RAIL:
-        if n_modes != 2 * n_photons:
-            raise ValueError(
-                "Dual-rail encoding requires the number of modes to equal 2 * n_photons."
-            )
-        return [value for _ in range(n_photons) for value in (1, 0)]
-
-    return [1] * n_photons + [0] * (n_modes - n_photons)
 
 
 def generate_state(

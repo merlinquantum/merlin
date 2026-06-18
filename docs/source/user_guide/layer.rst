@@ -110,11 +110,6 @@ a good understanding of Perceval.
 
   ``input_state=[...]`` is accepted as a convenience input, but the layer stores it as a Perceval
   `pcvl.BasicState <https://perceval.quandela.net/docs/v1.2/reference/utils/states.html>`_ (access the occupation vector via ``list(layer.input_state)``).
-  Tensor constructor states are removed; build a
-  :class:`~merlin.core.state_vector.StateVector` with
-  :meth:`~merlin.core.state_vector.StateVector.from_tensor` when amplitude data
-  must be passed as ``input_state``. The same rule applies to
-  :meth:`~merlin.algorithms.layer.QuantumLayer.set_input_state`.
 
 Experiment-driven
 ~~~~~~~~~~~~~~~~~
@@ -156,11 +151,10 @@ Photon loss and detectors
   every survival/loss configuration implied by the noise model.
 - ``MeasurementStrategy.amplitudes()`` requires access to raw complex amplitudes
   and is therefore incompatible with custom detectors **or** photon-loss noise
-  models. Active noise models raise a ``ValueError``; custom detectors raise a
-  ``RuntimeError``. To emulate a detector pipeline while still inspecting
-  amplitudes, run the layer without detectors and apply
-  :class:`~merlin.measurement.detectors.DetectorTransform` manually to the
-  resulting amplitudes.
+  models. Attempting this combination raises a ``RuntimeError``. To emulate a
+  detector pipeline while still inspecting amplitudes, run the layer without
+  detectors and apply :class:`~merlin.measurement.detectors.DetectorTransform`
+  manually to the resulting amplitudes.
 - Call :meth:`~merlin.algorithms.layer.QuantumLayer.output_keys` to inspect
   the classical outcomes produced by the detector transform.
 
@@ -175,16 +169,8 @@ Notes
   whether photon loss is active and how it alters the output distribution.
 
 .. warning::
-   *Removed in version 0.4:* The ``no_bunching`` flag is removed in
-   version 0.4. Use
-   ``MeasurementStrategy.probs(computation_space=ComputationSpace.UNBUNCHED)``
-   or ``MeasurementStrategy.probs(computation_space=ComputationSpace.FOCK)``
-   instead. See :doc:`/user_guide/migration_guide`.
-
-.. warning::
-   *Deprecated since version 0.4:* The use of the ``computation_space`` argument in the QuantumLayer's constructor is no longer supported as 0.4.0.
+   *Deprecated since version 0.3:* The use of the ``no_bunching`` flag  is deprecated and is removed since version 0.3.0.
    Use the ``computation_space`` flag inside ``measurement_strategy`` instead. See :doc:`/user_guide/migration_guide`.
-
 
 ----------------------
 API Reference

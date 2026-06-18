@@ -1,14 +1,11 @@
 # tests/core/cloud/conftest.py
 from __future__ import annotations
 
-import logging
 import os
 
 import perceval as pcvl
 import pytest
 from perceval.runtime import RemoteConfig
-
-LOGGER = logging.getLogger(__name__)
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -188,11 +185,6 @@ def scaleway_session_probs(scaleway_credentials):
                     probs_platform = p["name"]
                     break
         except Exception:
-            LOGGER.debug(
-                "Scaleway platform %s did not support the probs probe.",
-                p.get("name"),
-                exc_info=True,
-            )
             continue
 
     if probs_platform is None:

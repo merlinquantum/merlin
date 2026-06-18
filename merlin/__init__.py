@@ -27,9 +27,6 @@ A comprehensive framework for integrating photonic quantum circuits
 into PyTorch neural networks with automatic differentiation support.
 """
 
-# Public model namespace
-from . import models
-
 # Core API - Most users will only need these
 from .algorithms.feed_forward import FeedForwardBlock
 from .algorithms.feed_forward_legacy import (
@@ -63,22 +60,13 @@ from .measurement import (
 from .measurement.autodiff import AutoDiffProcess
 from .measurement.process import SamplingProcess
 from .measurement.strategies import MeasurementStrategy
-from .models import QCNNClassifier, ReservoirClassifier
-from .models.photonic_generator import (
-    GeneratorMeasurements,
-    ImageAdapter,
-    LatentDistribution,
-    NormalLatent,
-    OutputAdapter,
-    PhotonicGenerator,
-    VectorAdapter,
-)
+from .models.qcnn import QCNNClassifier
 from .pcvl_pytorch import CircuitConverter, build_slos_distribution_computegraph
 from .utils.combinadics import Combinadics
 from .utils.grouping import LexGrouping, ModGrouping
 
 # Version and metadata
-__version__ = "0.4.0"
+__version__ = "0.3.2"
 __author__ = "Merlin Team"
 __description__ = "Photonic Quantum Machine Learning Framework"
 
@@ -87,10 +75,7 @@ __all__ = [
     # Core classes (most common usage)
     "QuantumLayer",
     "QuantumBridge",
-    "ReservoirClassifier",
-    "models",
     "QCNNClassifier",
-    "PhotonicGenerator",
     # Configuration enums
     "ComputationSpace",
     "EncodingSpace",
@@ -123,10 +108,4 @@ __all__ = [
     "CircuitBuilder",
     "AutoDiffProcess",
     "SamplingProcess",
-    "GeneratorMeasurements",
-    "ImageAdapter",
-    "LatentDistribution",
-    "NormalLatent",
-    "OutputAdapter",
-    "VectorAdapter",
 ]

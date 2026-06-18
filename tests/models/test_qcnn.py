@@ -31,7 +31,7 @@ from merlin.algorithms import QuantumLayer
 from merlin.core import ComputationSpace, StateVector
 from merlin.measurement import MeasurementStrategy
 from merlin.models import QCNNClassifier
-
+import re
 
 def test_qcnn_basic_api():
     accepted_input_shape = (4, 4)
@@ -790,3 +790,7 @@ def test_qcnn_state_dict_round_trip_with_export_config():
         restored_logits = restored_qcnn(x)
 
     assert torch.allclose(restored_logits, expected_logits, atol=1e-6, rtol=1e-6)
+
+def test_qcnn_input_shape_warning():
+    with pytest.warns(UserWarning, match="Too many dimensions for QCNN, the program may crash"):
+        QCNNClassifier((30, 30), 3)

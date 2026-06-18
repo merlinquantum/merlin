@@ -36,9 +36,6 @@ Basic Structure
 A :class:`PartialMeasurement` represents the outcome of measuring a subset of modes in a quantum system.
 It consists of a collection of :class:`PartialMeasurementBranch` objects, each corresponding to a specific
 measurement outcome on the measured modes, along with the conditional quantum state on the unmeasured modes.
-When constructing one manually, ``measured_modes`` and ``unmeasured_modes`` must be disjoint and together cover
-the full contiguous mode range. Branch outcomes must have one entry per measured mode, and each conditional
-state vector must use one mode per unmeasured mode.
 
 .. code-block:: python
 

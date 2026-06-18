@@ -26,9 +26,7 @@ import torch
 
 import merlin as ML
 from merlin.algorithms.layer_utils import (
-    _build_simple_circuit,
     apply_angle_encoding,
-    classify_noise,
     compute_new_memristive_ps_angles,
     feature_count_for_prefix,
     normalize_output_key,
@@ -39,17 +37,21 @@ from merlin.algorithms.layer_utils import (
     split_inputs_by_prefix,
     validate_and_resolve_circuit_source,
     validate_encoding_mode,
-    validate_noisy_measurement_strategy,
     vet_experiment,
 )
 from merlin.core.computation_space import ComputationSpace
-from merlin.core.state_vector import StateVector
 from merlin.measurement.strategies import MeasurementStrategy
 
 
 def test_validate_encoding_mode_constraints():
-    with pytest.raises(ValueError, match="forward\\(StateVector\\)"):
+    with pytest.raises(ValueError, match="input_size"):
         validate_encoding_mode(True, 2, 1, None)
+
+    with pytest.raises(ValueError, match="n_photons"):
+        validate_encoding_mode(True, None, None, None)
+
+    with pytest.raises(ValueError, match="input parameters"):
+        validate_encoding_mode(True, None, 1, ["x"])
 
     config = validate_encoding_mode(False, 3, None, ["x"])
     assert config.input_size == 3
@@ -79,37 +81,8 @@ def test_prepare_input_state_statevector():
         None,
         torch.complex64,
     )
-    assert isinstance(state, StateVector)
+    assert isinstance(state, torch.Tensor)
     assert resolved == 1
-
-
-def test_prepare_input_state_merlin_statevector_n_photons_mismatch_raises():
-    state_vector = StateVector.from_basic_state([1, 0, 1, 0])
-
-    with pytest.raises(
-        ValueError,
-        match="Inconsistent number of photons between input_state and n_photons",
-    ):
-        prepare_input_state(
-            state_vector,
-            1,
-            ComputationSpace.UNBUNCHED,
-            None,
-            torch.complex64,
-        )
-
-
-def test_prepare_input_state_rejects_tensor_input_state():
-    tensor = torch.tensor([1.0, 0.0], dtype=torch.complex64)
-
-    with pytest.raises(ValueError, match="StateVector.from_tensor"):
-        prepare_input_state(
-            tensor,
-            1,
-            ComputationSpace.UNBUNCHED,
-            None,
-            torch.complex64,
-        )
 
 
 def test_prepare_input_state_empty_statevector_rejected():
@@ -178,9 +151,7 @@ def test_validate_and_resolve_circuit_source_multiple_sources():
 
 def test_validate_and_resolve_circuit_source_builder_prefixes():
     builder = ML.CircuitBuilder(n_modes=2)
-    builder.add_entangling_layer(trainable=False, name="pre_mix")
     builder.add_angle_encoding(modes=[0], name="x")
-    builder.add_entangling_layer(trainable=False, name="post_mix")
     source = validate_and_resolve_circuit_source(builder, None, None, None, None)
     assert source.source_type == "builder"
     assert source.input_parameters == ["x"]
@@ -241,34 +212,6 @@ def test_setup_noise_and_detectors_computation_space_overrides():
     assert config.has_custom_detectors is True
     assert len(config.detectors) == 2
     assert config.detector_warnings
-
-
-def test_validate_noisy_measurement_strategy_allows_noiseless_amplitudes():
-    noise = validate_noisy_measurement_strategy(
-        None,
-        output="amplitudes",
-        noise=None,
-        noise_groups=None,
-        empty_detectors=False,
-    )
-
-    assert noise is None
-
-
-def test_validate_noisy_measurement_strategy_rejects_active_noise_amplitudes():
-    noise = pcvl.NoiseModel(brightness=0.5)
-
-    with pytest.raises(
-        ValueError,
-        match="When doing a noisy simulation, the probabilities measurement strategy must be used.",
-    ):
-        validate_noisy_measurement_strategy(
-            None,
-            output="amplitudes",
-            noise=noise,
-            noise_groups=classify_noise(noise),
-            empty_detectors=False,
-        )
 
 
 def test_apply_angle_encoding_basic():
@@ -340,88 +283,3 @@ def test_compute_new_memristive_ps_angles():
 
     for x, y in zip(res, expected, strict=True):
         assert torch.allclose(x, y)
-
-
-class TestBuildSimpleCircuit:
-    """Tests for :func:`~merlin.algorithms.layer_utils._build_simple_circuit`."""
-
-    def test_returns_circuit_builder(self):
-        from merlin.builder.circuit_builder import CircuitBuilder
-
-        builder = _build_simple_circuit(input_size=3, n_modes=4)
-        assert isinstance(builder, CircuitBuilder)
-
-    def test_n_modes_propagated(self):
-        builder = _build_simple_circuit(input_size=4, n_modes=5)
-        circuit = builder.to_pcvl_circuit(__import__("perceval"))
-        assert circuit.m == 5
-
-    def test_default_n_modes_is_input_size_plus_one(self):
-        for input_size in (1, 3, 5):
-            builder = _build_simple_circuit(input_size=input_size)
-            circuit = builder.to_pcvl_circuit(__import__("perceval"))
-            assert circuit.m == input_size + 1
-
-    def test_default_scale_is_one(self):
-        builder_default = _build_simple_circuit(input_size=3)
-        builder_explicit = _build_simple_circuit(input_size=3, angle_encoding_scale=1.0)
-        # Both builders should produce the same angle-encoding specs
-        assert (
-            builder_default.angle_encoding_specs
-            == builder_explicit.angle_encoding_specs
-        )
-
-    def test_trainable_prefixes(self):
-        builder = _build_simple_circuit(n_modes=4, input_size=3)
-        assert "LI_simple" in builder.trainable_parameter_prefixes
-        assert "RI_simple" in builder.trainable_parameter_prefixes
-
-    def test_input_prefix(self):
-        builder = _build_simple_circuit(n_modes=4, input_size=3)
-        assert "input" in builder.input_parameter_prefixes
-
-    def test_angle_encoding_scale_stored(self):
-        scale = 2.5
-        builder = _build_simple_circuit(
-            n_modes=4, input_size=3, angle_encoding_scale=scale
-        )
-        specs = builder.angle_encoding_specs
-        # All feature scales in the "input" spec should equal the provided scale
-        input_spec = specs.get("input", {})
-        scales = input_spec.get("scales", {})
-        assert scales, "Expected non-empty scales dict"
-        for v in scales.values():
-            assert v == scale
-
-    def test_produces_identical_circuit_for_layer_and_feature_map(self):
-        """QuantumLayer.simple and FeatureMap.simple must share the same circuit topology."""
-        import merlin as ML
-        from merlin.algorithms.kernels import FeatureMap
-
-        ql = ML.QuantumLayer.simple(input_size=3)
-        fm = FeatureMap.simple(input_size=3)
-
-        ql_circuit = ql.quantum_layer.circuit
-        fm_circuit = fm.circuit
-
-        assert ql_circuit.m == fm_circuit.m
-        # Both circuits encode the same number of modes
-        assert ql_circuit.m == 4  # input_size + 1
-
-    def test_quantum_layer_and_feature_map_share_parameter_names(self):
-        """Both simple factories must expose the same trainable parameter names."""
-        import merlin as ML
-        from merlin.algorithms.kernels import FeatureMap
-
-        ql_params = [
-            k
-            for k, _ in ML.QuantumLayer.simple(
-                input_size=3
-            ).quantum_layer.named_parameters()
-        ]
-        fm_params = FeatureMap.simple(input_size=3).trainable_parameters
-
-        assert "LI_simple" in ql_params
-        assert "RI_simple" in ql_params
-        assert "LI_simple" in fm_params
-        assert "RI_simple" in fm_params

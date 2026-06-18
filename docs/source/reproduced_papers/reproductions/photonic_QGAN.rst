@@ -61,7 +61,7 @@ At this stage:
 * ``smoke`` mode is a lightweight wiring check,
 * ``digits`` and ``ideal`` train the MerLin ``QuantumLayer`` generator end-to-end,
 * ``hp_study`` performs successive-halving hyperparameter search on Adam-based training,
-* ``PatchGeneratorLegacy`` remains available for the previous sampler/SPSA workflow.
+* ``PatchGeneratorLegacy`` remains available as a reference for the previous sampler/SPSA workflow.
 
 Key Contributions Reproduced
 ============================
@@ -102,7 +102,7 @@ The implemented ``PatchGenerator`` in ``lib/generators.py`` builds ``gen_count``
    # 4) Concatenate patch tensors into one image vector
    return torch.cat(patches, dim=1)
 
-``PatchGeneratorLegacy`` remains in the same file for the previous Perceval sampler path.
+``PatchGeneratorLegacy`` remains in the same file as a reference implementation of the previous Perceval sampler path.
 
 Experimental Results
 ====================
@@ -173,7 +173,8 @@ The active implementation in ``lib/generators.py`` follows this structure:
                    input_parameters=pcvl_circuit.enc_param_names,
                    trainable_parameters=pcvl_circuit.var_param_names,
                    input_state=input_state,
-                   measurement_strategy=ml.MeasurementStrategy.probs(computation_space=ml.ComputationSpace.FOCK),
+                   measurement_strategy=ml.MeasurementStrategy.PROBABILITIES,
+                   computation_space=ml.ComputationSpace.FOCK,
                )
                self.layers.append(layer)
 
@@ -181,7 +182,7 @@ The active implementation in ``lib/generators.py`` follows this structure:
            patch_probs = [layer(z) for layer in self.layers]
            return torch.cat(patch_probs, dim=-1)
 
-The file also keeps ``PatchGeneratorLegacy`` for the older sampler-based implementation.
+The file also keeps ``PatchGeneratorLegacy`` for backward comparison with the older sampler-based implementation.
 
 With this implementation:
 
@@ -192,15 +193,9 @@ With this implementation:
 Interactive Exploration
 =======================
 
-**Jupyter Notebook**: :doc:`../../notebooks/reproduced_papers/photonic_QGAN`
+Notebook status in this docs repository: dedicated ``photonic_QGAN`` notebook page is not yet published under ``docs/source/notebooks/reproduced_papers``.
 
-The notebook demonstrates the MerLin ``PhotonicGenerator`` path with repeated
-quantum heads, Fock-space occupancy readout, headwise image adaptation, and an
-Adam-based GAN training routine against a classical discriminator on Optdigits
-samples. The run is intentionally compact; paper-scale experiments should use
-longer training runs and checkpoint selection.
-
-Additional notebooks in reproduced-papers project:
+Available notebooks in reproduced-papers project:
 
 * ``notebooks/qgan_digits.ipynb``
 * ``notebooks/qgan_ideal.ipynb``
@@ -215,16 +210,10 @@ Additional notebooks in reproduced-papers project:
 
    Photonic QGAN overview figure.
 
-.. toctree::
-   :maxdepth: 1
-   :hidden:
-
-   ../../notebooks/reproduced_papers/photonic_QGAN
-
 Extensions and Future Work
 ==========================
 
-The key MerLin-native generator path is now implemented. The next work items focus on benchmark coverage and cleanup.
+The key MerLin-native generator path is now implemented. The next work items focus on validation and cleanup.
 
 **Planned migration steps**
   * Finalize benchmark tables for ``digits``, ``ideal``, and ``hp_study`` in docs.

@@ -67,9 +67,3 @@ API Perceval Aliases
    
    External API: `Exqalibur API <https://perceval.quandela.net/docs/v1.2/reference/exqalibur/index.html>`_
 
-.. py:class:: torch.nn.Parameter
-   :canonical: torch.nn.parameter.Parameter
-
-   Alias for :class:`torch.nn.parameter.Parameter`.
-
-   External API: `PyTorch Parameter API <https://pytorch.org/docs/stable/generated/torch.nn.parameter.Parameter.html>`_

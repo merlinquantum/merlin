@@ -18,9 +18,8 @@ import torch
 
 from merlin import QuantumLayer
 from merlin.core.computation_space import ComputationSpace
-from merlin.core.encoding_space import EncodingSpace
 from merlin.core.process import ComputationProcess
-from merlin.core.state_vector import StateVector, embed_tensor_in_fock_basis
+from merlin.core.state_vector import embed_tensor_in_fock_basis
 from merlin.measurement.strategies import MeasurementStrategy
 
 
@@ -77,12 +76,6 @@ class TestComputeEbsSimultaneously:
             n_photons=2,
             computation_space=ComputationSpace.UNBUNCHED,
         )
-        self.input_state = StateVector.from_tensor(
-            self.input_state_tensor,
-            n_modes=self.circuit.m,
-            n_photons=2,
-            encoding=EncodingSpace.UNBUNCHED,
-        )
         # Set up parameters
         self.trainable_parameters = ["phi"]
         self.input_parameters = []
@@ -95,7 +88,7 @@ class TestComputeEbsSimultaneously:
             measurement_strategy=MeasurementStrategy.probs(
                 computation_space=ComputationSpace.UNBUNCHED
             ),
-            input_state=self.input_state,
+            input_state=self.input_state_tensor,
             trainable_parameters=self.trainable_parameters,
             input_parameters=self.input_parameters,
             dtype=torch.float64,

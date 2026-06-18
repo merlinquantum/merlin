@@ -71,10 +71,10 @@ We use the ``CircuitBuilder`` to create small quantum models easily with amplitu
             circuit.add_entangling_layer()
     qlayer = ml.QuantumLayer(
         builder=circuit,
+        amplitude_encoding=True,
         n_photons=n_photons,
         measurement_strategy=measurement_strategy,
     )
-    # Pass amplitude data as StateVector or complex tensor inputs to qlayer(...).
 
 Experimental Results
 ====================

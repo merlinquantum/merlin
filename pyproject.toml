@@ -31,11 +31,11 @@ classifiers=[
 ]
 
 dependencies = [
-    "torch>=2.0.0,<2.13",
+    "torch>=2.0.0,<=2.10.0",
     "perceval-quandela>=1.2.1",
     "numpy>=2.2.6",
     "pandas",
-    "scikit-learn>=1.7.2,<1.10",
+    "scikit-learn>=1.7.2",
 ]
 
 [project.optional-dependencies]
@@ -57,14 +57,13 @@ docs = [
     "ipython",
     "ipykernel",
     "gitpython",
-    "python-dotenv",
     "sphinx-multiversion-contrib @ git+https://github.com/Quandela/sphinx-multiversion-contrib.git@1.1.1",
     "jinja2==3.0.0",
-    "scikit-learn>=1.7.0",
+    "scikit-learn>=1.0.0",
 ]
 examples = [
     "matplotlib>=3.5.0",
-    "scikit-learn>=1.7.0",
+    "scikit-learn>=1.0.0",
     "jupyter>=1.0.0",
 ]
 
@@ -75,11 +74,19 @@ source = "https://github.com/merlinquantum/merlin"
 issues = "https://github.com/merlinquantum/merlin/issues"
 
 [tool.setuptools]
-
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["merlin*"]
-namespaces = false
+package-dir = {"" = "src"}
+packages = [
+    "merlin",
+    "merlin.algorithms",
+    "merlin.bridge",
+    "merlin.builder",
+    "merlin.core",
+    "merlin.datasets",
+    "merlin.models",
+    "merlin.measurement",
+    "merlin.pcvl_pytorch",
+    "merlin.utils",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "benchmarks"]

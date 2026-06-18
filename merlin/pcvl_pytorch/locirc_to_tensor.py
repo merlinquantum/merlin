@@ -1,6 +1,6 @@
 # MIT License
 #
-# Copyright (c) 2026 Quandela
+# Copyright (c) 2025 Quandela
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -22,7 +22,7 @@
 
 from __future__ import annotations
 
-import warnings
+import random
 
 import torch
 from multipledispatch import dispatch
@@ -51,41 +51,6 @@ Components:
 """
 
 
-def _phase_shifter_max_error(component: AComponent) -> float:
-    """Return the local Perceval phase-error half-width for a phase shifter.
-
-    Parameters
-    ----------
-    component : AComponent
-        Perceval component to inspect.
-
-    Returns
-    -------
-    float
-        Positive stochastic phase-error half-width stored on the component,
-        or 0.0 when the component has no local phase-error setting.
-    """
-    if not isinstance(component, PS):
-        return 0.0
-    return float(getattr(component, "_max_error", 0.0))
-
-
-def _circuit_has_local_phase_error(circuit: Circuit) -> bool:
-    """Return whether a circuit contains phase shifters with local error.
-
-    Parameters
-    ----------
-    circuit : Circuit
-        Perceval circuit to inspect.
-
-    Returns
-    -------
-    bool
-        True when at least one phase shifter has ``max_error > 0``.
-    """
-    return any(_phase_shifter_max_error(component) > 0.0 for _, component in circuit)
-
-
 class CircuitConverter:
     """Convert a parameterized Perceval circuit into a differentiable PyTorch unitary matrix.
 
@@ -104,27 +69,6 @@ class CircuitConverter:
         Target tensor dtype.
     device : torch.device
         Device used for tensor operations.
-    phase_imprecision : float
-        Deterministic quantization step applied to every phase shifter before
-        building the unitary. This models finite phase-setting resolution: a
-        commanded phase ``phi`` is mapped to
-        ``round(phi / phase_imprecision) * phase_imprecision`` with a
-        straight-through estimator, so the forward pass uses the quantized
-        value while the backward pass keeps the identity gradient through the
-        commanded phase. This is nearest-grid rounding, not truncation. Exact
-        half-step ties follow ``torch.round`` behavior. For example,
-        ``phi = pi / 8`` with ``phase_imprecision = pi / 4`` quantizes to
-        ``0`` because ``round(0.5) == 0``. Default value is 0.0.
-    phase_error : float
-        Stochastic uniform perturbation half-width in radians. This models
-        random phase noise around the quantized phase after any
-        ``phase_imprecision`` step. When active, the effective sampled phase is
-        ``round(phi / phase_imprecision) * phase_imprecision + epsilon`` with
-        ``epsilon ~ Uniform(-phase_error, phase_error)``. If
-        ``phase_imprecision`` is inactive, the sampled phase is
-        ``phi + epsilon``. Fresh samples are drawn only when :meth:`to_tensor`
-        is called with ``apply_phase_error=True``; otherwise the converter
-        remains deterministic. Default value is 0.0.
 
     Notes
     -----
@@ -134,46 +78,6 @@ class CircuitConverter:
         - PERM (Permutation)
         - Unitary (Generic unitary matrix)
         - Barrier (no-op, removed during compilation)
-
-    Phase Noise Parameter Flow:
-        Phase noise parameters (`phase_imprecision` and `phase_error`) are
-        configured at converter initialization and automatically applied during
-        unitary generation. The flow is:
-
-        1. **Initialization**: User passes `phase_imprecision` and/or
-           `phase_error` to CircuitConverter via QuantumLayer
-           (Step 4: through InitializationContext → ComputationProcessFactory
-           → ComputationProcess → CircuitConverter).
-
-        2. **Compilation**: During `_compile_circuit()`, constant phase shifters
-           are marked as dynamic if `phase_error > 0.0`, ensuring fresh
-           perturbations on each call. Quantization-only noise allows
-           precomputation since it is deterministic.
-
-        3. **Conversion**: Each call to `to_tensor(*params, apply_phase_error=bool)`
-           applies both quantization (always, if configured) and perturbations
-           (only if `apply_phase_error=True`). Monte Carlo sampling is done by
-           calling `to_tensor()` multiple times with `apply_phase_error=True`
-           and averaging the resulting probability distributions.
-
-        4. **Gradient Flow**: Phase quantization uses straight-through estimators
-           to preserve gradients to the commanded phase. Perturbations use
-           `torch.empty_like(phase)` to ensure proper device/dtype handling
-           and do NOT require gradients (they are stochastic noise, not
-           learnable parameters).
-
-        5. **Effective Phase**: For a phase shifter commanded to phase ``phi``,
-           the forward phase is:
-
-           - ``phi`` when both phase noises are inactive;
-           - ``round(phi / phase_imprecision) * phase_imprecision`` when only
-             ``phase_imprecision`` is active;
-           - ``phi + epsilon`` when only ``phase_error`` is active;
-           - ``round(phi / phase_imprecision) * phase_imprecision + epsilon``
-             when both are active.
-
-           The quantization uses nearest-grid rounding through
-           :func:`torch.round`; it is not floor or truncation.
 
     Example:
         Basic usage with a single phase shifter:
@@ -234,8 +138,6 @@ class CircuitConverter:
         memristive_metadata: list[dict] | None = None,
         dtype: torch.dtype = torch.complex64,
         device: torch.device = torch.device("cpu"),
-        phase_imprecision: float = 0.0,
-        phase_error: float = 0.0,
     ):
         """Initialize the CircuitConverter with a Perceval circuit.
 
@@ -252,32 +154,11 @@ class CircuitConverter:
             Tensor dtype.
         device : torch.device
             PyTorch device for tensor operations.
-        phase_imprecision : float
-            Deterministic quantization step applied to every phase shifter
-            before building the unitary. This models finite phase-setting
-            resolution: a commanded phase ``phi`` is mapped to
-            ``round(phi / phase_imprecision) * phase_imprecision`` with a
-            straight-through estimator, so the forward pass uses the quantized
-            value while the backward pass keeps the identity gradient through
-            the commanded phase. This is nearest-grid rounding, not
-            truncation. If omitted, no phase quantization is applied. Default
-            value is 0.0.
-        phase_error : float
-            Stochastic uniform perturbation half-width in radians. This models
-            random phase noise around the configured phase after any
-            ``phase_imprecision`` quantization. The sampled perturbation is
-            added after quantization, so both noises compose as
-            ``round(phi / phase_imprecision) * phase_imprecision + epsilon``.
-            Fresh samples are drawn only when :meth:`to_tensor` is called with
-            ``apply_phase_error=True``; otherwise the converter remains
-            deterministic. If omitted, no stochastic phase perturbation is
-            configured. Default value is 0.0.
 
         Raises
         ------
         ValueError
-            If ``input_specs`` do not match circuit parameters, or if a phase
-            noise value is negative.
+            If ``input_specs`` do not match circuit parameters.
         TypeError
             If ``circuit`` is not a Perceval circuit.
         """
@@ -298,28 +179,11 @@ class CircuitConverter:
         self.batch_size = 1
 
         self.set_dtype(dtype)
-        self._phase_imprecision = float(phase_imprecision)
-        self._phase_error = float(phase_error)
-        self._apply_phase_error = False
-
-        # Validate that phase noise parameters are non-negative
-        if self._phase_imprecision < 0.0:
-            raise ValueError("phase_imprecision must be non-negative.")
-        if self._phase_error < 0.0:
-            raise ValueError("phase_error must be non-negative.")
 
         assert isinstance(circuit, Circuit), (
             f"Expected a Perceval LO circuit, but got {type(circuit).__name__}"
         )
         self.circuit = circuit
-        if self._phase_error > 0.0 and _circuit_has_local_phase_error(self.circuit):
-            warnings.warn(
-                "Circuit contains pcvl.PS(max_error > 0) while phase_error is "
-                "configured. Local PS max_error overrides phase_error for those "
-                "phase shifters.",
-                UserWarning,
-                stacklevel=2,
-            )
 
         # Create parameter mapping - it will map parameter names to their index in the input tensors
         self.param_mapping = {}
@@ -447,15 +311,7 @@ class CircuitConverter:
                 )
             if isinstance(c, Barrier):
                 continue
-            # Check if this PS component requires dynamic handling due to phase_error.
-            # Phase shifters with active phase_error must remain dynamic (not precomputed)
-            # because fresh perturbations must be drawn on each call to to_tensor().
-            # In contrast, phase_imprecision-only PS can still be precomputed since
-            # quantization is deterministic.
-            is_phase_error_sensitive = isinstance(c, PS) and (
-                self._phase_error > 0.0 or _phase_shifter_max_error(c) > 0.0
-            )
-            if not c.get_parameters(all_params=False) and not is_phase_error_sensitive:
+            if not c.get_parameters(all_params=False):
                 # we can already compute the tensor for this component
                 curr_comp_tensor = self._compute_tensor(c)
                 list_rct.append((r, curr_comp_tensor))
@@ -519,39 +375,9 @@ class CircuitConverter:
         self,
         *input_params: torch.Tensor,
         batch_size: int | None = None,
-        apply_phase_error: bool = False,
         memristive_current_state: list[torch.Tensor] | None = None,
     ) -> torch.Tensor:
         r"""Convert the parameterized circuit to a PyTorch unitary tensor.
-
-        Phase Noise Processing:
-            This method applies configured phase noise to all phase shifters during
-            unitary generation. The noise is applied in two stages:
-
-            1. **phase_imprecision (deterministic, always applied)**:
-               If configured, every phase is quantized to the nearest multiple of
-               ``phase_imprecision`` using a straight-through estimator. This uses
-               ``torch.round(phase / phase_imprecision) * phase_imprecision``:
-               it is nearest-grid rounding, not truncation. Exact half-step ties
-               follow ``torch.round`` behavior, so ``pi / 8`` with a ``pi / 4``
-               step quantizes to ``0``. Gradients flow through the commanded phase,
-               while the forward pass uses the quantized value. This is always
-               active and does not require ``apply_phase_error=True``.
-
-            2. **phase_error (stochastic, controlled by apply_phase_error flag)**:
-               If configured and `apply_phase_error=True`, fresh samples from
-               Uniform(-phase_error, phase_error) are drawn and added to each phase
-               after quantization. The samples respect the phase tensor's device and
-               dtype via `torch.empty_like()`. Each call with `apply_phase_error=True`
-               produces a different unitary. For Monte Carlo averaging of probabilistic
-               outputs, call this method multiple times with `apply_phase_error=True`,
-               collect the resulting probability distributions, and average them.
-
-            Parameter Flow (see class Notes for full context):
-            - layer_utils.classify_noise() → extracts phase settings to NoiseGroups
-            - ComputationProcess.__init__() → stores phase settings from NoiseGroups
-            - ComputationProcess._setup_computation_graphs() → passes to CircuitConverter
-            - CircuitConverter.to_tensor() ← receives apply_phase_error flag each call
 
         Parameters
         ----------
@@ -565,12 +391,6 @@ class CircuitConverter:
         memristive_current_state : list[torch.Tensor] | None
             The memristive phase shifters current states. Defaults to None
             and will be treated as an empty list.
-        apply_phase_error : bool
-            Whether to draw fresh stochastic perturbations for configured
-            ``phase_error`` values during this conversion. This flag does not
-            affect deterministic ``phase_imprecision`` quantization, which is
-            applied whenever ``phase_imprecision`` is positive. The perturbation
-            is added after quantization. Default value is False.
 
         Returns
         -------
@@ -620,33 +440,28 @@ class CircuitConverter:
             has_batch = True
         self.batch_size = batch_size
 
-        previous_apply_phase_error = self._apply_phase_error
-        self._apply_phase_error = apply_phase_error
-        try:
-            converted_tensor = (
-                torch
-                .eye(self.circuit.m, dtype=self.tensor_cdtype, device=self.device)
-                .unsqueeze(0)
-                .repeat(batch_size, 1, 1)
-            )
-            # Build unitary tensor by composing component unitaries
-            for r, c in self.list_rct:
-                if isinstance(c, torch.Tensor):
-                    # If the component is already a tensor, use it directly, just move it to the correct device and dtype
-                    # and expand it to the batch size
-                    curr_comp_tensor = c.to(
-                        dtype=self.tensor_cdtype, device=self.device
-                    ).expand(batch_size, -1, -1)
-                else:
-                    curr_comp_tensor = self._compute_tensor(c)
+        converted_tensor = (
+            torch
+            .eye(self.circuit.m, dtype=self.tensor_cdtype, device=self.device)
+            .unsqueeze(0)
+            .repeat(batch_size, 1, 1)
+        )
+        # Build unitary tensor by composing component unitaries
+        for r, c in self.list_rct:
+            if isinstance(c, torch.Tensor):
+                # If the component is already a tensor, use it directly, just move it to the correct device and dtype
+                # and expand it to the batch size
+                curr_comp_tensor = c.to(
+                    dtype=self.tensor_cdtype, device=self.device
+                ).expand(batch_size, -1, -1)
+            else:
+                curr_comp_tensor = self._compute_tensor(c)
 
-                # Compose unitaries
-                contribution = converted_tensor[..., r[0] : (r[-1] + 1), :].clone()
-                converted_tensor[..., r[0] : (r[-1] + 1), :] = (
-                    curr_comp_tensor @ contribution.to(curr_comp_tensor.device)
-                )
-        finally:
-            self._apply_phase_error = previous_apply_phase_error
+            # Compose unitaries
+            contribution = converted_tensor[..., r[0] : (r[-1] + 1), :].clone()
+            converted_tensor[..., r[0] : (r[-1] + 1), :] = (
+                curr_comp_tensor @ contribution.to(curr_comp_tensor.device)
+            )
 
         if not has_batch:
             # If no batch dimension was provided, remove the batch dimension
@@ -750,56 +565,11 @@ class CircuitConverter:
     def _compute_tensor(self, comp: AComponent) -> torch.Tensor:  # type: ignore[no-redef]
         """Compute tensor for Phase Shifter component.
 
-        Applies phase noise to the phase value before constructing the phase
-        unitary exp(1j * phase). This method is called by to_tensor() for each
-        phase shifter in the circuit.
-
-        Phase Noise Processing (in order):
-            1. **Read Phase**: Retrieve the phase value from the PS component.
-               This can be a constant, a trainable parameter, or an input-driven
-               parameter. The value is converted to real dtype for noise application.
-
-            2. **Quantization (phase_imprecision)**:
-               If self._phase_imprecision > 0.0, apply deterministic STE
-               quantization. The commanded phase is rounded to the nearest
-               multiple of ``phase_imprecision`` with
-               ``torch.round(phase / phase_imprecision) * phase_imprecision``,
-               while gradients pass through the original commanded phase
-               unchanged. This models finite phase resolution in hardware.
-               It is not truncation. For example, ``pi / 8`` with a
-               ``pi / 4`` imprecision is exactly half a step, and
-               ``torch.round(0.5)`` sends it to ``0``.
-
-            3. **Perturbation (phase_error)**:
-               If self._apply_phase_error and self._phase_error > 0.0, draw
-               fresh ``Uniform(-phase_error, phase_error)`` samples and add them
-               to the quantized phase. If quantization is inactive, samples are
-               added to the commanded phase. Samples are drawn using
-               ``torch.empty_like(phase)`` to respect the phase tensor's device,
-               dtype, and batch shape. Perturbations do NOT require gradients;
-               they are stochastic noise, not learnable. Optimization updates
-               the commanded phase, not the noise.
-
-            4. **Complex Conversion**: Convert the noisy phase to the complex
-               phase unitary exp(1j * phase).
-
-        Gradient Flow:
-            - Quantization: STE ensures gradients bypass the quantization step
-            - Perturbations: .detach() on phase_error ensures no gradients flow
-              through noise samples, only through the commanded phase
-            - Result: dL/d(phase_commanded) is well-defined and updates the
-              circuit parameters during backprop
-
-        Device and Dtype Safety:
-            - Perturbations use torch.empty_like(phase) to match device/dtype
-            - Batch handling is automatic via broadcasting
-            - Results are in the converter's configured complex_dtype
-
         Args:
             comp: PS component with phi parameter
 
         Returns:
-            Batched 1x1 phase tensor of shape (batch_size, 1, 1) in complex dtype
+            Batched 1x1 phase tensor of shape (batch_size, 1, 1)
         """
         if comp.param("phi").is_variable:
             param_name = comp.param("phi").name
@@ -818,41 +588,13 @@ class CircuitConverter:
             phase = torch.tensor(
                 comp.param("phi")._value, dtype=self.tensor_fdtype, device=self.device
             )
+        phase = phase.to(self.tensor_cdtype)
 
-        if phase.ndim == 0 and self.batch_size > 1:
-            phase = phase.expand(self.batch_size)
+        if comp._max_error:
+            err = float(comp._max_error) * random.uniform(-1, 1)
+            phase += err
 
-        # Apply finite phase resolution with nearest-grid quantization. This is
-        # not truncation: a phase is mapped to
-        # round(phase / phase_imprecision) * phase_imprecision. torch.round
-        # decides exact half-step ties, so pi/8 with a pi/4 step maps to 0.
-        # The STE keeps gradients attached to the commanded phase.
-        if self._phase_imprecision > 0.0:
-            phase_imprecision = phase.new_tensor(self._phase_imprecision)
-            phase_quantized = torch.round(phase / phase_imprecision) * phase_imprecision
-            # Straight-through estimator: adding a detached delta makes the
-            # forward value equal to phase_quantized, while autograd sees
-            # d phase / d commanded_phase = 1 because the delta is constant.
-            phase = phase + (phase_quantized - phase).detach()
-
-        # Apply stochastic phase perturbation after quantization. Each call
-        # draws fresh Uniform(-phase_error, phase_error) samples. The samples
-        # are noise, not trainable parameters; gradients flow only through the
-        # commanded phase value.
-        component_phase_error = _phase_shifter_max_error(comp)
-        phase_error_half_width = (
-            component_phase_error if component_phase_error > 0.0 else self._phase_error
-        )
-        if self._apply_phase_error and phase_error_half_width > 0.0:
-            # Use torch.empty_like() to ensure perturbations follow the same
-            # device, dtype, and batch structure as the phase tensor.
-            phase_error = torch.empty_like(phase).uniform_(
-                -phase_error_half_width,
-                phase_error_half_width,
-            )
-            phase = phase + phase_error
-
-        unitary_tensor = torch.exp(1j * phase.to(self.tensor_cdtype)).reshape(
+        unitary_tensor = torch.exp(1j * phase).reshape(
             -1, 1
         )  # reshape so that in any case, we have 2 dim
         return unitary_tensor.unsqueeze(-1)  # to change shape of tensor to (b, 1, 1)

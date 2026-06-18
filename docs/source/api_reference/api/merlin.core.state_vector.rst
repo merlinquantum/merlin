@@ -38,9 +38,7 @@ Constructors
 
 **from_tensor** — wrap a real or complex tensor with Fock metadata.
 Real data is auto-promoted to complex. By default, the last dimension must match
-the Fock basis size :math:`\binom{n\_modes + n\_photons - 1}{n\_photons}`.
-The raw amplitudes are stored as provided; ``StateVector`` normalizes lazily
-when a normalized dense view or layer execution needs it:
+the Fock basis size :math:`\binom{n\_modes + n\_photons - 1}{n\_photons}`:
 
 .. code-block:: python
 
@@ -146,9 +144,6 @@ the stored encoding:
        encoding=EncodingSpace.DUAL_RAIL,
    )
    sv.logical_to_fock_map()  # {(0, 0): 2, (0, 1): 3, (1, 0): 5, (1, 1): 6}
-
-See :doc:`/user_guide/encoding_space` for full worked examples that compare
-logical labels, Fock occupation tuples, and tensor indices.
 
 
 Amplitude lookup

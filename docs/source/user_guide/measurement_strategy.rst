@@ -122,9 +122,8 @@ derives a photon loss transform and a detector transform that remaps raw Fock-st
 outcomes defined by the experiment. The photon loss mapping is applied first. Then, the detector mapping is applied. Lastly, the
 measurement strategy converts the distribution into classical features. As a consequence:
 
-* ``MeasurementStrategy.probs()`` transparently works with any noise model and detector setup.
-* ``MeasurementStrategy.mode_expectations()`` works with detector setup, but active noise models require ``MeasurementStrategy.probs()``.
-* ``MeasurementStrategy.amplitudes()`` requires direct access to the complex amplitudes and therefore **cannot** be used when a noise model or custom detectors are defined. Active noise models raise a ``ValueError``; custom detectors raise a ``RuntimeError``.
+* ``MeasurementStrategy.probs()`` and ``MeasurementStrategy.mode_expectations()`` transparently work with any noise model and detector setup.
+* ``MeasurementStrategy.amplitudes()`` requires direct access to the complex amplitudes and therefore **cannot** be used when a noise model or custom detectors are defined (the layer will raise a ``RuntimeError``).
 
 Computation space and grouping
 ============================================
@@ -133,14 +132,11 @@ The MeasurementStrategy now gets two arguments in input.
 
 * ``computation_space``: A ``ComputationSpace`` object that defines the output computation space.
 
-  This is the supported way to define the computation space. The legacy
-  ``no_bunching`` flag is removed in version 0.4.
+  It will be the only way to define the computation space as the ``no_bunching`` flag is deprecated.
   
-  .. warning:: *Removed in version 0.4:*
-     The ``no_bunching`` flag is removed in version 0.4. Use
-     ``MeasurementStrategy.probs(computation_space=ComputationSpace.UNBUNCHED)``
-     or ``MeasurementStrategy.probs(computation_space=ComputationSpace.FOCK)``
-     instead. See :doc:`/user_guide/migration_guide`.
+  .. warning:: *Deprecated since version 0.3:*
+   The use of the ``no_bunching`` flag  is deprecated and is removed since version 0.3.0.
+   Use the ``computation_space`` flag inside ``measurement_strategy`` instead. See :doc:`/user_guide/migration_guide`.
 
 
 * ``grouping``: The grouping strategy to use between ``LexGrouping`` and ``ModGrouping``. By default, no grouping is applied.

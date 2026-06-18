@@ -206,6 +206,7 @@ def _make_layer(case: Case) -> QuantumLayer:
         circuit=circuit,
         n_photons=case.n_photons,
         measurement_strategy=MeasurementStrategy.amplitudes(ComputationSpace.FOCK),
+        amplitude_encoding=True,
         trainable_parameters=["phi"],
         input_parameters=[],
         dtype=torch.float32,
@@ -283,20 +284,14 @@ def _run_case(
     with ZeroAllocationRecorder(basis_size, layer.output_size) as recorder:
         for run_index in range(warmups + runs):
             start = time.perf_counter()
-            output = layer(
-                amplitude_input.to(dtype=torch.complex128),
-                simultaneous_processes=case.chunk_size,
-            )
+            output = layer(amplitude_input, simultaneous_processes=case.chunk_size)
             elapsed = time.perf_counter() - start
             if run_index >= warmups:
                 times.append(elapsed)
             del output
             gc.collect()
 
-    output = layer(
-        amplitude_input.to(dtype=torch.complex128),
-        simultaneous_processes=case.chunk_size,
-    )
+    output = layer(amplitude_input, simultaneous_processes=case.chunk_size)
     rss_kib = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
 
     result = {
@@ -391,12 +386,8 @@ def _run_encoding_api_check(runs: int, warmups: int) -> dict[str, Any]:
             chunk_size=chunk_size,
         )
     )
-    api_output = layer(
-        api_state.to(dtype=torch.complex128), simultaneous_processes=chunk_size
-    )
-    manual_output = layer(
-        manual_tensor.to(dtype=torch.complex128), simultaneous_processes=chunk_size
-    )
+    api_output = layer(api_state, simultaneous_processes=chunk_size)
+    manual_output = layer(manual_tensor, simultaneous_processes=chunk_size)
     output_diff = (api_output - manual_output).abs()
     probability_diff = (api_output.abs().pow(2) - manual_output.abs().pow(2)).abs()
 
@@ -422,16 +413,12 @@ def _run_encoding_api_check(runs: int, warmups: int) -> dict[str, Any]:
     api_forward_mean_s, api_forward_times_s = _mean_timed_call(
         runs,
         warmups,
-        lambda: layer(
-            api_state.to(dtype=torch.complex128), simultaneous_processes=chunk_size
-        ),
+        lambda: layer(api_state, simultaneous_processes=chunk_size),
     )
     manual_forward_mean_s, manual_forward_times_s = _mean_timed_call(
         runs,
         warmups,
-        lambda: layer(
-            manual_tensor.to(dtype=torch.complex128), simultaneous_processes=chunk_size
-        ),
+        lambda: layer(manual_tensor, simultaneous_processes=chunk_size),
     )
 
     return {
@@ -516,11 +503,9 @@ def main() -> int:
         "platform": platform.platform(),
         "torch": torch.__version__,
         "pid": os.getpid(),
-        "encoding_api_check": (
-            None
-            if args.no_encoding_api_check
-            else _run_encoding_api_check(args.runs, args.warmups)
-        ),
+        "encoding_api_check": None
+        if args.no_encoding_api_check
+        else _run_encoding_api_check(args.runs, args.warmups),
         "cases": [
             _run_case(
                 case,
