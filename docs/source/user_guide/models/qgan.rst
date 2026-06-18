@@ -87,6 +87,13 @@ Although the :class:`~merlin.models.photonic_generator.PhotonicGenerator`'s outp
 
 For more information on the specifications of these objects, please consult the api: :doc:`/api_reference/api/merlin.models.photonic_generator`.
 
+User recommendations and limitations
+------------------------------------
+
+- When choosing the size of the circuits in the quantum layers that form the photonic generator, follow the same guidelines as for other MerLin circuits. Further information on limitations on number of photons and modes can be found `here <https://merlinquantum.ai/performance/index.html#pushing-the-h100-to-its-limits>`_.  
+- As a rule of thumb, when choosing the number of generator heads for patch generaton through parameter 'count', we recommend that the total number of pixels of the image (or size of the data) should be lower or equal to the number of generator heads times the output space size of each quantum circuit.
+- For images, we also recommend making sure that the patches are at least of size 2x2 pixels.
+
 Tutorial
 ----------------
 A tutorial on the use of the :class:`~merlin.models.photonic_generator.PhotonicGenerator` to create a photonic QGAN is available by clicking on the next window.
@@ -94,3 +101,19 @@ A tutorial on the use of the :class:`~merlin.models.photonic_generator.PhotonicG
 .. merlin-gallery::
    :data: _data/galleries/user_guide/models/qgan_notebook.json
    :columns: 2
+
+Citation
+--------
+
+.. code-block:: bibtex
+
+   @article{sedrakyan2025photonicqgan,
+     title={Photonic quantum generative adversarial networks for classical data},
+     author={Sedrakyan, Tigran and Salavrakos, Alexia},
+     journal={Optica Quantum},
+     volume={2},
+     number={6},
+     pages={458--467},
+     year={2025},
+     doi={10.1364/OPTICAQ.530346}
+   }
