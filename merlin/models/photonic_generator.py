@@ -490,12 +490,8 @@ class PhotonicGenerator(nn.Module):
         else:
             max_count = None
         if max_count is not None:
-            if isinstance(layers, Sequence):
-                head_count = len(layers)
-                total_output_size = sum(layer._output_size for layer in layers)
-            else:
-                head_count = count if count is not None else 1
-                total_output_size = layers._output_size * head_count
+            head_count = len(validated_layers)
+            total_output_size = sum(layer.output_size for layer in validated_layers)
             if head_count > max_count:
                 raise ValueError(
                     f"Number of heads ({head_count}) must not exceed data size "
