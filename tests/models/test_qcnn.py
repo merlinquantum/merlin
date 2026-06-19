@@ -790,3 +790,7 @@ def test_qcnn_state_dict_round_trip_with_export_config():
         restored_logits = restored_qcnn(x)
 
     assert torch.allclose(restored_logits, expected_logits, atol=1e-6, rtol=1e-6)
+
+def test_qcnn_input_shape_warning():
+    with pytest.warns(UserWarning, match="Too many dimensions for QCNN, the program may crash"):
+        QCNNClassifier((30, 30), 3)
