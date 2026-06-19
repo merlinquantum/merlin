@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import warnings
 from dataclasses import dataclass
 from enum import Enum
 
@@ -13,7 +14,7 @@ from ..algorithms import QuantumLayer
 from ..core import ComputationSpace, StateVector
 from ..core.partial_measurement import PartialMeasurement
 from ..measurement import MeasurementStrategy
-import warnings
+
 
 class QCNNClassifier(torch.nn.Module):
     """Quantum convolutional neural network classifier.
@@ -145,7 +146,7 @@ class QCNNClassifier(torch.nn.Module):
             warnings.warn(
                 "Too many dimensions for QCNN, the program may crash",
                 UserWarning,
-                stacklevel=2
+                stacklevel=2,
             )
 
     @property
