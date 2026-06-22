@@ -2,7 +2,7 @@
 Quantum CNN (QCNN) Scaling Study
 ====================================
 
-This page details the empirical complexity laws and scalability constraints of 
+This page details the empirical complexities and scalability constraints of 
 the Quantum Convolutional Neural Network (QCNN) implementation in MerLin.
 
 Complexity and Scaling
@@ -40,13 +40,13 @@ Running the Benchmark Study
 ---------------------------
 
 To reproduce the scaling study or evaluate performance updates under this 
-subsystem, navigate to the ``merlin`` environment and execute the following 
+subsystem, navigate to the ``merlin``repository and execute the following 
 benchmark pipeline:
 
 .. code-block:: bash
 
     python -m benchmarks.QCNN_scaling_study_benchmark
-    python -m docs.source.quantum_expert_area.input_shape_logs.scaling_study_graphs
+    python -m benchmarks.scaling_study_graphs
 
 ----------------
 

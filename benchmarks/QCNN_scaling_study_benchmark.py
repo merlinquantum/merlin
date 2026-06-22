@@ -68,7 +68,7 @@ with open(csv_filename, mode='w', newline='') as file:
             
         except Exception as e:
             writer.writerow([batch_size, img_h, "N/A", "N/A", "N/A", "N/A", f"FAILED: {type(e).__name__}"])
-            print(f"ÉCHEC ({type(e).__name__})")
+            print(f"ERROR ({type(e).__name__})")
             #Here we stop the program to prevent it from crashing.
             if batch_size == phase2_batch:
                 print("STOP")
