@@ -112,6 +112,15 @@ Compatibility
 
 Migration guide
 ----------------------------------------
+
+.. toctree::
+   :hidden:
+   :maxdepth: 1
+
+   migration_guide
+
+Hardware aware design
+----------------------------------------
 .. merlin-gallery::
    :data: _data/galleries/user_guide/migration.json
    :columns: 2
@@ -121,4 +130,4 @@ Migration guide
    :hidden:
    :maxdepth: 1
 
-   migration_guide
+   hardware_design_checklist
