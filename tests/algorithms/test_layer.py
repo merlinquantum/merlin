@@ -3226,3 +3226,36 @@ def test_quantum_layer_experiment_input_state_overrides_without_error():
             measurement_strategy=ML.MeasurementStrategy.probs(),
         )
         assert layer.n_photons == 1
+
+
+
+def test_memrsistive_statevector_input_batched():
+    def update_rule(state: torch.Tensor, output: torch.Tensor):
+        return state + torch.vstack([output[0, 0]] * state.size(0)).squeeze(
+            dim=0
+        )
+
+    circ = ML.CircuitBuilder(n_modes=3)
+    circ.add_entangling_layer()
+    circ.add_memristive_ps(mode=0, update_rule=update_rule, initial_state=0)
+    circ.add_entangling_layer()
+    #circ.add_angle_encoding(modes=[0, 1])
+
+    ql = ML.QuantumLayer(
+        builder=circ,
+        n_photons=1,
+        measurement_strategy=ML.MeasurementStrategy.probs(
+            computation_space=ML.ComputationSpace.FOCK
+        ),
+    )
+    ql.reset(batch_size=2)
+
+    input = torch.tensor([[1, 0,0],[0,1, 0]],dtype=torch.complex64)
+
+    output=ql(input)
+
+    print(output)
+
+    print(ql.memristive_state)
+    print(ql.memristive_history)
+    assert False

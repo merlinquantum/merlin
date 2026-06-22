@@ -996,17 +996,30 @@ class ComputationProcess(AbstractComputationProcess):
                 "Noisy simulations with source noise can only call the `compute` and `compute_with_keys` methods to compute probabilities"
             )
         prepared_state = self._prepare_superposition_support()
-        unitary = self.converter.to_tensor(
-            *parameters,
-            memristive_current_state=(
+        memristive_current_state=(
                 [] if memristive_current_state is None else memristive_current_state
-            ),
-        )
-        _keys_out, final_amplitudes = self._compute_chunked_superposition(
-            prepared_state,
-            unitary if unitary.dim() == 3 else unitary.unsqueeze(0),
-            simultaneous_processes=simultaneous_processes,
-        )
+            )
+        if prepared_state.batch_size>1 and (not (memristive_current_state == [])):
+            unitaries=[self.converter.to_tensor(
+                *parameters,
+                memristive_current_state=[torch.tensor(memristor[index]) for memristor in memristive_current_state],
+            ) for index in range(prepared_state.batch_size)]
+            #TODO COMPLETE
+            _keys_out, final_amplitudes = self._compute_chunked_superposition(
+                prepared_state,
+                unitary if unitary.dim() == 3 else unitary.unsqueeze(0),
+                simultaneous_processes=simultaneous_processes,
+            )
+        else:
+            unitary = self.converter.to_tensor(
+                *parameters,
+                memristive_current_state=memristive_current_state,
+            )
+            _keys_out, final_amplitudes = self._compute_chunked_superposition(
+                prepared_state,
+                unitary if unitary.dim() == 3 else unitary.unsqueeze(0),
+                simultaneous_processes=simultaneous_processes,
+            )
 
         if final_amplitudes.shape[0] == 1:
             final_amplitudes = final_amplitudes.squeeze(0)
