@@ -1002,14 +1002,31 @@ class ComputationProcess(AbstractComputationProcess):
         if prepared_state.batch_size>1 and (not (memristive_current_state == [])):
             unitaries=[self.converter.to_tensor(
                 *parameters,
-                memristive_current_state=[torch.tensor(memristor[index]) for memristor in memristive_current_state],
+                memristive_current_state=[memristor[index] for memristor in memristive_current_state],
             ) for index in range(prepared_state.batch_size)]
-            #TODO COMPLETE
-            _keys_out, final_amplitudes = self._compute_chunked_superposition(
-                prepared_state,
-                unitary if unitary.dim() == 3 else unitary.unsqueeze(0),
-                simultaneous_processes=simultaneous_processes,
-            )
+            keys_out,final_amplitudes=None,[]
+            for i,unitary in enumerate(unitaries):
+                _keys, amplitudes = self._compute_chunked_superposition(
+                    _SuperpositionSupport(prepared_state.basis_indices,coefficients=prepared_state.coefficients[i].unsqueeze(0),basis_size=prepared_state.basis_size),
+                    unitary if unitary.dim() == 3 else unitary.unsqueeze(0),
+                    simultaneous_processes=simultaneous_processes,
+                )
+                amplitudes=amplitudes.squeeze()
+                if keys_out is None:
+                    keys_out = _keys
+                    final_amplitudes.append(amplitudes)
+                else:
+                    # Reorder amplitudes to match the reference ordering
+                    key_to_index = {key: i for i, key in enumerate(_keys)}
+
+                    reordered = torch.empty_like(final_amplitudes[0])
+
+                    for target_idx, key in enumerate(keys_out):
+                        reordered[target_idx] = amplitudes[key_to_index[key]]
+
+                    final_amplitudes.append(reordered)
+            
+            final_amplitudes = torch.stack(final_amplitudes, dim=0)
         else:
             unitary = self.converter.to_tensor(
                 *parameters,
