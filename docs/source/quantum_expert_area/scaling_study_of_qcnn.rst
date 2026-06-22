@@ -40,7 +40,7 @@ Running the Benchmark Study
 ---------------------------
 
 To reproduce the scaling study or evaluate performance updates under this 
-subsystem, navigate to the ``merlin``repository and execute the following 
+subsystem, navigate to the ``merlin`` repository and execute the following 
 benchmark pipeline:
 
 .. code-block:: bash
