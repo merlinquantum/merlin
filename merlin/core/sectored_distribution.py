@@ -409,9 +409,10 @@ def clean_sectored_distribution(dist: SectoredDistribution) -> SectoredDistribut
                     number_of_photons_in_state
                 ].index(key)
 
-                sectors[number_of_photons_in_state][..., column_in_new_tensor] = (
-                    sectors[number_of_photons_in_state][..., column_in_new_tensor]
-                    + (sector_to_fix.tensor[..., col_index_in_previous_sector])
+                sectors[number_of_photons_in_state][
+                    ..., column_in_new_tensor
+                ] = sectors[number_of_photons_in_state][..., column_in_new_tensor] + (
+                    sector_to_fix.tensor[..., col_index_in_previous_sector]
                 )
 
         else:
@@ -461,3 +462,35 @@ def clean_sectored_distribution(dist: SectoredDistribution) -> SectoredDistribut
     )
 
     return SectoredDistribution(sectors=sectors_to_return)
+
+
+def stack_sectored_distributions(
+    dists: list[SectoredDistribution],
+) -> SectoredDistribution:
+    if not dists:
+        raise ValueError("Empty list")
+
+    # Use first distribution as reference
+    photon_numbers = sorted(dists[0]._photon_map.keys())
+
+    sectors = []
+
+    for n_photons in photon_numbers:
+        ref_sector = dists[0].get_sector(n_photons)
+
+        stacked_tensor = torch.stack(
+            [dist.get_sector(n_photons).tensor for dist in dists],
+            dim=0,
+        )
+
+        sectors.append(
+            SectorResult(
+                tensor=stacked_tensor,
+                n_modes=ref_sector.n_modes,
+                n_photons=ref_sector.n_photons,
+                computation_space=ref_sector.computation_space,
+                keys=ref_sector.keys,
+            )
+        )
+
+    return SectoredDistribution(tuple(sectors))

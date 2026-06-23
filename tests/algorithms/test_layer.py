@@ -3316,6 +3316,7 @@ def test_memrsistive_amplitude_input_batched_with_noise():
     circ.add_memristive_ps(mode=0, update_rule=update_rule, initial_state=0)
     circ.add_entangling_layer()
 
+    # Both source and phase
     ql = ML.QuantumLayer(
         builder=circ,
         n_photons=1,
@@ -3336,6 +3337,68 @@ def test_memrsistive_amplitude_input_batched_with_noise():
 
     output = ql(input)
 
+    assert output.shape == (2, 10)
+    assert not ql.memristive_state[0][0] == ql.memristive_state[0][1]
+    assert ql.memristive_history[0][0][0] == ql.memristive_history[0][0][1]
+
+    input = torch.tensor([[1, 0, 0], [1, 0, 0]], dtype=torch.complex64)
+
+    output = ql(input)
+
+    assert not torch.allclose(output[0], output[1])
+
+    # Source noise only
+    ql = ML.QuantumLayer(
+        builder=circ,
+        n_photons=1,
+        measurement_strategy=ML.MeasurementStrategy.probs(
+            computation_space=ML.ComputationSpace.FOCK
+        ),
+        noise=pcvl.NoiseModel(
+            indistinguishability=0.7,
+            g2=0.1,
+        ),
+    )
+    ql.reset(batch_size=2)
+
+    input = torch.tensor([[1, 0, 0], [0, 1, 0]], dtype=torch.complex64)
+
+    output = ql(input)
+
+    assert output.shape == (2, 9)
+    assert not ql.memristive_state[0][0] == ql.memristive_state[0][1]
+    assert ql.memristive_history[0][0][0] == ql.memristive_history[0][0][1]
+
+    input = torch.tensor([[1, 0, 0], [1, 0, 0]], dtype=torch.complex64)
+
+    output = ql(input)
+
+    assert not torch.allclose(output[0], output[1])
+
+    # Phase noise only
+    ql = ML.QuantumLayer(
+        builder=circ,
+        n_photons=1,
+        measurement_strategy=ML.MeasurementStrategy.probs(
+            computation_space=ML.ComputationSpace.FOCK
+        ),
+        noise=pcvl.NoiseModel(
+            phase_error=0.1,
+            phase_imprecision=0.1,
+        ),
+    )
+    ql.reset(batch_size=2)
+
+    input = torch.tensor([[1, 0, 0], [0, 1, 0]], dtype=torch.complex64)
+
+    output = ql(input)
+
     assert output.shape == (2, 3)
     assert not ql.memristive_state[0][0] == ql.memristive_state[0][1]
     assert ql.memristive_history[0][0][0] == ql.memristive_history[0][0][1]
+
+    input = torch.tensor([[1, 0, 0], [1, 0, 0]], dtype=torch.complex64)
+
+    output = ql(input)
+
+    assert not torch.allclose(output[0], output[1])
