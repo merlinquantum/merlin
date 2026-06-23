@@ -1042,9 +1042,7 @@ class ComputationProcess(AbstractComputationProcess):
             for i, unitary in enumerate(unitaries):
                 self.input_state = input_states[i]
                 input_state = self._fixed_input_state_for_compute()
-                _keys, amplitudes = self.simulation_graph.compute(
-                    unitary, input_state
-                )
+                _keys, amplitudes = self.simulation_graph.compute(unitary, input_state)
                 # Flattening the tensor
                 amplitudes = amplitudes.squeeze(dim=0)
                 if keys_out is None:
