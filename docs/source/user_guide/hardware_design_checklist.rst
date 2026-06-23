@@ -3,18 +3,47 @@ Hardware-Aware QML Guidelines with MerLin
 
 This guide outlines the best practices, constraints, and recommended workflows for designing Quantum Machine Learning (QML) models compatible with physical photonic Quantum Processing Units (QPUs).
 
+Design Recommendations
+----------------------
+
+To simplify your workflow, this guide classifies QML design components into three distinct categories based on physical hardware readiness:
+
+1. **Hardware-Oriented Designs (Go)**
+   These features map directly to the physical constraints of the QPU and ensure optimal fidelity.
+   
+   * **Computation Space:** ``ComputationSpace.UNBUNCHED`` or ``ComputationSpace.DUAL_RAIL``.
+   * **State Encoding:** Angle/phase encoding (directly maps to physical phase shifters).
+   * **Input State:** ``BasicState`` initialization (with exactly 1 photon per pair of modes for Dual-Rail).
+   * **Output Strategy:** ``MeasurementStrategy.probs()`` or ``mode_expectations()``.
+   * **Components:** Native Mach-Zehnder Interferometers (MZI), beam splitters, and shallow circuit depths.
+
+2. **Simulation-Only Designs (No-Go on Hardware)**
+   These features work perfectly in software simulation but are physically impossible to execute on current QPUs.
+   
+   * **Output Formats:** Raw amplitudes or ``StateVector`` outputs (due to the destructive nature of physical measurements).
+   * **Computation Space:** ``ComputationSpace.FOCK`` (since physical QPUs do not have photon-number-resolving detectors yet).
+
+3. **Discouraged-but-Possible Designs (Proceed with Caution)**
+   These features can theoretically be sent to hardware but require complex workarounds, scale poorly, or drastically degrade performance.
+   
+   * **State Encoding:** Amplitude encoding (the required arbitrary dense state preparation is not hardware-realistic and creates oversized circuits).
+   * **Input States:** Arbitrary superpositions without a native, hardware-validated state-preparation circuit.
+   * **Circuit Depth:** Very deep simulated architectures (they scale poorly during transpilation and suffer from hardware decoherence).
+
 Computation Spaces
 ------------------
 
 When designing models for physical hardware execution, selecting the appropriate computation space is critical.
 
-* **Recommended:** Use ``ComputationSpace.unbunched`` or ``ComputationSpace.DUAL_RAIL``.
-* **Avoid:** ``ComputationSpace.bunched`` and ``ComputationSpace.FOCK``. Physical photonic QPUs do not natively support bunched states or arbitrary Fock spaces due to hardware limitations.
+* **Recommended:** Use ``ComputationSpace.UNBUNCHED`` or ``ComputationSpace.DUAL_RAIL``.
+* **Avoid:** ``ComputationSpace.FOCK``.
+
+Physical photonic QPUs do not have photon-number-resolving detectors yet.
 
 State Encoding
 --------------
 
-Photonic QPUs do not natively perform amplitude encoding. 
+Since arbitrary dense state preparation is not hardware realistic, algorithms used for encoding take too many resources. We strongly recommend not using it for hardware implementations.
 
 * **Hardware Execution:** Use **angle/phase encoding** as it directly maps to physical phase shifters.
 * **Simulation:** Amplitude encoding remains acceptable for pure simulation workflows but should be avoided for hardware-targeted models.
@@ -26,19 +55,21 @@ Due to the destructive nature of quantum measurements, hardware execution restri
 
 * **Supported:**
   
-  * ``probabilities`` (Full probability distribution)
+  * ``probabilities`` (Full probability distribution derived from output samples)
   * ``mode_expectations`` (Average photon counts per mode)
   * ``sampled counts/probabilities`` (Shot-based measurements)
 
 * **Unsupported:** Raw amplitudes or ``StateVector`` outputs cannot be directly retrieved from physical hardware.
 
+Indeed, we only have shots and can only derive probabilities from photon count output.
+
 Input-State Constraints
 -----------------------
 
-Photonic QPUs natively process ``BasicState`` inputs (e.g., specific photon configurations). 
+Photonic QPUs natively process ``BasicState`` inputs (e.g., specific photon configurations).
 
 .. note::
-   If your pipeline relies on a ``StateVector``, you must implement a state-preparation circuit prior to the main ansatz to convert the state natively on the hardware.
+   If your pipeline relies on a ``StateVector``, you must implement a state-preparation circuit prior to the main ansatz to convert the state natively on the hardware. Avoid arbitrary superposition unless there is a real state preparation path.
 
 Dual-Rail Constraints
 ^^^^^^^^^^^^^^^^^^^^^
@@ -53,14 +84,17 @@ To ensure efficient execution and high fidelity, adhere to the following hardwar
 * **Component Selection:** Favor native photonic components such as Mach-Zehnder Interferometers (MZI), beam splitters, and phase shifters, as they map directly to the QPU's physical architecture.
 * **Circuit Depth:** Avoid unnecessarily deep circuits. Large simulated circuits may scale poorly during hardware compilation (transpilation), leading to suboptimal or inefficient physical implementations on a constrained QPU.
 
-Recommended Architecture Pattern
---------------------------------
+Recommended Pipeline
+--------------------
 
 The standard workflow follows a hybrid classical-quantum-classical pipeline:
 
 1. **Classical Preprocessing:** Normalize and prepare features.
-2. **Quantum Layer:** Inject features using angle encoding into a hardware-optimized ansatz.
-3. **Classical Post-processing:** Bind the output tensor to a classical neural network for final task mapping.
+2. **Angle Encoding:** Inject features using angle encoding into a hardware-optimized ansatz.
+3. **Output Measurement Strategy:** ``MeasurementStrategy.probs(...)`` or ``mode_expectations(...)`` to return output probabilities for each state.
+4. **Classical Post-processing:** Bind the output tensor to a classical neural network for final task mapping.
+5. **Classical ML Algorithm:** Read the output of the ``QuantumLayer`` and process it.
+6. **Train/Inference Separation:** Train the model on a GPU and infer it on a QPU.
 
 Implementation Example
 ----------------------
@@ -69,10 +103,12 @@ Below is a standard hardware-compatible circuit definition using ``merlin`` and 
 
 .. code-block:: python
 
-   import perceval as pcvl
+   import torch
    import torch.nn as nn
-   import merlin as ML
-   from ..builder import CircuitBuilder
+   import perceval as pcvl
+   from merlin import QuantumLayer, LexGrouping
+   from merlin.builder import CircuitBuilder
+   from merlin import ComputationSpace, MeasurementStrategy
 
    # 1. Define the parameterized photonic circuit
    builder = CircuitBuilder(n_modes=6)
@@ -81,20 +117,19 @@ Below is a standard hardware-compatible circuit definition using ``merlin`` and 
    builder.add_rotations(trainable=True, name="theta")             # Extra expressivity
    builder.add_superpositions(depth=1)                            # Fixed mixing layer
 
-   # 2. Instantiate the hardware-aware Quantum Layer
+   # 2. Instantiate the hardware-aware Quantum Layer (Fixed for MerLin v0.4)
    core = QuantumLayer(
-       input_size=4,                                      # Number of classical features
-       Experiment=ComputationSpace.UNBUNCHED,             # UNBUNCHED or DUAL_RAIL for hardware
-       builder=builder,
-       n_photons=3,                                       # Equivalent to input_state = [1, 1, 1, 0, 0, 0]
-       dtype=torch.float32,
-       measurement_strategy=MeasurementStrategy.probs(),  # Hardware-compatible strategy
+      input_size=4,                                      # Number of classical features
+      builder=builder,
+      n_photons=3,                                       # Equivalent to input_state = [1, 0, 1, 0, 1, 0]
+      dtype=torch.float32,
+      measurement_strategy=MeasurementStrategy.probs(computation_space=ComputationSpace.UNBUNCHED),
    )
 
    # 3. Connect the quantum layer to a classical PyTorch network
    model = nn.Sequential(
-       core,
-       LexGrouping(core.output_size, 3),                  # Transforms output to a tensor of shape (B, 3)
+      core,
+      LexGrouping(core.output_size, 3),                  # Transforms output to a tensor of shape (B, 3)
    )
 
 Deployment Workflow
@@ -102,3 +137,31 @@ Deployment Workflow
 
 .. important::
    Always **train the model on a GPU** using quantum simulation to compute gradients efficiently, then **deploy and infer on the QPU** for real-world hardware validation.
+
+Summary of Unsupported or Discouraged Features
+----------------------------------------------
+
+For your first hardware-aware implementation, ensure your pipeline **does not** use any of the following features:
+
+.. list-table:: Hardware Compatibility Summary
+   :widths: 25 35 40
+   :header-rows: 1
+
+   * - Feature
+     - Status
+     - Alternative / Reason
+   * - ``FOCK``
+     - **Unsupported**
+     - QPUs currently lack photon-number-resolving detectors. Use ``UNBUNCHED`` or ``DUAL_RAIL``.
+   * - ``StateVector`` / Raw Amplitudes
+     - **Unsupported**
+     - Physical hardware only yields destructive, shot-based measurements. Use ``MeasurementStrategy.probs()``.
+   * - Amplitude Encoding
+     - **Discouraged**
+     - Arbitrary dense state preparation requires exponential circuit depth, which is not hardware-realistic. Use **angle/phase encoding**.
+   * - Arbitrary Superposition (Input)
+     - **Discouraged**
+     - Hard to prepare natively without a dedicated state-preparation circuit. Stick to ``BasicState`` initialization.
+   * - Deep Simulated Circuits
+     - **Discouraged**
+     - Leads to high error rates and compilation (transpilation) failures due to QPU coherence time limits. Keep circuits shallow.
