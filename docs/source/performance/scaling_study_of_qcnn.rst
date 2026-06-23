@@ -25,6 +25,7 @@ must be observed during configuration:
 * **Batch Size**: The ``batch_size`` can safely be scaled beyond **100**, as its 
   overall impact on performance overhead remains minor.
 * **Input Dimension**: The ``input dimension`` is not capped, however, we recommand
+
 the user to avoid going above **24** if it is possible.
 
 Here are the different graphs representing the scaling:

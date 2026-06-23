@@ -12,7 +12,7 @@ from sklearn.decomposition import PCA, FastICA
 from sklearn.preprocessing import StandardScaler
 
 import merlin
-from merlin.models import ReservoirClassifier
+from merlin.models.reservoir_classifier import ReservoirClassifier
 
 
 def _toy_data():

@@ -38,7 +38,3 @@ Scaling study of QCNN
    :maxdepth: 1
 
    scaling_study_of_qcnn
-
-
-.. merlin-gallery::
-   :data: _data/galleries/quantum_expert/scaling_study.json
