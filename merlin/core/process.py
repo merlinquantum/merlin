@@ -869,7 +869,7 @@ class ComputationProcess(AbstractComputationProcess):
                 ]
                 self.unitary = unitaries
                 input_states = self.input_state
-                output_probs = []
+                output_probs: list[SectoredDistribution] | list[torch.Tensor] = []
 
                 for i, unitary in enumerate(unitaries):
                     self.input_state = input_states[i]
@@ -999,7 +999,8 @@ class ComputationProcess(AbstractComputationProcess):
             ]
             self.unitary = unitaries
             input_states = self.input_state
-            keys_out, final_amplitudes = None, []
+            keys_out: list[tuple[int, ...]] | None = None
+            final_amplitudes: list[SectoredDistribution] | list[torch.Tensor] = []
 
             for i, unitary in enumerate(unitaries):
                 self.input_state = input_states[i]
