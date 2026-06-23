@@ -87,8 +87,6 @@ def test_qcnn_basic_api():
 
     with pytest.raises(TypeError, match="num_classes must have int type"):
         QCNNClassifier(accepted_input_shape, float_num_classes_v2)
-    with pytest.warns(UserWarning, match="Too many dimensions for QCNN, the program may crash"):
-        QCNNClassifier((30, 30), 3)
 
     assert qcnn_classifier.input_shape == accepted_input_shape
     assert qcnn_classifier.num_classes == accepted_num_classes
@@ -104,12 +102,12 @@ def test_qcnn_basic_api():
     )
     with pytest.raises(AttributeError):
         qcnn_classifier_from_list.input_shape = (2, 2)
-    with pytest.warns(UserWarning, match="Too many dimensions for QCNN, the program may crash"):
-        qcnn_classifier_above_former_limit = QCNNClassifier(
-            input_shape_above_former_limit,
-            accepted_num_classes,
-            [QCNNClassifier.QDense()],
-        )
+    
+    qcnn_classifier_above_former_limit = QCNNClassifier(
+        input_shape_above_former_limit,
+        accepted_num_classes,
+        [QCNNClassifier.QDense()],
+    )
     assert (
         qcnn_classifier_above_former_limit.input_shape == input_shape_above_former_limit
     )
@@ -793,6 +791,3 @@ def test_qcnn_state_dict_round_trip_with_export_config():
 
     assert torch.allclose(restored_logits, expected_logits, atol=1e-6, rtol=1e-6)
 
-def test_qcnn_input_shape_warning():
-    with pytest.warns(UserWarning, match="Too many dimensions for QCNN, the program may crash"):
-        QCNNClassifier((30, 30), 3)

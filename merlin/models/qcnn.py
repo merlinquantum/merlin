@@ -142,12 +142,6 @@ class QCNNClassifier(torch.nn.Module):
             self._build_amplitude_basis_indices(),
             persistent=False,
         )
-        if input_shape[0] * input_shape[1] >= 576:
-            warnings.warn(
-                "Too many dimensions for QCNN, the program may crash",
-                UserWarning,
-                stacklevel=2,
-            )
 
     @property
     def input_shape(self) -> tuple[int, int]:

@@ -30,3 +30,15 @@ Models Performance
    :data: _data/galleries/performance/models.json
    :columns: 2
    :contour-color: #5648ED
+
+Scaling study of QCNN
+=========================
+.. toctree::
+   :hidden:
+   :maxdepth: 1
+
+   scaling_study_of_qcnn
+
+
+.. merlin-gallery::
+   :data: _data/galleries/quantum_expert/scaling_study.json

@@ -6,7 +6,7 @@ import psutil
 from merlin.models.qcnn import QCNNClassifier 
 
 
-log_dir = "./docs/source/quantum_expert_area/input_shape_logs/"
+log_dir = "./benchmarks"
 os.makedirs(log_dir, exist_ok=True)
 csv_filename = os.path.join(log_dir, "scaling_study_benchmark.csv")
 
