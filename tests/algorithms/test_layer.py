@@ -3305,6 +3305,12 @@ def test_memrsistive_amplitude_input_batched():
     assert not ql.memristive_state[0][0] == ql.memristive_state[0][1]
     assert ql.memristive_history[0][0][0] == ql.memristive_history[0][0][1]
 
+    input = torch.tensor([[1, 0, 0], [1, 0, 0]], dtype=torch.complex64)
+
+    output = ql(input)
+
+    assert not torch.allclose(output[0], output[1])
+
 
 def test_memrsistive_amplitude_input_batched_with_noise():
     def update_rule(state: torch.Tensor, output: torch.Tensor):
@@ -3327,9 +3333,10 @@ def test_memrsistive_amplitude_input_batched_with_noise():
             brightness=0.9,
             indistinguishability=0.7,
             g2=0.1,
-            phase_error=0.1,
-            phase_imprecision=0.1,
+            phase_error=0.01,
+            phase_imprecision=0.01,
         ),
+        n_phase_error_samples=1,
     )
     ql.reset(batch_size=2)
 
@@ -3383,9 +3390,10 @@ def test_memrsistive_amplitude_input_batched_with_noise():
             computation_space=ML.ComputationSpace.FOCK
         ),
         noise=pcvl.NoiseModel(
-            phase_error=0.1,
-            phase_imprecision=0.1,
+            phase_error=0.01,
+            phase_imprecision=0.01,
         ),
+        n_phase_error_samples=1,
     )
     ql.reset(batch_size=2)
 
