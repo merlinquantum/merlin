@@ -863,6 +863,7 @@ class ComputationProcess(AbstractComputationProcess):
                         memristive_current_state=[
                             memristor[index] for memristor in memristive_current_state
                         ],
+                        apply_phase_error=True,
                     )
                     for index in range(prepared_state.batch_size)
                 ]
@@ -877,9 +878,9 @@ class ComputationProcess(AbstractComputationProcess):
                     )
 
                     if isinstance(probabilities, SectoredDistribution):
-                        for i in range(len(probabilities.sectors)):
-                            probabilities.sectors[i].tensor = probabilities.sectors[
-                                i
+                        for k in range(len(probabilities.sectors)):
+                            probabilities.sectors[k].tensor = probabilities.sectors[
+                                k
                             ].tensor.squeeze(dim=0)
                     else:
                         probabilities = probabilities.squeeze(dim=0)
@@ -1007,8 +1008,8 @@ class ComputationProcess(AbstractComputationProcess):
                         unitary, amplitude_encoding=amplitude_encoding
                     )
                     if isinstance(probs, SectoredDistribution):
-                        for i in range(len(probs.sectors)):
-                            probs.sectors[i].tensor = probs.sectors[i].tensor.squeeze(
+                        for k in range(len(probs.sectors)):
+                            probs.sectors[k].tensor = probs.sectors[k].tensor.squeeze(
                                 dim=0
                             )
                     else:
@@ -1022,9 +1023,9 @@ class ComputationProcess(AbstractComputationProcess):
                     )
                     # Flattening the tensor
                     if isinstance(amplitudes, SectoredDistribution):
-                        for i in range(len(amplitudes.sectors)):
-                            amplitudes.sectors[i].tensor = amplitudes.sectors[
-                                i
+                        for k in range(len(amplitudes.sectors)):
+                            amplitudes.sectors[k].tensor = amplitudes.sectors[
+                                k
                             ].tensor.squeeze(dim=0)
                     else:
                         amplitudes = amplitudes.squeeze(dim=0)
@@ -1156,7 +1157,9 @@ class ComputationProcess(AbstractComputationProcess):
                     unitary if unitary.dim() == 3 else unitary.unsqueeze(0),
                     simultaneous_processes=simultaneous_processes,
                 )
-                amplitudes = amplitudes.squeeze()
+
+                amplitudes = torch.atleast_1d(amplitudes.squeeze())
+
                 if keys_out is None:
                     keys_out = _keys
                     final_amplitudes.append(amplitudes)

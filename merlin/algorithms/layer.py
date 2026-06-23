@@ -1125,12 +1125,12 @@ class QuantumLayer(MerlinModule):
                 raise RuntimeError(
                     "Already ran a smaller batch size: call reset(batch_size=N) before using the layer again"
                 )
-            batch_dim=max(parameter_batch_dim,1)
-            if batch_dim==1 and amplitude_input is not None:
-                if amplitude_input.shape==1:
-                    batch_dim=1
+            batch_dim = max(parameter_batch_dim, 1)
+            if batch_dim == 1 and amplitude_input is not None:
+                if len(amplitude_input.shape) == 1:
+                    batch_dim = 1
                 else:
-                    batch_dim=amplitude_input.shape[0]
+                    batch_dim = amplitude_input.shape[0]
 
             state_dimensions = set()
             for state in self.memristive_state:
@@ -1854,9 +1854,9 @@ class QuantumLayer(MerlinModule):
                 n_photons=self.n_photons,
                 keys=_normalize_sector_keys(self._raw_output_keys),
             )
-            distribution_to_use: SectoredDistribution = SectoredDistribution((
-                sector_result,
-            ))
+            distribution_to_use: SectoredDistribution = SectoredDistribution(
+                (sector_result,)
+            )
         else:
             distribution_to_use: SectoredDistribution = distribution
 
@@ -1910,9 +1910,9 @@ class QuantumLayer(MerlinModule):
                 n_photons=self.n_photons,
                 keys=_normalize_sector_keys(self._raw_output_keys),
             )
-            distribution_to_use: SectoredDistribution = SectoredDistribution((
-                sector_result,
-            ))
+            distribution_to_use: SectoredDistribution = SectoredDistribution(
+                (sector_result,)
+            )
         else:
             distribution_to_use: SectoredDistribution = distribution
 

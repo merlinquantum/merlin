@@ -470,16 +470,28 @@ def stack_sectored_distributions(
     if not dists:
         raise ValueError("Empty list")
 
-    # Use first distribution as reference
-    photon_numbers = sorted(dists[0]._photon_map.keys())
+    all_photon_numbers = sorted(
+        set().union(*(dist._photon_map.keys() for dist in dists))
+    )
 
     sectors = []
 
-    for n_photons in photon_numbers:
-        ref_sector = dists[0].get_sector(n_photons)
+    for n_photons in all_photon_numbers:
+        ref_sector = next(
+            dist.get_sector(n_photons)
+            for dist in dists
+            if n_photons in dist._photon_map
+        )
 
         stacked_tensor = torch.stack(
-            [dist.get_sector(n_photons).tensor for dist in dists],
+            [
+                (
+                    dist.get_sector(n_photons).tensor
+                    if n_photons in dist._photon_map
+                    else torch.zeros_like(ref_sector.tensor)
+                )
+                for dist in dists
+            ],
             dim=0,
         )
 
@@ -487,7 +499,7 @@ def stack_sectored_distributions(
             SectorResult(
                 tensor=stacked_tensor,
                 n_modes=ref_sector.n_modes,
-                n_photons=ref_sector.n_photons,
+                n_photons=n_photons,
                 computation_space=ref_sector.computation_space,
                 keys=ref_sector.keys,
             )
