@@ -27,7 +27,7 @@ Main QuantumLayer implementation
 from __future__ import annotations
 
 import warnings
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, MutableMapping, Sequence
 from contextlib import contextmanager
 from typing import Any, cast
 
@@ -1499,7 +1499,7 @@ class QuantumLayer(MerlinModule):
         # Fatal deprecation is handled by the sanitize_parameters decorator via registry.
         return None
 
-    def to(self, *args, **kwargs):
+    def to(self, *args: Any, **kwargs: Any) -> QuantumLayer:
         """Move the layer and auxiliary transforms to a new device or dtype.
 
         Parameters
@@ -2212,7 +2212,12 @@ class QuantumLayer(MerlinModule):
                 else:
                     self.memristive_history[index] = []
 
-    def _save_to_state_dict(self, destination, prefix, keep_vars):
+    def _save_to_state_dict(
+        self,
+        destination: MutableMapping[str, Any],
+        prefix: str,
+        keep_vars: bool,
+    ) -> None:
         """Save module parameters plus memristive runtime state when present."""
         super()._save_to_state_dict(destination, prefix, keep_vars)
 
@@ -2227,14 +2232,14 @@ class QuantumLayer(MerlinModule):
 
     def _load_from_state_dict(
         self,
-        state_dict,
-        prefix,
-        local_metadata,
-        strict,
-        missing_keys,
-        unexpected_keys,
-        error_msgs,
-    ):
+        state_dict: MutableMapping[str, Any],
+        prefix: str,
+        local_metadata: dict[str, Any],
+        strict: bool,
+        missing_keys: list[str],
+        unexpected_keys: list[str],
+        error_msgs: list[str],
+    ) -> None:
         """Load module parameters plus memristive runtime state when present."""
         memristive_state_key = prefix + "_memristive_state"
         memristive_history_key = prefix + "_memristive_history"
