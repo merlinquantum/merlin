@@ -25,7 +25,7 @@ must be observed during configuration:
 * **Batch Size**: The ``batch_size`` can safely be scaled beyond **100**, as its 
   overall impact on performance overhead remains minor.
 * **Input Dimension**: The ``input dimension`` is not capped, however, we recommand
-to the user to avoid going above **24** if it is possible.
+the user to avoid going above **24** if it is possible.
 
 Here are the different graphs representing the scaling:
 
@@ -50,4 +50,5 @@ benchmark pipeline:
 
 ----------------
 
-For structural architecture details and QCNN layer signatures, see the internal expert documentation section: :mod:`merlin.models.qcnn`. See also: :class:`merlin.models.qcnn.QCNNClassifier`
+For structural architecture details and QCNN layer signatures, see the internal expert documentation section: :mod:`merlin.models.qcnn`. 
+See also: :class:`merlin.models.qcnn.QCNNClassifier`

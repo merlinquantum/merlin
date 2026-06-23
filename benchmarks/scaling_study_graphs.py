@@ -2,9 +2,9 @@
 this documents process the data in file ./benchmarks/scaling_study_benchmark.csv
 
 and plot them into 6 different graphs, to see how the wcnn model scales in term of :
+- Runtime
+- footprint
 - RAM
-- memory footprint
-- number of parameters.
 
 graphs are saved on : ./docs/source/_static/img/graph_scaling_study.png
 """
@@ -12,7 +12,6 @@ graphs are saved on : ./docs/source/_static/img/graph_scaling_study.png
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
-import os
 
 
 csv_filename = "benchmarks/scaling_study_benchmark.csv"

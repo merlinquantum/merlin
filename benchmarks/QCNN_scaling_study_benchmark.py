@@ -28,7 +28,7 @@ with open(csv_filename, mode='w', newline='') as file:
     writer = csv.writer(file)
     writer.writerow(["batch_size", "image_height", "num_parameters", "peak_memory_mb", "init_time_sec", "forward_backward_time_sec", "status"])
 
-    print(f"Begining of the benchmark. Logs in {csv_filename}")
+    print(f"Beginning of the benchmark. Logs in {csv_filename}")
     
     for batch_size, img_h in experiments:
         input_size = (img_h, img_h)
