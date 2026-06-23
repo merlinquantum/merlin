@@ -1854,9 +1854,9 @@ class QuantumLayer(MerlinModule):
                 n_photons=self.n_photons,
                 keys=_normalize_sector_keys(self._raw_output_keys),
             )
-            distribution_to_use: SectoredDistribution = SectoredDistribution(
-                (sector_result,)
-            )
+            distribution_to_use: SectoredDistribution = SectoredDistribution((
+                sector_result,
+            ))
         else:
             distribution_to_use: SectoredDistribution = distribution
 
@@ -1910,9 +1910,9 @@ class QuantumLayer(MerlinModule):
                 n_photons=self.n_photons,
                 keys=_normalize_sector_keys(self._raw_output_keys),
             )
-            distribution_to_use: SectoredDistribution = SectoredDistribution(
-                (sector_result,)
-            )
+            distribution_to_use: SectoredDistribution = SectoredDistribution((
+                sector_result,
+            ))
         else:
             distribution_to_use: SectoredDistribution = distribution
 
