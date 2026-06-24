@@ -61,7 +61,17 @@ Due to the destructive nature of quantum measurements, hardware execution restri
 
 * **Unsupported:** Raw amplitudes or ``StateVector`` outputs cannot be directly retrieved from physical hardware.
 
-Indeed, we only have shots and can only derive probabilities from photon count output.
+Understanding Shot-Based Execution
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Physical QPUs cannot output raw amplitudes or a ``StateVector``. Due to the destructive nature of quantum measurement, a single execution of a circuit yields only a single classical outcome (a sample). 
+
+To compute expectations or output probabilities, the hardware must physically prepare, execute, and measure the exact same quantum circuit repeatedly. Each independent repetition is called a **shot**. By accumulating a large number of shots, we can reconstruct the underlying probability distribution of the possible output states.
+
+**Hardware Realities to Consider:**
+
+* **Photon Loss:** Physical components are imperfect. During execution, photons can be lost before reaching the detectors, resulting in invalid or degraded states.
+* **Runtime vs. Accuracy Trade-off:** While a higher number of shots yields a more accurate statistical estimation (reducing shot noise), it linearly increases the physical runtime and execution cost on the QPU. You must find the optimal balance between statistical fidelity and execution time for your specific model.
 
 Input-State Constraints
 -----------------------

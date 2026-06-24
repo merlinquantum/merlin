@@ -23,7 +23,7 @@ Compatibility
 Hardware aware design
 ----------------------------------------
 .. merlin-gallery::
-   :data: _data/galleries/user_guide/migration.json
+   :data: _data/galleries/user_guide/Hardware-aware_design.json
    :columns: 2
    :contour-color: #f2994a
 
