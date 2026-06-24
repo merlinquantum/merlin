@@ -1521,13 +1521,26 @@ def test_local_processor_two_quantum_layers_matches_direct_perceval_probabilitie
     """Local MerlinProcessor execution matches a direct two-layer Perceval run."""
     n_modes = 3
 
-    def make_builder_layer(prefix: str) -> QuantumLayer:
+    class ReuploadInput(torch.nn.Module):
+        """Duplicate a feature tensor for a second angle-encoding upload."""
+
+        def forward(self, input_tensor: torch.Tensor) -> torch.Tensor:
+            return torch.cat((input_tensor, input_tensor), dim=-1)
+
+    def make_builder_layer(prefixes: Sequence[str]) -> QuantumLayer:
         builder = CircuitBuilder(n_modes=n_modes)
-        builder.add_entangling_layer(trainable=False, name=f"{prefix}_pre")
-        builder.add_angle_encoding(modes=list(range(n_modes)), name=prefix)
-        builder.add_entangling_layer(trainable=False, name=f"{prefix}_post")
+        builder.add_entangling_layer(trainable=False, name=f"{prefixes[0]}_pre")
+        for index, prefix in enumerate(prefixes):
+            builder.add_angle_encoding(modes=list(range(n_modes)), name=prefix)
+            entangler_name = (
+                f"{prefix}_post" if index == len(prefixes) - 1 else f"{prefix}_mid"
+            )
+            builder.add_entangling_layer(
+                trainable=False,
+                name=entangler_name,
+            )
         return QuantumLayer(
-            input_size=n_modes,
+            input_size=n_modes * len(prefixes),
             builder=builder,
             input_state=[1, 0, 0],
             measurement_strategy=MeasurementStrategy.probs(
@@ -1536,29 +1549,30 @@ def test_local_processor_two_quantum_layers_matches_direct_perceval_probabilitie
             dtype=torch.float64,
         ).eval()
 
-    def make_builder_equivalent_perceval_circuit(prefix: str) -> pcvl.Circuit:
+    def make_builder_equivalent_perceval_circuit(
+        prefixes: Sequence[str],
+    ) -> pcvl.Circuit:
         def fixed_mzi(_index: int) -> pcvl.Circuit:
             return pcvl.BS() // pcvl.PS(0.0) // pcvl.BS() // pcvl.PS(0.0)
 
+        def add_fixed_entangler(circuit: pcvl.Circuit) -> None:
+            circuit.add(
+                0,
+                pcvl.GenericInterferometer(
+                    n_modes,
+                    fixed_mzi,
+                    shape=pcvl.InterferometerShape.RECTANGLE,
+                ),
+            )
+
         circuit = pcvl.Circuit(n_modes)
-        circuit.add(
-            0,
-            pcvl.GenericInterferometer(
-                n_modes,
-                fixed_mzi,
-                shape=pcvl.InterferometerShape.RECTANGLE,
-            ),
-        )
-        for mode in range(n_modes):
-            circuit.add(mode, pcvl.PS(pcvl.P(f"{prefix}{mode + 1}")))
-        circuit.add(
-            0,
-            pcvl.GenericInterferometer(
-                n_modes,
-                fixed_mzi,
-                shape=pcvl.InterferometerShape.RECTANGLE,
-            ),
-        )
+        add_fixed_entangler(circuit)
+        parameter_index = 1
+        for prefix in prefixes:
+            for mode in range(n_modes):
+                circuit.add(mode, pcvl.PS(pcvl.P(f"{prefix}{parameter_index}")))
+                parameter_index += 1
+            add_fixed_entangler(circuit)
         return circuit
 
     def run_perceval_probabilities(
@@ -1589,21 +1603,35 @@ def test_local_processor_two_quantum_layers_matches_direct_perceval_probabilitie
                 output[row_index, state_to_index[str(state)]] = float(probability)
         return output
 
-    first_circuit = make_builder_equivalent_perceval_circuit("a")
-    second_circuit = make_builder_equivalent_perceval_circuit("b")
-    first_layer = make_builder_layer("a")
-    second_layer = make_builder_layer("b")
-    model = torch.nn.Sequential(first_layer, second_layer).eval()
+    first_circuit = make_builder_equivalent_perceval_circuit(["a"])
+    second_circuit = make_builder_equivalent_perceval_circuit(["b", "c"])
+    first_layer = make_builder_layer(["a"])
+    second_layer = make_builder_layer(["b", "c"])
+    model = torch.nn.Sequential(first_layer, ReuploadInput(), second_layer).eval()
     input_tensor = torch.tensor(
         [[0.1, 0.7, 1.4], [1.2, 0.3, 0.6], [2.4, 1.1, 0.2]],
         dtype=torch.float64,
     )
 
+    first_param_order = first_layer.export_config()["input_param_order"]
+    second_param_order = second_layer.export_config()["input_param_order"]
+    assert first_param_order == ["a1", "a2", "a3"]
+    assert second_param_order == [
+        "b1",
+        "b2",
+        "b3",
+        "c4",
+        "c5",
+        "c6",
+    ]
+    assert len(second_param_order) > len(first_param_order)
+
     first_expected = run_perceval_probabilities(
         first_circuit, ["a1", "a2", "a3"], input_tensor
     )
+    second_input = torch.cat((first_expected, first_expected), dim=-1)
     expected = run_perceval_probabilities(
-        second_circuit, ["b1", "b2", "b3"], first_expected
+        second_circuit, ["b1", "b2", "b3", "c4", "c5", "c6"], second_input
     )
 
     processor = MerlinProcessor(processor=Processor("SLOS"))
