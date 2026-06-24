@@ -1,17 +1,71 @@
 import os
+import sys
 import time
 import csv
 import torch
-import psutil
+import subprocess
+
 from merlin.models.qcnn import QCNNClassifier 
+
+def get_current_ram_mb():
+    """
+    Take the current RAM consumption, regarding computer's os.
+    """
+    pid = os.getpid()
+    
+    # 1. LINUX : direct reading.
+    if sys.platform == "linux":
+        try:
+            with open('/proc/self/status') as f:
+                for line in f:
+                    if line.startswith('VmRSS:'):
+                        return int(line.split()[1]) / 1024.0
+        except FileNotFoundError:
+            pass
+
+    # 2. MACOS : we use ps command.
+    elif sys.platform == "darwin":
+        try:
+            # 'ps -o rss=' Returns the amount of memory in KB on a Mac
+            rss_kb = subprocess.check_output(['ps', '-o', 'rss=', '-p', str(pid)])
+            return int(rss_kb.strip()) / 1024.0
+        except (subprocess.SubprocessError, ValueError):
+            pass
+            
+    # 3. WINDOWS : We directly call the api via ctypes
+    elif sys.platform == "win32":
+        import ctypes
+        
+        # Structure to read memory on windows.
+        class PROCESS_MEMORY_COUNTERS(ctypes.Structure):
+            _fields_ = [
+                ("cb", ctypes.c_ulong),
+                ("PageFaultCount", ctypes.c_ulong),
+                ("PeakWorkingSetSize", ctypes.c_size_t),
+                ("WorkingSetSize", ctypes.c_size_t),
+                ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                ("PagefileUsage", ctypes.c_size_t),
+                ("PeakPagefileUsage", ctypes.c_size_t),
+            ]
+            
+        process_handle = ctypes.windll.kernel32.GetCurrentProcess()
+        counters = PROCESS_MEMORY_COUNTERS()
+        counters.cb = ctypes.sizeof(PROCESS_MEMORY_COUNTERS)
+        
+        if ctypes.windll.psapi.GetProcessMemoryInfo(process_handle, ctypes.byref(counters), ctypes.sizeof(counters)):
+            # WorkingSetSize is in bytes; divide it to get MB
+            return counters.WorkingSetSize / (1024 * 1024)
+
+    return 0.0 # Valeur de repli en cas d'erreur
 
 
 log_dir = "./benchmarks"
 os.makedirs(log_dir, exist_ok=True)
 csv_filename = os.path.join(log_dir, "scaling_study_benchmark.csv")
 
-
-process = psutil.Process(os.getpid())
 
 num_classes = 2
 phase1_height = 4
@@ -54,8 +108,7 @@ with open(csv_filename, mode='w', newline='') as file:
             loss = criterion(logits, y)
             
 
-            memory_bytes = process.memory_info().rss
-            peak_memory_mb = memory_bytes / (1024 * 1024)
+            peak_memory_mb = get_current_ram_mb()
             
             optimizer.zero_grad()
             loss.backward()
