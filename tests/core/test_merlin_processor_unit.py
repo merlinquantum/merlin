@@ -23,6 +23,7 @@ from perceval.runtime.session import ISession
 import merlin.core.merlin_processor as merlin_processor_module
 from merlin.algorithms import QuantumLayer
 from merlin.algorithms.module import MerlinModule
+from merlin.builder.circuit_builder import CircuitBuilder
 from merlin.core.circuit import Circuit
 from merlin.core.computation_space import ComputationSpace
 from merlin.core.merlin_processor import (
@@ -1518,34 +1519,54 @@ def test_run_chunk_local_executes_real_perceval_processor():
 
 def test_local_processor_two_quantum_layers_matches_direct_perceval_probabilities():
     """Local MerlinProcessor execution matches a direct two-layer Perceval run."""
+    n_modes = 3
 
-    def make_phase_circuit(prefix: str, final_theta: float) -> pcvl.Circuit:
-        circuit = pcvl.Circuit(2)
-        circuit.add(0, pcvl.BS.H())
-        circuit.add(0, pcvl.PS(pcvl.P(f"{prefix}1")))
-        circuit.add(1, pcvl.PS(pcvl.P(f"{prefix}2")))
-        circuit.add(0, pcvl.BS(theta=final_theta))
-        return circuit
-
-    def make_phase_layer(circuit: pcvl.Circuit, prefix: str) -> QuantumLayer:
+    def make_builder_layer(prefix: str) -> QuantumLayer:
+        builder = CircuitBuilder(n_modes=n_modes)
+        builder.add_entangling_layer(trainable=False, name=f"{prefix}_pre")
+        builder.add_angle_encoding(modes=list(range(n_modes)), name=prefix)
+        builder.add_entangling_layer(trainable=False, name=f"{prefix}_post")
         return QuantumLayer(
-            input_size=2,
-            circuit=circuit,
-            input_state=[1, 0],
-            trainable_parameters=[],
-            input_parameters=[prefix],
+            input_size=n_modes,
+            builder=builder,
+            input_state=[1, 0, 0],
             measurement_strategy=MeasurementStrategy.probs(
                 computation_space=ComputationSpace.UNBUNCHED,
             ),
             dtype=torch.float64,
         ).eval()
 
+    def make_builder_equivalent_perceval_circuit(prefix: str) -> pcvl.Circuit:
+        def fixed_mzi(_index: int) -> pcvl.Circuit:
+            return pcvl.BS() // pcvl.PS(0.0) // pcvl.BS() // pcvl.PS(0.0)
+
+        circuit = pcvl.Circuit(n_modes)
+        circuit.add(
+            0,
+            pcvl.GenericInterferometer(
+                n_modes,
+                fixed_mzi,
+                shape=pcvl.InterferometerShape.RECTANGLE,
+            ),
+        )
+        for mode in range(n_modes):
+            circuit.add(mode, pcvl.PS(pcvl.P(f"{prefix}{mode + 1}")))
+        circuit.add(
+            0,
+            pcvl.GenericInterferometer(
+                n_modes,
+                fixed_mzi,
+                shape=pcvl.InterferometerShape.RECTANGLE,
+            ),
+        )
+        return circuit
+
     def run_perceval_probabilities(
         circuit: pcvl.Circuit, param_names: Sequence[str], inputs: torch.Tensor
     ) -> torch.Tensor:
         processor = Processor("SLOS")
         processor.set_circuit(circuit.copy())
-        processor.with_input(pcvl.BasicState([1, 0]))
+        processor.with_input(pcvl.BasicState([1, 0, 0]))
 
         sampler = merlin_processor_module.Sampler(
             processor,
@@ -1561,28 +1582,28 @@ def test_local_processor_two_quantum_layers_matches_direct_perceval_probabilitie
             )
 
         raw_results = sampler.probs.execute_sync()
-        output = torch.zeros((inputs.shape[0], 2), dtype=inputs.dtype)
-        state_to_index = {"|1,0>": 0, "|0,1>": 1}
+        output = torch.zeros((inputs.shape[0], n_modes), dtype=inputs.dtype)
+        state_to_index = {"|1,0,0>": 0, "|0,1,0>": 1, "|0,0,1>": 2}
         for row_index, result_item in enumerate(raw_results["results_list"]):
             for state, probability in result_item["results"].items():
                 output[row_index, state_to_index[str(state)]] = float(probability)
         return output
 
-    first_circuit = make_phase_circuit("a", final_theta=0.8)
-    second_circuit = make_phase_circuit("b", final_theta=1.3)
-    first_layer = make_phase_layer(first_circuit, "a")
-    second_layer = make_phase_layer(second_circuit, "b")
+    first_circuit = make_builder_equivalent_perceval_circuit("a")
+    second_circuit = make_builder_equivalent_perceval_circuit("b")
+    first_layer = make_builder_layer("a")
+    second_layer = make_builder_layer("b")
     model = torch.nn.Sequential(first_layer, second_layer).eval()
     input_tensor = torch.tensor(
-        [[0.1, 0.7], [1.2, 0.3], [2.4, 1.1]],
+        [[0.1, 0.7, 1.4], [1.2, 0.3, 0.6], [2.4, 1.1, 0.2]],
         dtype=torch.float64,
     )
 
     first_expected = run_perceval_probabilities(
-        first_circuit, ["a1", "a2"], input_tensor
+        first_circuit, ["a1", "a2", "a3"], input_tensor
     )
     expected = run_perceval_probabilities(
-        second_circuit, ["b1", "b2"], first_expected
+        second_circuit, ["b1", "b2", "b3"], first_expected
     )
 
     processor = MerlinProcessor(processor=Processor("SLOS"))
