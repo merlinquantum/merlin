@@ -21,8 +21,10 @@ from perceval.runtime import AProcessor, Processor, RemoteProcessor
 from perceval.runtime.session import ISession
 
 import merlin.core.merlin_processor as merlin_processor_module
+from merlin.algorithms import QuantumLayer
 from merlin.algorithms.module import MerlinModule
 from merlin.core.circuit import Circuit
+from merlin.core.computation_space import ComputationSpace
 from merlin.core.merlin_processor import (
     BackendCapabilities,
     MerlinProcessor,
@@ -30,6 +32,7 @@ from merlin.core.merlin_processor import (
     ValidatedLayerConfig,
 )
 from merlin.core.state_vector import StateVector
+from merlin.measurement.strategies import MeasurementStrategy
 
 
 class FakeCommand:
@@ -1511,6 +1514,84 @@ def test_run_chunk_local_executes_real_perceval_processor():
     )
 
     torch.testing.assert_close(output, torch.tensor([[1.0, 0.0], [1.0, 0.0]]))
+
+
+def test_local_processor_two_quantum_layers_matches_direct_perceval_probabilities():
+    """Local MerlinProcessor execution matches a direct two-layer Perceval run."""
+
+    def make_phase_circuit(prefix: str, final_theta: float) -> pcvl.Circuit:
+        circuit = pcvl.Circuit(2)
+        circuit.add(0, pcvl.BS.H())
+        circuit.add(0, pcvl.PS(pcvl.P(f"{prefix}1")))
+        circuit.add(1, pcvl.PS(pcvl.P(f"{prefix}2")))
+        circuit.add(0, pcvl.BS(theta=final_theta))
+        return circuit
+
+    def make_phase_layer(circuit: pcvl.Circuit, prefix: str) -> QuantumLayer:
+        return QuantumLayer(
+            input_size=2,
+            circuit=circuit,
+            input_state=[1, 0],
+            trainable_parameters=[],
+            input_parameters=[prefix],
+            measurement_strategy=MeasurementStrategy.probs(
+                computation_space=ComputationSpace.UNBUNCHED,
+            ),
+            dtype=torch.float64,
+        ).eval()
+
+    def run_perceval_probabilities(
+        circuit: pcvl.Circuit, param_names: Sequence[str], inputs: torch.Tensor
+    ) -> torch.Tensor:
+        processor = Processor("SLOS")
+        processor.set_circuit(circuit.copy())
+        processor.with_input(pcvl.BasicState([1, 0]))
+
+        sampler = merlin_processor_module.Sampler(
+            processor,
+            max_shots_per_call=MerlinProcessor.DEFAULT_MAX_SHOTS,
+        )
+        sampler.clear_iterations()
+        input_values = inputs.detach().cpu().numpy()
+        for row in input_values:
+            sampler.add_iteration(
+                circuit_params={
+                    name: float(row[index]) for index, name in enumerate(param_names)
+                }
+            )
+
+        raw_results = sampler.probs.execute_sync()
+        output = torch.zeros((inputs.shape[0], 2), dtype=inputs.dtype)
+        state_to_index = {"|1,0>": 0, "|0,1>": 1}
+        for row_index, result_item in enumerate(raw_results["results_list"]):
+            for state, probability in result_item["results"].items():
+                output[row_index, state_to_index[str(state)]] = float(probability)
+        return output
+
+    first_circuit = make_phase_circuit("a", final_theta=0.8)
+    second_circuit = make_phase_circuit("b", final_theta=1.3)
+    first_layer = make_phase_layer(first_circuit, "a")
+    second_layer = make_phase_layer(second_circuit, "b")
+    model = torch.nn.Sequential(first_layer, second_layer).eval()
+    input_tensor = torch.tensor(
+        [[0.1, 0.7], [1.2, 0.3], [2.4, 1.1]],
+        dtype=torch.float64,
+    )
+
+    first_expected = run_perceval_probabilities(
+        first_circuit, ["a1", "a2"], input_tensor
+    )
+    expected = run_perceval_probabilities(
+        second_circuit, ["b1", "b2"], first_expected
+    )
+
+    processor = MerlinProcessor(processor=Processor("SLOS"))
+    actual = processor.forward(model, input_tensor, nsample=None)
+
+    assert first_layer.uid != second_layer.uid
+    assert len(processor._layer_cache) == 2
+    assert set(processor._layer_cache) == {first_layer.uid, second_layer.uid}
+    torch.testing.assert_close(actual, expected, rtol=1e-5, atol=1e-6)
 
 
 def test_run_chunk_local_executes_real_clifford_processor_samples():
