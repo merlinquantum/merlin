@@ -2363,6 +2363,15 @@ def test_has_export_config():
     assert not isinstance(BadLayer(), SupportsExportConfig)
 
 
+def test_merlin_module_uid_is_instance_scoped():
+    first = MerlinModule()
+    second = MerlinModule()
+
+    assert first.uid != second.uid
+    assert "uid" in first.__dict__
+    assert "uid" in second.__dict__
+
+
 def test_offload_quantum_layer_with_chunking_validates_and_caches_export_config():
     proc = make_processor(["probs", "sample_count"])
 
@@ -2415,3 +2424,70 @@ def test_offload_quantum_layer_with_chunking_validates_and_caches_export_config(
         None,
     )
     assert layer.export_config_calls == 1
+
+
+def test_offload_quantum_layer_cache_isolated_by_merlin_module_instance_uid():
+    proc = make_processor(["probs", "sample_count"])
+
+    class LayerWithExportConfig(MerlinModule):
+        def __init__(self, label: str) -> None:
+            super().__init__()
+            self.label = label
+            self.export_config_calls = 0
+
+        def export_config(self):
+            self.export_config_calls += 1
+            return {
+                "circuit": pcvl.Circuit(m=2, name=f"Circuit {self.label}"),
+                "input_state": [1, 0],
+                "input_param_order": [f"theta_{self.label}"],
+            }
+
+    first = LayerWithExportConfig("first")
+    second = LayerWithExportConfig("second")
+    configs_used = []
+
+    def fake_run_chunks_pooled(
+        layer_arg, config, input_tensor, chunks, nsample, state, deadline
+    ):
+        configs_used.append((layer_arg.label, tuple(config.input_param_order)))
+        return torch.tensor([[1.0]])
+
+    proc._run_chunks_pooled = fake_run_chunks_pooled
+
+    proc._offload_quantum_layer_with_chunking(
+        first,
+        torch.zeros(1, 2),
+        None,
+        {},
+        None,
+    )
+    proc._offload_quantum_layer_with_chunking(
+        second,
+        torch.zeros(1, 2),
+        None,
+        {},
+        None,
+    )
+
+    assert first.uid != second.uid
+    assert first.export_config_calls == 1
+    assert second.export_config_calls == 1
+    assert len(proc._layer_cache) == 2
+    assert set(proc._layer_cache) == {first.uid, second.uid}
+    assert configs_used == [
+        ("first", ("theta_first",)),
+        ("second", ("theta_second",)),
+    ]
+
+    proc._offload_quantum_layer_with_chunking(
+        first,
+        torch.zeros(1, 2),
+        None,
+        {},
+        None,
+    )
+
+    assert first.export_config_calls == 1
+    assert second.export_config_calls == 1
+    assert configs_used[-1] == ("first", ("theta_first",))
