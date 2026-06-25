@@ -34,7 +34,6 @@ import torch
 from merlin.core.sectored_distribution import (
     SectoredDistribution,
     SectorResult,
-    stack_sectored_distributions,
 )
 from merlin.pcvl_pytorch.noisy_slos import (
     NoisyG2SLOSComputeGraph,
