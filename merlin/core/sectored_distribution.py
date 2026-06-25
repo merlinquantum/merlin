@@ -409,10 +409,9 @@ def clean_sectored_distribution(dist: SectoredDistribution) -> SectoredDistribut
                     number_of_photons_in_state
                 ].index(key)
 
-                sectors[number_of_photons_in_state][
-                    ..., column_in_new_tensor
-                ] = sectors[number_of_photons_in_state][..., column_in_new_tensor] + (
-                    sector_to_fix.tensor[..., col_index_in_previous_sector]
+                sectors[number_of_photons_in_state][..., column_in_new_tensor] = (
+                    sectors[number_of_photons_in_state][..., column_in_new_tensor]
+                    + (sector_to_fix.tensor[..., col_index_in_previous_sector])
                 )
 
         else:
