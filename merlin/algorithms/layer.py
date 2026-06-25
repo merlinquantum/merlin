@@ -1591,13 +1591,14 @@ class QuantumLayer(MerlinModule):
 
         # infer canonical device/dtype AFTER move
         old_device = self.device if self.device is not None else torch.device("cpu")
+        old_dtype = self.dtype if self.dtype is not None else torch.get_default_dtype()
         probe = torch.zeros((), device=old_device, dtype=torch.get_default_dtype())
         moved = fn(probe)
 
         if moved.device != old_device:  # a real device move was requested
             self.device = moved.device  # ...otherwise leave it (stays None)
 
-        if moved.dtype in (torch.float32, torch.float64):  # guards .half()/complex
+        if moved.dtype != old_dtype:  # a real dtype change was requested
             _, self.dtype, self.complex_dtype = MerlinModule.setup_device_and_dtype(
                 None, moved.dtype
             )

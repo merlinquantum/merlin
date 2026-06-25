@@ -3675,3 +3675,19 @@ def test_cuda_matches_to_noisy(noisy_layer):
     actual = deepcopy(noisy_layer).cuda()
 
     assert_layers_equal(expected, actual)
+
+
+def test_half_raises_value_error(layer):
+    """Merlin only supports float32/float64, so .half()/float16 must raise."""
+    with pytest.raises(ValueError):
+        deepcopy(layer).half()
+    with pytest.raises(ValueError):
+        deepcopy(layer).to(torch.float16)
+
+
+def test_dtype_only_move_leaves_device_unchanged(layer):
+    """A pure dtype move must not assign a concrete device."""
+    original_device = layer.device
+    moved = deepcopy(layer).double()
+    assert moved.device == original_device
+    assert moved.dtype == torch.float64
