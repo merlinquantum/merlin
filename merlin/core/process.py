@@ -447,13 +447,19 @@ class ComputationProcess(AbstractComputationProcess):
                         selected_weights = weights[:, weight_index].to(
                             sector.tensor.dtype
                         )
-                        sector.tensor = torch.einsum(
-                            "i,bo->bio", selected_weights, sector.tensor
-                        )
-                        if sector.tensor.shape[0] == 1:
-                            sector.tensor = sector.tensor.squeeze(0)
-                        if sector.tensor.ndim == 3 and sector.tensor.shape[1] == 1:
-                            sector.tensor = sector.tensor.squeeze(1)
+                        if paired:
+                            # b == N: pair weight n with unitary n (no cross product)
+                            sector.tensor = (
+                                selected_weights.unsqueeze(-1) * sector.tensor
+                            )  # (N, O)
+                        else:
+                            sector.tensor = torch.einsum(
+                                "i,bo->bio", selected_weights, sector.tensor
+                            )
+                            if sector.tensor.shape[0] == 1:
+                                sector.tensor = sector.tensor.squeeze(0)
+                            if sector.tensor.ndim == 3 and sector.tensor.shape[1] == 1:
+                                sector.tensor = sector.tensor.squeeze(1)
 
                     if output_distribution is None:
                         output_distribution = probs
@@ -484,12 +490,18 @@ class ComputationProcess(AbstractComputationProcess):
 
             probs_stacked = torch.stack(tensor_probs_per_state, dim=0)
             selected_weights = weights.to(probs_stacked.dtype)
-            mixed_probs = torch.einsum("is,sbo->bio", selected_weights, probs_stacked)
-
-            if mixed_probs.shape[0] == 1:
-                mixed_probs = mixed_probs.squeeze(0)
-            if mixed_probs.ndim == 3 and mixed_probs.shape[1] == 1:
-                mixed_probs = mixed_probs.squeeze(1)
+            if paired:
+                mixed_probs = torch.einsum(
+                    "ns,sno->no", selected_weights, probs_stacked
+                )  # (N, O)
+            else:
+                mixed_probs = torch.einsum(
+                    "is,sbo->bio", selected_weights, probs_stacked
+                )
+                if mixed_probs.shape[0] == 1:
+                    mixed_probs = mixed_probs.squeeze(0)
+                if mixed_probs.ndim == 3 and mixed_probs.shape[1] == 1:
+                    mixed_probs = mixed_probs.squeeze(1)
 
             return mixed_probs
 
@@ -504,6 +516,7 @@ class ComputationProcess(AbstractComputationProcess):
         unitary: torch.Tensor,
         *,
         simultaneous_processes: int = 1,
+        paired: bool = False,
     ) -> torch.Tensor:
         """Compute coherent superposition amplitudes for one precomputed unitary.
 
@@ -542,12 +555,13 @@ class ComputationProcess(AbstractComputationProcess):
             prepared_state,
             unitary if unitary.dim() == 3 else unitary.unsqueeze(0),
             simultaneous_processes=simultaneous_processes,
+            paired=paired,
         )
-
-        if final_amplitudes.shape[0] == 1:
-            final_amplitudes = final_amplitudes.squeeze(0)
-        if final_amplitudes.ndim == 3 and final_amplitudes.shape[1] == 1:
-            final_amplitudes = final_amplitudes.squeeze(1)
+        if not paired:
+            if final_amplitudes.shape[0] == 1:
+                final_amplitudes = final_amplitudes.squeeze(0)
+            if final_amplitudes.ndim == 3 and final_amplitudes.shape[1] == 1:
+                final_amplitudes = final_amplitudes.squeeze(1)
 
         return final_amplitudes
 
@@ -598,9 +612,7 @@ class ComputationProcess(AbstractComputationProcess):
             return normalize_probabilities(probabilities, self.computation_space)
 
         input_state = self._fixed_input_state_for_compute()
-        keys, probs = self.simulation_graph.compute_probs(
-            unitary, input_state, paired=paired
-        )
+        keys, probs = self.simulation_graph.compute_probs(unitary, input_state)
         self._validate_probability_keys(keys)
         return probs
 
@@ -945,13 +957,6 @@ class ComputationProcess(AbstractComputationProcess):
             active (a :class:`~merlin.core.sectored_distribution.SectoredDistribution`
             when g2 noise is present) and amplitudes otherwise.
         """
-        if self._has_phase_error():
-            return self._compute_phase_error_probabilities(
-                parameters,
-                amplitude_encoding=amplitude_encoding,
-                memristive_current_state=memristive_current_state,
-            )
-
         # Checking if there is memristive and amplitude encoding
         memristive_current_state = (
             [] if memristive_current_state is None else memristive_current_state
@@ -959,14 +964,22 @@ class ComputationProcess(AbstractComputationProcess):
         prepared_state = (
             self._prepare_superposition_support() if amplitude_encoding else None
         )
-
-        # If there is memristive PS and batched amplitude encoding, create a
-        # unitary per amplitude input
-        if (
+        memristive_batched_amplitudes = (
             prepared_state is not None
             and prepared_state.batch_size > 1
             and (not (memristive_current_state == []))
-        ):
+        )
+
+        if self._has_phase_error():
+            return self._compute_phase_error_probabilities(
+                parameters,
+                amplitude_encoding=amplitude_encoding,
+                memristive_current_state=memristive_current_state,
+            )
+
+        # If there is memristive PS and batched amplitude encoding, create a
+        # unitary per amplitude input
+        if memristive_batched_amplitudes:
             unitary = self.converter.to_tensor(
                 *parameters,
                 batch_size=(memristive_current_state[0].shape[0]),
@@ -983,7 +996,9 @@ class ComputationProcess(AbstractComputationProcess):
 
         if self._has_source_noise():
             return self._compute_source_probabilities_for_unitary(
-                unitary, amplitude_encoding=amplitude_encoding
+                unitary,
+                amplitude_encoding=amplitude_encoding,
+                paired=memristive_batched_amplitudes,
             )
 
         input_state = self._fixed_input_state_for_compute()
