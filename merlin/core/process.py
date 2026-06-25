@@ -1048,8 +1048,12 @@ class ComputationProcess(AbstractComputationProcess):
         memristive_current_state = (
             [] if memristive_current_state is None else memristive_current_state
         )
+        memristive_batched = (
+            prepared_state.batch_size > 1 and memristive_current_state != []
+        )
+
         # If there is amplitude encoding and memristors, create a unitary per input state
-        if prepared_state.batch_size > 1 and (not (memristive_current_state == [])):
+        if memristive_batched:
             unitary = self.converter.to_tensor(
                 *parameters,
                 batch_size=(memristive_current_state[0].shape[0]),
@@ -1062,14 +1066,14 @@ class ComputationProcess(AbstractComputationProcess):
                     [] if memristive_current_state is None else memristive_current_state
                 ),
             )
-
         _keys_out, final_amplitudes = self._compute_chunked_superposition(
             prepared_state,
             unitary if unitary.dim() == 3 else unitary.unsqueeze(0),
             simultaneous_processes=simultaneous_processes,
+            paired=memristive_batched,
         )
 
-        if final_amplitudes.shape[0] == 1:
+        if not memristive_batched and final_amplitudes.shape[0] == 1:
             final_amplitudes = final_amplitudes.squeeze(0)
 
         if return_keys:
@@ -1516,11 +1520,17 @@ class ComputationProcess(AbstractComputationProcess):
         unitary: torch.Tensor,
         *,
         simultaneous_processes: int | None,
+        paired: bool = False,
     ) -> tuple[list[tuple[int, ...]], torch.Tensor]:
         """Evaluate a superposition by streaming chunked kernel calls into the final tensor."""
         if unitary.dim() != 3:
             raise ValueError(
                 "Expected batched unitary tensor for chunked superposition evaluation."
+            )
+
+        if paired and unitary.shape[0] != prepared_state.batch_size:
+            raise ValueError(
+                "Paired superposition requires one unitary per amplitude input."
             )
 
         keys_out = list(self.simulation_graph.mapped_keys)
@@ -1564,7 +1574,17 @@ class ComputationProcess(AbstractComputationProcess):
             batch_amplitudes = batch_amplitudes / batch_amplitudes.norm(
                 p=2, dim=1, keepdim=True
             ).clamp_min(1e-12)
-            final_amplitudes += torch.einsum("se,boe->bso", coeffs, batch_amplitudes)
+
+            if paired:
+                final_amplitudes += torch.einsum(
+                    "ne,noe->no", coeffs, batch_amplitudes
+                )  # (N,O)
+            else:
+                final_amplitudes += torch.einsum(
+                    "se,boe->bso", coeffs, batch_amplitudes
+                )
+
+        print(final_amplitudes)
 
         return keys_out, final_amplitudes
 
