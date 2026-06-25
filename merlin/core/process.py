@@ -428,6 +428,10 @@ class ComputationProcess(AbstractComputationProcess):
             # over Fock basis states and produce a weighted mixture of noisy output
             # probabilities. The mixture weight for each basis state is |c_i|^2.
             prepared_state = self._prepare_superposition_support()
+            if paired and unitary.shape[0] != prepared_state.batch_size:
+                raise ValueError(
+                    "Paired superposition requires one unitary per amplitude input."
+                )
             weights = prepared_state.coefficients.abs().pow(2)
 
             active_indices = prepared_state.basis_indices
@@ -968,7 +972,7 @@ class ComputationProcess(AbstractComputationProcess):
         memristive_batched_amplitudes = (
             prepared_state is not None
             and prepared_state.batch_size > 1
-            and (not (memristive_current_state == []))
+            and (memristive_current_state != [])
         )
 
         if self._has_phase_error():

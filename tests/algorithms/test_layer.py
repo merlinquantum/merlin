@@ -3278,10 +3278,8 @@ def test_quantum_layer_experiment_input_state_overrides_without_error():
         assert layer.n_photons == 1
 
 
-def test_memrsistive_amplitude_input_batched():
+def test_memristive_amplitude_input_batched():
     def update_rule(state: torch.Tensor, output: torch.Tensor):
-        print(state)
-        print(output)
         x = state + output[:, 0]
         return x
 
@@ -3314,10 +3312,8 @@ def test_memrsistive_amplitude_input_batched():
     assert not torch.allclose(output[0], output[1])
 
 
-def test_memrsistive_amplitude_input_batched_with_noise():
+def test_memristive_amplitude_input_batched_with_noise():
     def update_rule(state: torch.Tensor, output: torch.Tensor):
-        print(state)
-        print(output)
         x = state + output[:, 0]
         return x
 
