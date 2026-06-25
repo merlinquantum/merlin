@@ -857,49 +857,12 @@ class ComputationProcess(AbstractComputationProcess):
                 and prepared_state.batch_size > 1
                 and (not (memristive_current_state == []))
             ):
-                unitaries = [
-                    self.converter.to_tensor(
-                        *parameters,
-                        memristive_current_state=[
-                            memristor[index] for memristor in memristive_current_state
-                        ],
-                        apply_phase_error=True,
-                    )
-                    for index in range(prepared_state.batch_size)
-                ]
-                self.unitary = unitaries
-                input_states = self.input_state
-                if not isinstance(input_states, torch.Tensor):
-                    raise TypeError("Input state should be a tensor")
-                output_distributions: list[SectoredDistribution] = []
-                output_tensors: list[torch.Tensor] = []
-
-                for i, unitary in enumerate(unitaries):
-                    self.input_state = input_states[i]
-                    probabilities = self._compute_probabilities_for_unitary(
-                        unitary, amplitude_encoding=amplitude_encoding
-                    )
-
-                    if isinstance(probabilities, SectoredDistribution):
-                        for k in range(len(probabilities.sectors)):
-                            probabilities.sectors[k].tensor = probabilities.sectors[
-                                k
-                            ].tensor.squeeze(dim=0)
-                        output_distributions.append(probabilities)
-                    else:
-                        probabilities = probabilities.squeeze(dim=0)
-                        output_tensors.append(probabilities)
-
-                self.input_state = input_states
-                if output_distributions:
-                    if output_tensors:
-                        raise ValueError(
-                            "Phase-error sample type mismatch while averaging probabilities."
-                        )
-                    probabilities = stack_sectored_distributions(output_distributions)
-                else:
-                    probabilities = torch.stack(output_tensors, dim=0)
-
+                unitary = self.converter.to_tensor(
+                    *parameters,
+                    batch_size=(memristive_current_state[0].shape[0]),
+                    apply_phase_error=True,
+                    memristive_current_state=memristive_current_state,
+                )
             # Otherwise
             else:
                 unitary = self.converter.to_tensor(
@@ -911,10 +874,10 @@ class ComputationProcess(AbstractComputationProcess):
                         else memristive_current_state
                     ),
                 )
-                self.unitary = unitary
-                probabilities = self._compute_probabilities_for_unitary(
-                    unitary, amplitude_encoding=amplitude_encoding
-                )
+            self.unitary = unitary
+            probabilities = self._compute_probabilities_for_unitary(
+                unitary, amplitude_encoding=amplitude_encoding
+            )
 
             if accumulated is None:
                 accumulated = probabilities
@@ -995,74 +958,11 @@ class ComputationProcess(AbstractComputationProcess):
             and prepared_state.batch_size > 1
             and (not (memristive_current_state == []))
         ):
-            unitaries = [
-                self.converter.to_tensor(
-                    *parameters,
-                    memristive_current_state=[
-                        memristor[index] for memristor in memristive_current_state
-                    ],
-                )
-                for index in range(prepared_state.batch_size)
-            ]
-            self.unitary = unitaries
-            input_states = self.input_state
-            if not isinstance(input_states, torch.Tensor):
-                raise TypeError("Input state should be a tensor")
-
-            if self._has_source_noise():
-                final_distributions: list[SectoredDistribution] = []
-                final_probabilities: list[torch.Tensor] = []
-                for i, unitary in enumerate(unitaries):
-                    self.input_state = input_states[i]
-                    probs = self._compute_source_probabilities_for_unitary(
-                        unitary, amplitude_encoding=amplitude_encoding
-                    )
-                    if isinstance(probs, SectoredDistribution):
-                        for k in range(len(probs.sectors)):
-                            probs.sectors[k].tensor = probs.sectors[k].tensor.squeeze(
-                                dim=0
-                            )
-                        final_distributions.append(probs)
-                    else:
-                        probs = probs.squeeze(dim=0)
-                        final_probabilities.append(probs)
-
-                self.input_state = input_states
-                if final_distributions:
-                    if final_probabilities:
-                        raise ValueError(
-                            "Source-noise result type mismatch while batching probabilities."
-                        )
-                    return stack_sectored_distributions(final_distributions)
-                return torch.stack(final_probabilities, dim=0)
-
-            keys_out: list[tuple[int, ...]] | None = None
-            final_amplitudes: list[torch.Tensor] = []
-
-            for i, unitary in enumerate(unitaries):
-                self.input_state = input_states[i]
-                input_state = self._fixed_input_state_for_compute()
-                _keys, amplitudes = self.simulation_graph.compute(unitary, input_state)
-                # Flattening the tensor
-                amplitudes = amplitudes.squeeze(dim=0)
-                if keys_out is None:
-                    keys_out = _keys
-                    final_amplitudes.append(amplitudes)
-                else:
-                    # Reorder amplitudes to match the reference ordering
-                    key_to_index = {key: j for j, key in enumerate(_keys)}
-
-                    reordered = torch.empty_like(final_amplitudes[0])
-
-                    for target_idx, key in enumerate(keys_out):
-                        reordered[target_idx] = amplitudes[key_to_index[key]]
-
-                    final_amplitudes.append(reordered)
-
-            self.input_state = input_states
-            return torch.stack(final_amplitudes, dim=0)
-
-        # Otherwise
+            unitary = self.converter.to_tensor(
+                *parameters,
+                batch_size=(memristive_current_state[0].shape[0]),
+                memristive_current_state=memristive_current_state,
+            )
         else:
             unitary = self.converter.to_tensor(
                 *parameters,
@@ -1070,16 +970,16 @@ class ComputationProcess(AbstractComputationProcess):
                     [] if memristive_current_state is None else memristive_current_state
                 ),
             )
-            self.unitary = unitary
+        self.unitary = unitary
 
-            if self._has_source_noise():
-                return self._compute_source_probabilities_for_unitary(
-                    unitary, amplitude_encoding=amplitude_encoding
-                )
+        if self._has_source_noise():
+            return self._compute_source_probabilities_for_unitary(
+                unitary, amplitude_encoding=amplitude_encoding
+            )
 
-            input_state = self._fixed_input_state_for_compute()
-            _keys, amplitudes = self.simulation_graph.compute(unitary, input_state)
-            return amplitudes
+        input_state = self._fixed_input_state_for_compute()
+        _keys, amplitudes = self.simulation_graph.compute(unitary, input_state)
+        return amplitudes
 
     @overload
     def compute_superposition_state(
@@ -1150,58 +1050,24 @@ class ComputationProcess(AbstractComputationProcess):
         )
         # If there is amplitude encoding and memristors, create a unitary per input state
         if prepared_state.batch_size > 1 and (not (memristive_current_state == [])):
-            unitaries = [
-                self.converter.to_tensor(
-                    *parameters,
-                    memristive_current_state=[
-                        memristor[index] for memristor in memristive_current_state
-                    ],
-                )
-                for index in range(prepared_state.batch_size)
-            ]
-            keys_out: list[tuple[int, ...]] | None = None
-            amplitude_batches: list[torch.Tensor] = []
-            for i, unitary in enumerate(unitaries):
-                _keys, amplitudes = self._compute_chunked_superposition(
-                    _SuperpositionSupport(
-                        prepared_state.basis_indices,
-                        coefficients=prepared_state.coefficients[i].unsqueeze(0),
-                        basis_size=prepared_state.basis_size,
-                    ),
-                    unitary if unitary.dim() == 3 else unitary.unsqueeze(0),
-                    simultaneous_processes=simultaneous_processes,
-                )
-
-                amplitudes = torch.atleast_1d(amplitudes.squeeze())
-
-                if keys_out is None:
-                    keys_out = _keys
-                    amplitude_batches.append(amplitudes)
-                else:
-                    # Reorder amplitudes to match the reference ordering
-                    key_to_index = {key: j for j, key in enumerate(_keys)}
-
-                    reordered = torch.empty_like(amplitude_batches[0])
-
-                    for target_idx, key in enumerate(keys_out):
-                        reordered[target_idx] = amplitudes[key_to_index[key]]
-
-                    amplitude_batches.append(reordered)
-
-            if keys_out is None:
-                raise RuntimeError("No batched superposition amplitudes were computed.")
-            _keys_out = keys_out
-            final_amplitudes = torch.stack(amplitude_batches, dim=0)
+            unitary = self.converter.to_tensor(
+                *parameters,
+                batch_size=(memristive_current_state[0].shape[0]),
+                memristive_current_state=memristive_current_state,
+            )
         else:
             unitary = self.converter.to_tensor(
                 *parameters,
-                memristive_current_state=memristive_current_state,
+                memristive_current_state=(
+                    [] if memristive_current_state is None else memristive_current_state
+                ),
             )
-            _keys_out, final_amplitudes = self._compute_chunked_superposition(
-                prepared_state,
-                unitary if unitary.dim() == 3 else unitary.unsqueeze(0),
-                simultaneous_processes=simultaneous_processes,
-            )
+
+        _keys_out, final_amplitudes = self._compute_chunked_superposition(
+            prepared_state,
+            unitary if unitary.dim() == 3 else unitary.unsqueeze(0),
+            simultaneous_processes=simultaneous_processes,
+        )
 
         if final_amplitudes.shape[0] == 1:
             final_amplitudes = final_amplitudes.squeeze(0)

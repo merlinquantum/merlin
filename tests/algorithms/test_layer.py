@@ -3280,6 +3280,8 @@ def test_quantum_layer_experiment_input_state_overrides_without_error():
 
 def test_memrsistive_amplitude_input_batched():
     def update_rule(state: torch.Tensor, output: torch.Tensor):
+        print(state)
+        print(output)
         x = state + output[:, 0]
         return x
 
@@ -3314,6 +3316,8 @@ def test_memrsistive_amplitude_input_batched():
 
 def test_memrsistive_amplitude_input_batched_with_noise():
     def update_rule(state: torch.Tensor, output: torch.Tensor):
+        print(state)
+        print(output)
         x = state + output[:, 0]
         return x
 
