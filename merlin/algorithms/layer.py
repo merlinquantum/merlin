@@ -1590,23 +1590,17 @@ class QuantumLayer(MerlinModule):
                 self.memristive_state[state] = fn(tensor)
 
         # infer canonical device/dtype AFTER move
-        ref_tensor = None
-        for p in self.parameters():
-            ref_tensor = p
-            break
+        old_device = self.device if self.device is not None else torch.device("cpu")
+        probe = torch.zeros((), device=old_device, dtype=torch.get_default_dtype())
+        moved = fn(probe)
 
-        if ref_tensor is None:
-            for b in self.buffers():
-                ref_tensor = b
-                break
+        if moved.device != old_device:  # a real device move was requested
+            self.device = moved.device  # ...otherwise leave it (stays None)
 
-        if ref_tensor is not None:
-            self.device = ref_tensor.device
-
-            if ref_tensor.dtype in (torch.float32, torch.float64):
-                _, self.dtype, self.complex_dtype = MerlinModule.setup_device_and_dtype(
-                    None, ref_tensor.dtype
-                )
+        if moved.dtype in (torch.float32, torch.float64):  # guards .half()/complex
+            _, self.dtype, self.complex_dtype = MerlinModule.setup_device_and_dtype(
+                None, moved.dtype
+            )
 
         self.computation_process.to(dtype=self.dtype, device=self.device)
 
