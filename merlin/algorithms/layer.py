@@ -1544,61 +1544,9 @@ class QuantumLayer(MerlinModule):
         if device is not None:
             self.device = torch.device(device)
 
-        if device is None and dtype is None:
-            return self
-
-        self.computation_process.to(dtype=self.dtype, device=self.device)
-
-        # Photon loss Module
-        if self._photon_loss_transform is not None:
-            if isinstance(self._photon_loss_transform, Sequence):
-                for i in range(len(self._photon_loss_transform)):
-                    self._photon_loss_transform[i] = self._photon_loss_transform[i].to(
-                        device=self.device,
-                        dtype=self.dtype,
-                    )
-            else:
-                self._photon_loss_transform = self._photon_loss_transform.to(
-                    device=self.device,
-                    dtype=self.dtype,
-                )
-
-        # Detector Module
-        if self._detector_transform is not None:
-            if isinstance(self._detector_transform, Sequence):
-                for i in range(len(self._detector_transform)):
-                    self._detector_transform[i] = self._detector_transform[i].to(
-                        device=self.device,
-                        dtype=self.dtype,
-                    )
-            else:
-                self._detector_transform = self._detector_transform.to(
-                    device=self.device,
-                    dtype=self.dtype,
-                )
-
-        if self._probability_readout is not None:
-            self._probability_readout = self._probability_readout.to(device=self.device)
-
-        target_kwargs: dict[str, Any] = {"dtype": self.dtype}
-        if self.device is not None:
-            target_kwargs["device"] = self.device
-
-        # memristor state and history
-        for state in range(len(self.memristive_history)):
-            for t in range(len(self.memristive_history[state])):
-                self.memristive_history[state][t] = self.memristive_history[state][
-                    t
-                ].to(**target_kwargs)
-
-        for state in range(len(self.memristive_state)):
-            self.memristive_state[state] = self.memristive_state[state].to(
-                **target_kwargs
-            )
-
         return self
 
-    def _apply(self, fn):
+    def _apply(self, fn, recurse=True):
         """Apply a transformation function to all tensors owned by the layer.
 
         This method extends :meth:`torch.nn.Module._apply` to ensure that
@@ -1607,7 +1555,7 @@ class QuantumLayer(MerlinModule):
         the rest of the module state. This guarantees that device and dtype
         conversions performed through methods such as :meth:`~torch.nn.Module.cuda`,
         :meth:`~torch.nn.Module.cpu`, :meth:`~torch.nn.Module.float`,
-        :meth:`~torch.nn.Module.double`, :meth:`~torch.nn.Module.half`, and
+        :meth:`~torch.nn.Module.double`, and
         :meth:`~torch.nn.Module.to` are consistently applied to all tensors
         associated with the layer.
 
@@ -1617,6 +1565,8 @@ class QuantumLayer(MerlinModule):
             Function applied by PyTorch to each tensor during device or dtype
             conversion. Typically generated internally by
             :meth:`torch.nn.Module._apply`.
+        recurse:bool
+            Default is False. Whether or not to apply the function recursively.
 
         Returns
         -------
@@ -1624,73 +1574,69 @@ class QuantumLayer(MerlinModule):
             The updated layer instance with all registered tensors and
             memristive state tensors transformed by ``fn``.
         """
-        super()._apply(fn)
-        try:
-            ref_tensor = next(self.parameters())
-        except StopIteration:
-            try:
-                ref_tensor = next(self.buffers())
-            except StopIteration:
-                return
 
-        self.device = ref_tensor.device
+        super()._apply(fn, recurse=recurse)
 
-        _, self.dtype, self.complex_dtype = MerlinModule.setup_device_and_dtype(
-            None,
-            ref_tensor.dtype,
-        )
-        #
-        # Keep auxiliary objects synchronized
-        #
-        self.computation_process.to(
-            device=self.device,
-            dtype=self.dtype,
-        )
-
-        # Photon loss module
-        if self._photon_loss_transform is not None:
-            if isinstance(self._photon_loss_transform, Sequence):
-                for i in range(len(self._photon_loss_transform)):
-                    self._photon_loss_transform[i] = self._photon_loss_transform[i].to(
-                        device=self.device,
-                        dtype=self.dtype,
-                    )
-            else:
-                self._photon_loss_transform = self._photon_loss_transform.to(
-                    device=self.device,
-                    dtype=self.dtype,
-                )
-
-        # Detector module
-        if self._detector_transform is not None:
-            if isinstance(self._detector_transform, Sequence):
-                for i in range(len(self._detector_transform)):
-                    self._detector_transform[i] = self._detector_transform[i].to(
-                        device=self.device,
-                        dtype=self.dtype,
-                    )
-            else:
-                self._detector_transform = self._detector_transform.to(
-                    device=self.device,
-                    dtype=self.dtype,
-                )
-
-        # Probability readout
-        if self._probability_readout is not None:
-            self._probability_readout = self._probability_readout.to(device=self.device)
-
-        # memristor history
+        # memristive tensors
         for state in range(len(self.memristive_history)):
             for t in range(len(self.memristive_history[state])):
                 tensor = self.memristive_history[state][t]
                 if torch.is_tensor(tensor):
                     self.memristive_history[state][t] = fn(tensor)
 
-        # memristor state
         for state in range(len(self.memristive_state)):
             tensor = self.memristive_state[state]
             if torch.is_tensor(tensor):
                 self.memristive_state[state] = fn(tensor)
+
+        # infer canonical device/dtype AFTER move
+        ref_tensor = None
+        for p in self.parameters():
+            ref_tensor = p
+            break
+
+        if ref_tensor is None:
+            for b in self.buffers():
+                ref_tensor = b
+                break
+
+        if ref_tensor is not None:
+            self.device = ref_tensor.device
+
+            if ref_tensor.dtype in (torch.float32, torch.float64):
+                _, self.dtype, self.complex_dtype = MerlinModule.setup_device_and_dtype(
+                    None, ref_tensor.dtype
+                )
+
+        self.computation_process.to(dtype=self.dtype, device=self.device)
+
+        # NOW move auxiliaries once
+        target_kwargs = {"dtype": self.dtype}
+        if self.device is not None:
+            target_kwargs["device"] = self.device
+
+        if self._photon_loss_transform is not None:
+            if isinstance(self._photon_loss_transform, Sequence):
+                for i in range(len(self._photon_loss_transform)):
+                    self._photon_loss_transform[i] = self._photon_loss_transform[i].to(
+                        **target_kwargs
+                    )
+            else:
+                self._photon_loss_transform = self._photon_loss_transform.to(
+                    **target_kwargs
+                )
+
+        if self._detector_transform is not None:
+            if isinstance(self._detector_transform, Sequence):
+                for i in range(len(self._detector_transform)):
+                    self._detector_transform[i] = self._detector_transform[i].to(
+                        **target_kwargs
+                    )
+            else:
+                self._detector_transform = self._detector_transform.to(**target_kwargs)
+
+        if self._probability_readout is not None:
+            self._probability_readout = self._probability_readout.to(device=self.device)
 
         return self
 
