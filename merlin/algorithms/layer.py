@@ -1598,6 +1598,102 @@ class QuantumLayer(MerlinModule):
 
         return self
 
+    def _apply(self, fn):
+        """Apply a transformation function to all tensors owned by the layer.
+
+        This method extends :meth:`torch.nn.Module._apply` to ensure that
+        memristive state tensors, which are stored in Python containers rather
+        than registered as parameters or buffers, are transformed together with
+        the rest of the module state. This guarantees that device and dtype
+        conversions performed through methods such as :meth:`~torch.nn.Module.cuda`,
+        :meth:`~torch.nn.Module.cpu`, :meth:`~torch.nn.Module.float`,
+        :meth:`~torch.nn.Module.double`, :meth:`~torch.nn.Module.half`, and
+        :meth:`~torch.nn.Module.to` are consistently applied to all tensors
+        associated with the layer.
+
+        Parameters
+        ----------
+        fn : callable
+            Function applied by PyTorch to each tensor during device or dtype
+            conversion. Typically generated internally by
+            :meth:`torch.nn.Module._apply`.
+
+        Returns
+        -------
+        QuantumLayer
+            The updated layer instance with all registered tensors and
+            memristive state tensors transformed by ``fn``.
+        """
+        super()._apply(fn)
+        try:
+            ref_tensor = next(self.parameters())
+        except StopIteration:
+            try:
+                ref_tensor = next(self.buffers())
+            except StopIteration:
+                return
+
+        self.device = ref_tensor.device
+
+        _, self.dtype, self.complex_dtype = MerlinModule.setup_device_and_dtype(
+            None,
+            ref_tensor.dtype,
+        )
+        #
+        # Keep auxiliary objects synchronized
+        #
+        self.computation_process.to(
+            device=self.device,
+            dtype=self.dtype,
+        )
+
+        # Photon loss module
+        if self._photon_loss_transform is not None:
+            if isinstance(self._photon_loss_transform, Sequence):
+                for i in range(len(self._photon_loss_transform)):
+                    self._photon_loss_transform[i] = self._photon_loss_transform[i].to(
+                        device=self.device,
+                        dtype=self.dtype,
+                    )
+            else:
+                self._photon_loss_transform = self._photon_loss_transform.to(
+                    device=self.device,
+                    dtype=self.dtype,
+                )
+
+        # Detector module
+        if self._detector_transform is not None:
+            if isinstance(self._detector_transform, Sequence):
+                for i in range(len(self._detector_transform)):
+                    self._detector_transform[i] = self._detector_transform[i].to(
+                        device=self.device,
+                        dtype=self.dtype,
+                    )
+            else:
+                self._detector_transform = self._detector_transform.to(
+                    device=self.device,
+                    dtype=self.dtype,
+                )
+
+        # Probability readout
+        if self._probability_readout is not None:
+            self._probability_readout = self._probability_readout.to(device=self.device)
+
+        # memristor history
+        for state in range(len(self.memristive_history)):
+            for t in range(len(self.memristive_history[state])):
+                tensor = self.memristive_history[state][t]
+                if torch.is_tensor(tensor):
+                    self.memristive_history[state][t] = fn(tensor)
+
+        # memristor state
+        for state in range(len(self.memristive_state)):
+            tensor = self.memristive_state[state]
+            if torch.is_tensor(tensor):
+                self.memristive_state[state] = fn(tensor)
+
+        return self
+
     @property
     def output_keys(self):
         """Return the Fock basis associated with the layer outputs.
@@ -1854,9 +1950,9 @@ class QuantumLayer(MerlinModule):
                 n_photons=self.n_photons,
                 keys=_normalize_sector_keys(self._raw_output_keys),
             )
-            distribution_to_use: SectoredDistribution = SectoredDistribution((
-                sector_result,
-            ))
+            distribution_to_use: SectoredDistribution = SectoredDistribution(
+                (sector_result,)
+            )
         else:
             distribution_to_use: SectoredDistribution = distribution
 
@@ -1910,9 +2006,9 @@ class QuantumLayer(MerlinModule):
                 n_photons=self.n_photons,
                 keys=_normalize_sector_keys(self._raw_output_keys),
             )
-            distribution_to_use: SectoredDistribution = SectoredDistribution((
-                sector_result,
-            ))
+            distribution_to_use: SectoredDistribution = SectoredDistribution(
+                (sector_result,)
+            )
         else:
             distribution_to_use: SectoredDistribution = distribution
 

@@ -26,6 +26,7 @@ Tests for the main QuantumLayer class.
 
 import math
 import re
+from collections.abc import Sequence
 from copy import deepcopy
 
 import numpy as np
@@ -3410,3 +3411,267 @@ def test_memristive_amplitude_input_batched_with_noise():
     output = ql(input)
 
     assert not torch.allclose(output[0], output[1])
+
+
+def _module_or_sequence_equal(expected, actual):
+    if expected is None:
+        assert actual is None
+        return True
+
+    if isinstance(expected, Sequence):
+        assert isinstance(actual, Sequence)
+        assert len(expected) == len(actual)
+
+        for e, a in zip(expected, actual):
+            _module_or_sequence_equal(e, a)
+
+        return True
+
+    assert type(expected) is type(actual)
+
+    for ep, ap in zip(
+        expected.parameters(),
+        actual.parameters(),
+    ):
+        assert ep.device == ap.device
+        assert ep.dtype == ap.dtype
+        assert torch.equal(ep, ap)
+
+    for eb, ab in zip(
+        expected.buffers(),
+        actual.buffers(),
+    ):
+        assert eb.device == ab.device
+        assert eb.dtype == ab.dtype
+        assert torch.equal(eb, ab)
+
+    return True
+
+
+def assert_computation_process_equal(expected, actual):
+    assert type(expected) is type(actual)
+
+    # These are the fields that should change when calling
+    # .to(), .cuda(), .float(), .double(), etc.
+    assert expected.device == actual.device
+    assert expected.dtype == actual.dtype
+
+    # Sanity-check a few structural fields that should not change.
+    assert expected.n_photons == actual.n_photons
+    assert expected.m == actual.m
+    assert expected.computation_space == actual.computation_space
+
+    assert expected.trainable_parameters == actual.trainable_parameters
+    assert expected.input_parameters == actual.input_parameters
+
+
+def assert_layers_equal(expected, actual):
+    #
+    # Layer bookkeeping
+    #
+    assert expected.device == actual.device
+    assert expected.dtype == actual.dtype
+    assert expected.complex_dtype == actual.complex_dtype
+
+    #
+    # Parameters
+    #
+    expected_params = dict(expected.named_parameters())
+    actual_params = dict(actual.named_parameters())
+
+    assert expected_params.keys() == actual_params.keys()
+
+    for name in expected_params:
+        ep = expected_params[name]
+        ap = actual_params[name]
+
+        assert ep.device == ap.device, name
+        assert ep.dtype == ap.dtype, name
+        assert torch.equal(ep, ap), name
+
+    #
+    # Buffers
+    #
+    expected_buffers = dict(expected.named_buffers())
+    actual_buffers = dict(actual.named_buffers())
+
+    assert expected_buffers.keys() == actual_buffers.keys()
+
+    for name in expected_buffers:
+        eb = expected_buffers[name]
+        ab = actual_buffers[name]
+
+        assert eb.device == ab.device, name
+        assert eb.dtype == ab.dtype, name
+        assert torch.equal(eb, ab), name
+
+    #
+    # Memristive state
+    #
+    assert len(expected.memristive_state) == len(actual.memristive_state)
+
+    for i, (es, as_) in enumerate(
+        zip(expected.memristive_state, actual.memristive_state)
+    ):
+        assert es.device == as_.device, i
+        assert es.dtype == as_.dtype, i
+        assert torch.equal(es, as_), i
+
+    #
+    # Memristive history
+    #
+    assert len(expected.memristive_history) == len(actual.memristive_history)
+
+    for i, (eh, ah) in enumerate(
+        zip(expected.memristive_history, actual.memristive_history)
+    ):
+        assert len(eh) == len(ah)
+
+        for j, (et, at) in enumerate(zip(eh, ah)):
+            assert et.device == at.device, (i, j)
+            assert et.dtype == at.dtype, (i, j)
+            assert torch.equal(et, at), (i, j)
+
+    #
+    # Probability readout
+    #
+    if expected._probability_readout is None:
+        assert actual._probability_readout is None
+    else:
+        assert type(expected._probability_readout) is type(actual._probability_readout)
+
+        for ep, ap in zip(
+            expected._probability_readout.parameters(),
+            actual._probability_readout.parameters(),
+        ):
+            assert ep.device == ap.device
+            assert ep.dtype == ap.dtype
+            assert torch.equal(ep, ap)
+
+    #
+    # Photon loss transform
+    #
+    assert _module_or_sequence_equal(
+        expected._photon_loss_transform,
+        actual._photon_loss_transform,
+    )
+
+    #
+    # Detector transform
+    #
+    assert _module_or_sequence_equal(
+        expected._detector_transform,
+        actual._detector_transform,
+    )
+
+    #
+    # Computation process
+    #
+    assert_computation_process_equal(
+        expected.computation_process,
+        actual.computation_process,
+    )
+
+
+@pytest.fixture
+def layer():
+    def update_rule(state: torch.Tensor, output: torch.Tensor):
+        x = state + output[:, 0]
+        return x
+
+    circ = ML.CircuitBuilder(n_modes=3)
+    circ.add_entangling_layer()
+    circ.add_memristive_ps(mode=0, update_rule=update_rule, initial_state=0)
+    circ.add_entangling_layer()
+
+    # Both source and phase
+    ql = ML.QuantumLayer(
+        builder=circ,
+        n_photons=1,
+        measurement_strategy=ML.MeasurementStrategy.probs(
+            computation_space=ML.ComputationSpace.FOCK
+        ),
+    )
+    return ql
+
+
+@pytest.mark.parametrize(
+    ("to_args", "apply_method"),
+    [
+        ({"device": "cpu"}, "cpu"),
+        ({"dtype": torch.float32}, "float"),
+        ({"dtype": torch.float64}, "double"),
+    ],
+)
+def test_apply_methods_match_to(layer, to_args, apply_method):
+    expected = deepcopy(layer).to(**to_args)
+    actual = getattr(deepcopy(layer), apply_method)()
+
+    assert_layers_equal(expected, actual)
+
+
+@pytest.mark.skipif(
+    not torch.cuda.is_available(),
+    reason="CUDA unavailable",
+)
+def test_cuda_matches_to(layer):
+    expected = deepcopy(layer).to("cuda")
+    actual = deepcopy(layer).cuda()
+
+    assert_layers_equal(expected, actual)
+
+
+@pytest.fixture
+def noisy_layer():
+    def update_rule(state: torch.Tensor, output: torch.Tensor):
+        x = state + output[:, 0]
+        return x
+
+    circ = ML.CircuitBuilder(n_modes=3)
+    circ.add_entangling_layer()
+    circ.add_memristive_ps(mode=0, update_rule=update_rule, initial_state=0)
+    circ.add_entangling_layer()
+
+    # Both source and phase
+    ql = ML.QuantumLayer(
+        builder=circ,
+        n_photons=1,
+        measurement_strategy=ML.MeasurementStrategy.probs(
+            computation_space=ML.ComputationSpace.FOCK
+        ),
+        noise=pcvl.NoiseModel(
+            brightness=0.9,
+            indistinguishability=0.7,
+            g2=0.1,
+            phase_error=0.01,
+            phase_imprecision=0.01,
+        ),
+        n_phase_error_samples=1,
+    )
+    return ql
+
+
+@pytest.mark.parametrize(
+    ("to_args", "apply_method"),
+    [
+        ({"device": "cpu"}, "cpu"),
+        ({"dtype": torch.float32}, "float"),
+        ({"dtype": torch.float64}, "double"),
+    ],
+)
+def test_apply_methods_match_to_noisy(noisy_layer, to_args, apply_method):
+    expected = deepcopy(noisy_layer).to(**to_args)
+    actual = getattr(deepcopy(noisy_layer), apply_method)()
+
+    assert_layers_equal(expected, actual)
+
+
+@pytest.mark.skipif(
+    not torch.cuda.is_available(),
+    reason="CUDA unavailable",
+)
+def test_cuda_matches_to_noisy(noisy_layer):
+    expected = deepcopy(noisy_layer).to("cuda")
+    actual = deepcopy(noisy_layer).cuda()
+
+    assert_layers_equal(expected, actual)
