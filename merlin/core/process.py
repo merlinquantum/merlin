@@ -533,6 +533,8 @@ class ComputationProcess(AbstractComputationProcess):
         simultaneous_processes : int
             Maximum number of active input basis states propagated in one
             ``compute_batch`` call. Default is 1.
+        paired: bool
+            Whether the output is simply one input state per unitary without the cross combinations.
 
         Returns
         -------
