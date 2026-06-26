@@ -144,13 +144,13 @@ If you use MerLin in your research, please cite:
 
 ## Roadmap
 
-- **Latest release (`0.3.2`)**: See the [release notes](https://github.com/merlinquantum/merlin/releases) for the full changelog.
-- **MerLin 0.4 (in progress)**:
-  - Built-in modules to make common algorithms easier to use
-  - Differentiation support on the `MerlinProcessor`
-  - Easier encoding-space specification
-  - Photon indistinguishability support
-  - Better sparsity handling in SLOS
+- **Current release (`0.4.1`)**: See the [release notes](https://github.com/merlinquantum/merlin/releases) for the full changelog.
+- **MerLin 0.4 release highlights**:
+  - Built-in models in `merlin.models`, including `ReservoirClassifier`, `PhotonicGenerator`, and `QCNNClassifier`
+  - Noisy SLOS simulations for more hardware-aware training
+  - Explicit amplitude-input encodings through `EncodingSpace` and `StateVector`
+  - Local and remote Perceval processor support through `MerlinProcessor(processor=...)`
+  - Memristive phase shifters through `CircuitBuilder.add_memristive_ps(...)`
 
 ## Contributing
 
