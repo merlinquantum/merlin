@@ -3548,12 +3548,6 @@ def test_cuda_lands_on_expected_state(layer):
     assert_layer_on(moved, device="cuda", real_dtype=torch.float32)
 
 
-def _example_input(layer):
-    # adapt to your fixture's expected input shape/dtype (see the existing
-    # memristive forward tests in this file for the right shape)
-    return torch.rand(1, layer.input_size, dtype=layer.dtype, device=layer.device)
-
-
 @pytest.mark.parametrize(
     "move",
     [

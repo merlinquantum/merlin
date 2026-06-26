@@ -1499,7 +1499,7 @@ class QuantumLayer(MerlinModule):
         # Fatal deprecation is handled by the sanitize_parameters decorator via registry.
         return None
 
-    # the to method refers to apply_ directly. They are intrinsically the same method.
+    # .to() routes through _apply (nn.Module.to calls self._apply), so this is the single move path.
     def _apply(self, fn, recurse=True):
         """Apply a transformation function to all tensors owned by the layer.
 
@@ -1520,7 +1520,7 @@ class QuantumLayer(MerlinModule):
             conversion. Typically generated internally by
             :meth:`torch.nn.Module._apply`.
         recurse:bool
-            Default is False. Whether or not to apply the function recursively.
+            Default is True. Whether or not to apply the function recursively.
 
         Returns
         -------
@@ -1532,7 +1532,7 @@ class QuantumLayer(MerlinModule):
         # infer canonical device/dtype
         old_device = self.device if self.device is not None else torch.device("cpu")
         old_dtype = self.dtype if self.dtype is not None else torch.get_default_dtype()
-        probe = torch.zeros((), device=old_device, dtype=torch.get_default_dtype())
+        probe = torch.zeros((), device=old_device, dtype=old_dtype)
         moved = fn(probe)
 
         if moved.device != old_device:  # a real device move was requested
