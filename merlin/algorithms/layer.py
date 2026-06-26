@@ -1499,53 +1499,7 @@ class QuantumLayer(MerlinModule):
         # Fatal deprecation is handled by the sanitize_parameters decorator via registry.
         return None
 
-    def to(self, *args: Any, **kwargs: Any) -> QuantumLayer:
-        """Move the layer and auxiliary transforms to a new device or dtype.
-
-        Parameters
-        ----------
-        *args
-            Positional arguments forwarded to :meth:`torch.nn.Module.to`.
-        **kwargs
-            Keyword arguments forwarded to :meth:`torch.nn.Module.to`.
-
-        Returns
-        -------
-        QuantumLayer
-            The updated layer instance.
-        """
-        super().to(*args, **kwargs)
-        # Manually move tensors that are not registered as parameters/buffers.
-        device = kwargs.get("device")
-        dtype = kwargs.get("dtype")
-
-        # Support all torch.nn.Module.to signatures.
-        if len(args) > 0:
-            first_arg = args[0]
-            if isinstance(first_arg, torch.dtype):
-                dtype = first_arg if dtype is None else dtype
-            elif isinstance(first_arg, (torch.device, str)):
-                device = first_arg if device is None else device
-            elif isinstance(first_arg, torch.Tensor):
-                if device is None:
-                    device = first_arg.device
-                if dtype is None and first_arg.dtype in (torch.float32, torch.float64):
-                    dtype = first_arg.dtype
-
-        if len(args) > 1 and isinstance(args[1], torch.dtype) and dtype is None:
-            dtype = args[1]
-
-        if dtype is not None:
-            _, self.dtype, self.complex_dtype = MerlinModule.setup_device_and_dtype(
-                None,
-                dtype,
-            )
-
-        if device is not None:
-            self.device = torch.device(device)
-
-        return self
-
+    # the to method refers to apply_ directly. They are intrinsically the same method.
     def _apply(self, fn, recurse=True):
         """Apply a transformation function to all tensors owned by the layer.
 
@@ -1575,6 +1529,20 @@ class QuantumLayer(MerlinModule):
             memristive state tensors transformed by ``fn``.
         """
 
+        # infer canonical device/dtype
+        old_device = self.device if self.device is not None else torch.device("cpu")
+        old_dtype = self.dtype if self.dtype is not None else torch.get_default_dtype()
+        probe = torch.zeros((), device=old_device, dtype=torch.get_default_dtype())
+        moved = fn(probe)
+
+        if moved.device != old_device:  # a real device move was requested
+            self.device = moved.device  # ...otherwise leave it (stays None)
+
+        if moved.dtype != old_dtype:  # a real dtype change was requested
+            _, self.dtype, self.complex_dtype = MerlinModule.setup_device_and_dtype(
+                None, moved.dtype
+            )
+
         super()._apply(fn, recurse=recurse)
 
         # memristive tensors
@@ -1589,23 +1557,9 @@ class QuantumLayer(MerlinModule):
             if torch.is_tensor(tensor):
                 self.memristive_state[state] = fn(tensor)
 
-        # infer canonical device/dtype AFTER move
-        old_device = self.device if self.device is not None else torch.device("cpu")
-        old_dtype = self.dtype if self.dtype is not None else torch.get_default_dtype()
-        probe = torch.zeros((), device=old_device, dtype=torch.get_default_dtype())
-        moved = fn(probe)
-
-        if moved.device != old_device:  # a real device move was requested
-            self.device = moved.device  # ...otherwise leave it (stays None)
-
-        if moved.dtype != old_dtype:  # a real dtype change was requested
-            _, self.dtype, self.complex_dtype = MerlinModule.setup_device_and_dtype(
-                None, moved.dtype
-            )
-
         self.computation_process.to(dtype=self.dtype, device=self.device)
 
-        # NOW move auxiliaries once
+        # Move auxiliaries once
         target_kwargs = {"dtype": self.dtype}
         if self.device is not None:
             target_kwargs["device"] = self.device
