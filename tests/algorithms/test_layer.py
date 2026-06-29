@@ -26,6 +26,7 @@ Tests for the main QuantumLayer class.
 
 import math
 import re
+from collections.abc import Sequence
 from copy import deepcopy
 
 import numpy as np
@@ -3410,3 +3411,169 @@ def test_memristive_amplitude_input_batched_with_noise():
     output = ql(input)
 
     assert not torch.allclose(output[0], output[1])
+
+
+@pytest.fixture
+def layer():
+    def update_rule(state: torch.Tensor, output: torch.Tensor):
+        x = state + output[:, 0]
+        return x
+
+    circ = ML.CircuitBuilder(n_modes=3)
+    circ.add_entangling_layer()
+    circ.add_memristive_ps(mode=0, update_rule=update_rule, initial_state=0)
+    circ.add_entangling_layer()
+
+    # Both source and phase
+    ql = ML.QuantumLayer(
+        builder=circ,
+        n_photons=1,
+        measurement_strategy=ML.MeasurementStrategy.probs(
+            computation_space=ML.ComputationSpace.FOCK
+        ),
+    )
+    return ql
+
+
+@pytest.fixture
+def noisy_layer():
+    def update_rule(state: torch.Tensor, output: torch.Tensor):
+        x = state + output[:, 0]
+        return x
+
+    circ = ML.CircuitBuilder(n_modes=3)
+    circ.add_entangling_layer()
+    circ.add_memristive_ps(mode=0, update_rule=update_rule, initial_state=0)
+    circ.add_entangling_layer()
+
+    # Both source and phase
+    ql = ML.QuantumLayer(
+        builder=circ,
+        n_photons=1,
+        measurement_strategy=ML.MeasurementStrategy.probs(
+            computation_space=ML.ComputationSpace.FOCK
+        ),
+        noise=pcvl.NoiseModel(
+            brightness=0.9,
+            indistinguishability=0.7,
+            g2=0.1,
+            phase_error=0.01,
+            phase_imprecision=0.01,
+        ),
+        n_phase_error_samples=1,
+    )
+    return ql
+
+
+def test_half_raises_value_error(layer):
+    """Merlin only supports float32/float64, so .half()/float16 must raise."""
+    with pytest.raises(ValueError):
+        deepcopy(layer).half()
+    with pytest.raises(ValueError):
+        deepcopy(layer).to(torch.float16)
+
+
+def test_dtype_only_move_leaves_device_unchanged(layer):
+    """A pure dtype move must not assign a concrete device."""
+    original_device = layer.device
+    moved = deepcopy(layer).double()
+    assert moved.device == original_device
+    assert moved.dtype == torch.float64
+
+
+def _iter_layer_tensors(layer):
+    """Yield (name, tensor) for every tensor the layer owns — including the
+    memristive state/history stored in plain Python lists (not buffers)."""
+    yield from layer.named_parameters()
+    yield from layer.named_buffers()
+    for i, s in enumerate(layer.memristive_state):
+        if torch.is_tensor(s):
+            yield f"memristive_state[{i}]", s
+    for i, hist in enumerate(layer.memristive_history):
+        for j, t in enumerate(hist):
+            if torch.is_tensor(t):
+                yield f"memristive_history[{i}][{j}]", t
+
+
+def assert_layer_on(layer, *, device, real_dtype):
+    """Ground truth: assert the end state of a move directly, with no reference
+    to any other code path."""
+    dev = torch.device(device)
+    seen_memristive = False
+    for name, t in _iter_layer_tensors(layer):
+        assert t.device.type == dev.type, f"{name}: {t.device} != {dev}"
+        if t.is_floating_point():  # complex left to its own test
+            assert t.dtype == real_dtype, f"{name}: {t.dtype} != {real_dtype}"
+        if name.startswith("memristive"):
+            seen_memristive = True
+    # guard against a fixture that silently has no memristive tensors —
+    # otherwise this whole helper would vacuously pass
+    assert seen_memristive, "fixture has no memristive tensors to check"
+    # layer bookkeeping
+    assert layer.dtype == real_dtype
+    assert layer.computation_process.dtype == real_dtype
+    if layer.device is not None:  # None == 'default/cpu', allowed
+        assert layer.device.type == dev.type
+
+
+@pytest.mark.parametrize(
+    ("move", "exp_device", "exp_dtype"),
+    [
+        (lambda l: l.cpu(), "cpu", torch.float32),  # default real dtype
+        (lambda l: l.float(), "cpu", torch.float32),
+        (lambda l: l.double(), "cpu", torch.float64),
+    ],
+)
+def test_move_lands_on_expected_state(layer, move, exp_device, exp_dtype):
+    moved = move(deepcopy(layer))
+    assert_layer_on(moved, device=exp_device, real_dtype=exp_dtype)
+
+
+@pytest.mark.parametrize(
+    ("move", "exp_device", "exp_dtype"),
+    [
+        (lambda l: l.cpu(), "cpu", torch.float32),
+        (lambda l: l.float(), "cpu", torch.float32),
+        (lambda l: l.double(), "cpu", torch.float64),
+    ],
+)
+def test_move_lands_on_expected_state_noisy(noisy_layer, move, exp_device, exp_dtype):
+    moved = move(deepcopy(noisy_layer))
+    assert_layer_on(moved, device=exp_device, real_dtype=exp_dtype)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA unavailable")
+def test_cuda_lands_on_expected_state(layer):
+    moved = deepcopy(layer).cuda()
+    assert_layer_on(moved, device="cuda", real_dtype=torch.float32)
+
+
+@pytest.mark.parametrize(
+    "move",
+    [
+        lambda l: l.float(),
+        lambda l: l.double(),
+        lambda l: l.cpu(),
+    ],
+)
+def test_forward_runs_after_move(layer, move):
+    moved = move(deepcopy(layer))
+    out = moved()  # must not raise device/dtype mismatch
+    assert out.device.type == (moved.device.type if moved.device is not None else "cpu")
+    if out.is_floating_point():
+        assert out.dtype == moved.dtype
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA unavailable")
+def test_forward_runs_after_cuda_roundtrip(layer):
+    moved = deepcopy(layer).cuda().cpu()  # round-trip exercises both directions
+    out = moved()
+    assert out.device.type == "cpu"
+
+
+def test_to_delegates_to_apply(layer):
+    """to() must remain a thin alias of _apply (no divergent override)."""
+    via_to = deepcopy(layer).to(dtype=torch.float64)
+    via_apply = deepcopy(layer).double()
+    assert_layer_on(via_to, device="cpu", real_dtype=torch.float64)
+    assert_layer_on(via_apply, device="cpu", real_dtype=torch.float64)
