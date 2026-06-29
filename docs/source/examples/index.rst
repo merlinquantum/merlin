@@ -11,7 +11,7 @@ Latest Release
    :hidden:
    :maxdepth: 1
 
-   ../notebooks/release_0,3_highlights
+   ../notebooks/release_highlights/release_0,4_highlights
 
 .. merlin-gallery::
    :data: _data/galleries/examples/new_release.json
@@ -194,7 +194,8 @@ Discover more usages of MerLin
    ../notebooks/iris_classification
    ../notebooks/QORC-basics
    ../notebooks/QORC-timeseries
-   ../notebooks/release_0,3_highlights
+   ../notebooks/release_highlights/release_0,4_highlights
+   ../notebooks/release_highlights/release_0,3_highlights
 
 Based on reproduced papers
 ~~~~~~~~~~~~~~~~~~~~~~~~~~

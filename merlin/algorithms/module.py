@@ -54,7 +54,7 @@ class MerlinModule(nn.Module):
     """
 
     # -------------------- Execution policy & helpers --------------------
-    uid = uuid.uuid4()
+    uid: uuid.UUID
 
     @property
     def force_local(self) -> bool:
@@ -87,6 +87,8 @@ class MerlinModule(nn.Module):
     def __init__(self) -> None:
         """Initialize the shared Merlin module state."""
         super().__init__()
+
+        self.uid = uuid.uuid4()
 
         # execution policy: when True, always simulate locally (do not offload)
         self._force_simulation: bool = False

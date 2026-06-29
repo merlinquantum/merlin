@@ -84,6 +84,6 @@ mypy .
 pytest
 
 # Build docs
-pip install -e .[docs] && make -C docs html
+pip install -r requirements-docs.txt && make -C docs html
 
 -->

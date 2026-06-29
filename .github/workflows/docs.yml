@@ -34,13 +34,14 @@ jobs:
           sudo rm -rf /var/lib/apt/lists/*
 
       - name: Install documentation dependencies
+        working-directory: docs
         run: |
           df -h
           python -m pip install --upgrade pip
           df -h
           pip install --index-url https://download.pytorch.org/whl/cpu "torch>=2.0.0,<=2.10.0"
           df -h
-          pip install -e ".[docs]"
+          pip install -r requirements.txt
           df -h
 
       - name: Build documentation

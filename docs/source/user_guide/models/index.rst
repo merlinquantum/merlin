@@ -17,6 +17,6 @@ Here are the quantum models that are ready to use in MerLin.
    :maxdepth: 3
    :hidden:
 
-   qgan
    qcnn
+   qgan
    reservoir_classifier

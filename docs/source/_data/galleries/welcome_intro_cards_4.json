@@ -9,8 +9,8 @@
   {
     "title": "Latest Releases",
     "summary": "Track recent updates, fixes, and newly added capabilities in MerLin.",
-    "image": "_static/img/release_0.3.png",
-    "doc": "notebooks/release_0,3_highlights.ipynb",
+    "image": "_static/img/noise_types.png",
+    "doc": "notebooks/release_highlights/release_0,4_highlights.ipynb",
     "tags": ["Releases", "Changelog", "Partial measurement"]
   },
   {

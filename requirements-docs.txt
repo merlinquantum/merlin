@@ -1,1 +1,2 @@
 -e .[docs]
+-r requirements-docs-vcs.txt

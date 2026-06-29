@@ -1,0 +1,1 @@
+sphinx-multiversion-contrib @ git+https://github.com/Quandela/sphinx-multiversion-contrib.git@1.1.1
