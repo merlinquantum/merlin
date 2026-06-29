@@ -35,8 +35,20 @@ Computation Spaces
 
 When designing models for physical hardware execution, selecting the appropriate computation space is critical.
 
-* **Recommended:** Use ``ComputationSpace.UNBUNCHED`` or ``ComputationSpace.DUAL_RAIL``.
-* **Avoid:** ``ComputationSpace.FOCK``.
+Voici une version corrigée et enrichie de tes explications. J'ai affiné le vocabulaire technique pour qu'il soit parfaitement aligné avec la documentation officielle de MerLin et les réalités matérielles de la photonique quantique.
+
+* **Recommended:** Use `ComputationSpace.UNBUNCHED` or `ComputationSpace.DUAL_RAIL`.
+* **UNBUNCHED:** This space restricts the simulated configurations to at most one photon per mode.
+   It aligns perfectly with the physical reality of current threshold detectors, which can only detect the presence or absence of a photon (0 or 1), but cannot count them.
+   It is the default computation space in MerLin.
+* **DUAL-RAIL:** This is a special case of the unbunched space, where exactly one photon is shared across every pair of modes.
+   By restricting the allowed states, this logical encoding provides robustness against photon loss and ensures higher fidelity on physical hardware.
+
+
+* **Avoid:** `ComputationSpace.FOCK`.
+* **FOCK:** This space simulates the full Fock space, allowing all photon-number configurations, including the accumulation of multiple photons in a single mode (bunching). 
+   You must avoid this on current physical QPUs because it assumes the use of photon-number-resolving (PNR) detectors, which are not yet available on standard hardware. 
+   It should be reserved exclusively for high-fidelity software simulations.
 
 Physical photonic QPUs do not have photon-number-resolving detectors yet.
 
@@ -60,6 +72,7 @@ Due to the destructive nature of quantum measurements, hardware execution restri
   * ``sampled counts/probabilities`` (Shot-based measurements)
 
 * **Unsupported:** Raw amplitudes or ``StateVector`` outputs cannot be directly retrieved from physical hardware.
+   We can only infer state probabilities at the end of the circuit, using shots and samples.
 
 Understanding Shot-Based Execution
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -73,13 +86,29 @@ To compute expectations or output probabilities, the hardware must physically pr
 * **Photon Loss:** Physical components are imperfect. During execution, photons can be lost before reaching the detectors, resulting in invalid or degraded states.
 * **Runtime vs. Accuracy Trade-off:** While a higher number of shots yields a more accurate statistical estimation (reducing shot noise), it linearly increases the physical runtime and execution cost on the QPU. You must find the optimal balance between statistical fidelity and execution time for your specific model.
 
-Input-State Constraints
------------------------
-
 Photonic QPUs natively process ``BasicState`` inputs (e.g., specific photon configurations).
 
 .. note::
    If your pipeline relies on a ``StateVector``, you must implement a state-preparation circuit prior to the main ansatz to convert the state natively on the hardware. Avoid arbitrary superposition unless there is a real state preparation path.
+
+**Shot efficiency guidance**
+
+Note that the larger the state space, the more samples are required. If the number of shots is too low, the sampled distribution will not be representative, making the resulting output inaccurate. 
+Conversely, requesting a massive number of shots does not cause any issues in software simulation, as the Law of Large Numbers ensures the distribution converges perfectly. 
+However, on a physical QPU, photons can be lost during execution. 
+Because of this photon loss, many shots are discarded as invalid, meaning you must run a much higher number of raw shots to gather enough valid samples.
+
+A good strategy to ensure using shot efficiently can be setting an arbitrary high number of shots (e.g., a default of 1024 or 10000) for every execution is highly inefficient. 
+To optimize hardware usage and mitigate execution costs, we strongly recommend implementing a **Diminishing Returns Strategy** (Incremental Execution).
+
+* **Incremental Execution:** Instead of requesting a massive block of shots upfront, execute the circuit in smaller, successive batches (e.g., chunks of 100 shots).
+* **Statistical Stopping Criterion:** Continuously monitor and compute the empirical output distribution after each batch. 
+* **The Diminishing Returns Point:** Halt the execution precisely when the system identifies that adding new shots no longer significantly alters the estimated probability distribution. 
+
+This dynamic approach ensures you only spend QPU time when it actively contributes to resolving the statistical noise, cutting down unnecessary hardware usage without sacrificing the accuracy of your gradients or final inferences.
+
+Input-State Constraints
+
 
 Dual-Rail Constraints
 ^^^^^^^^^^^^^^^^^^^^^
