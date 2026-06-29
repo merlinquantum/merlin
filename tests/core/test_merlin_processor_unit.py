@@ -21,8 +21,11 @@ from perceval.runtime import AProcessor, Processor, RemoteProcessor
 from perceval.runtime.session import ISession
 
 import merlin.core.merlin_processor as merlin_processor_module
+from merlin.algorithms import QuantumLayer
 from merlin.algorithms.module import MerlinModule
+from merlin.builder.circuit_builder import CircuitBuilder
 from merlin.core.circuit import Circuit
+from merlin.core.computation_space import ComputationSpace
 from merlin.core.merlin_processor import (
     BackendCapabilities,
     MerlinProcessor,
@@ -30,6 +33,7 @@ from merlin.core.merlin_processor import (
     ValidatedLayerConfig,
 )
 from merlin.core.state_vector import StateVector
+from merlin.measurement.strategies import MeasurementStrategy
 
 
 class FakeCommand:
@@ -1513,6 +1517,132 @@ def test_run_chunk_local_executes_real_perceval_processor():
     torch.testing.assert_close(output, torch.tensor([[1.0, 0.0], [1.0, 0.0]]))
 
 
+def test_local_processor_two_quantum_layers_matches_direct_perceval_probabilities():
+    """Local MerlinProcessor execution matches a direct two-layer Perceval run."""
+    n_modes = 3
+
+    class ReuploadInput(torch.nn.Module):
+        """Duplicate a feature tensor for a second angle-encoding upload."""
+
+        def forward(self, input_tensor: torch.Tensor) -> torch.Tensor:
+            return torch.cat((input_tensor, input_tensor), dim=-1)
+
+    def make_builder_layer(prefixes: Sequence[str]) -> QuantumLayer:
+        builder = CircuitBuilder(n_modes=n_modes)
+        builder.add_entangling_layer(trainable=False, name=f"{prefixes[0]}_pre")
+        for index, prefix in enumerate(prefixes):
+            builder.add_angle_encoding(modes=list(range(n_modes)), name=prefix)
+            entangler_name = (
+                f"{prefix}_post" if index == len(prefixes) - 1 else f"{prefix}_mid"
+            )
+            builder.add_entangling_layer(
+                trainable=False,
+                name=entangler_name,
+            )
+        return QuantumLayer(
+            input_size=n_modes * len(prefixes),
+            builder=builder,
+            input_state=[1, 0, 0],
+            measurement_strategy=MeasurementStrategy.probs(
+                computation_space=ComputationSpace.UNBUNCHED,
+            ),
+            dtype=torch.float64,
+        ).eval()
+
+    def make_builder_equivalent_perceval_circuit(
+        prefixes: Sequence[str],
+    ) -> pcvl.Circuit:
+        def fixed_mzi(_index: int) -> pcvl.Circuit:
+            return pcvl.BS() // pcvl.PS(0.0) // pcvl.BS() // pcvl.PS(0.0)
+
+        def add_fixed_entangler(circuit: pcvl.Circuit) -> None:
+            circuit.add(
+                0,
+                pcvl.GenericInterferometer(
+                    n_modes,
+                    fixed_mzi,
+                    shape=pcvl.InterferometerShape.RECTANGLE,
+                ),
+            )
+
+        circuit = pcvl.Circuit(n_modes)
+        add_fixed_entangler(circuit)
+        parameter_index = 1
+        for prefix in prefixes:
+            for mode in range(n_modes):
+                circuit.add(mode, pcvl.PS(pcvl.P(f"{prefix}{parameter_index}")))
+                parameter_index += 1
+            add_fixed_entangler(circuit)
+        return circuit
+
+    def run_perceval_probabilities(
+        circuit: pcvl.Circuit, param_names: Sequence[str], inputs: torch.Tensor
+    ) -> torch.Tensor:
+        processor = Processor("SLOS")
+        processor.set_circuit(circuit.copy())
+        processor.with_input(pcvl.BasicState([1, 0, 0]))
+
+        sampler = merlin_processor_module.Sampler(
+            processor,
+            max_shots_per_call=MerlinProcessor.DEFAULT_MAX_SHOTS,
+        )
+        sampler.clear_iterations()
+        input_values = inputs.detach().cpu().numpy()
+        for row in input_values:
+            sampler.add_iteration(
+                circuit_params={
+                    name: float(row[index]) for index, name in enumerate(param_names)
+                }
+            )
+
+        raw_results = sampler.probs.execute_sync()
+        output = torch.zeros((inputs.shape[0], n_modes), dtype=inputs.dtype)
+        state_to_index = {"|1,0,0>": 0, "|0,1,0>": 1, "|0,0,1>": 2}
+        for row_index, result_item in enumerate(raw_results["results_list"]):
+            for state, probability in result_item["results"].items():
+                output[row_index, state_to_index[str(state)]] = float(probability)
+        return output
+
+    first_circuit = make_builder_equivalent_perceval_circuit(["a"])
+    second_circuit = make_builder_equivalent_perceval_circuit(["b", "c"])
+    first_layer = make_builder_layer(["a"])
+    second_layer = make_builder_layer(["b", "c"])
+    model = torch.nn.Sequential(first_layer, ReuploadInput(), second_layer).eval()
+    input_tensor = torch.tensor(
+        [[0.1, 0.7, 1.4], [1.2, 0.3, 0.6], [2.4, 1.1, 0.2]],
+        dtype=torch.float64,
+    )
+
+    first_param_order = first_layer.export_config()["input_param_order"]
+    second_param_order = second_layer.export_config()["input_param_order"]
+    assert first_param_order == ["a1", "a2", "a3"]
+    assert second_param_order == [
+        "b1",
+        "b2",
+        "b3",
+        "c4",
+        "c5",
+        "c6",
+    ]
+    assert len(second_param_order) > len(first_param_order)
+
+    first_expected = run_perceval_probabilities(
+        first_circuit, ["a1", "a2", "a3"], input_tensor
+    )
+    second_input = torch.cat((first_expected, first_expected), dim=-1)
+    expected = run_perceval_probabilities(
+        second_circuit, ["b1", "b2", "b3", "c4", "c5", "c6"], second_input
+    )
+
+    processor = MerlinProcessor(processor=Processor("SLOS"))
+    actual = processor.forward(model, input_tensor, nsample=None)
+
+    assert first_layer.uid != second_layer.uid
+    assert len(processor._layer_cache) == 2
+    assert set(processor._layer_cache) == {first_layer.uid, second_layer.uid}
+    torch.testing.assert_close(actual, expected, rtol=1e-5, atol=1e-6)
+
+
 def test_run_chunk_local_executes_real_clifford_processor_samples():
     """Local chunk execution handles real Perceval samples results."""
     pcvl_proc = Processor("CliffordClifford2017")
@@ -2363,6 +2493,15 @@ def test_has_export_config():
     assert not isinstance(BadLayer(), SupportsExportConfig)
 
 
+def test_merlin_module_uid_is_instance_scoped():
+    first = MerlinModule()
+    second = MerlinModule()
+
+    assert first.uid != second.uid
+    assert "uid" in first.__dict__
+    assert "uid" in second.__dict__
+
+
 def test_offload_quantum_layer_with_chunking_validates_and_caches_export_config():
     proc = make_processor(["probs", "sample_count"])
 
@@ -2415,3 +2554,70 @@ def test_offload_quantum_layer_with_chunking_validates_and_caches_export_config(
         None,
     )
     assert layer.export_config_calls == 1
+
+
+def test_offload_quantum_layer_cache_isolated_by_merlin_module_instance_uid():
+    proc = make_processor(["probs", "sample_count"])
+
+    class LayerWithExportConfig(MerlinModule):
+        def __init__(self, label: str) -> None:
+            super().__init__()
+            self.label = label
+            self.export_config_calls = 0
+
+        def export_config(self):
+            self.export_config_calls += 1
+            return {
+                "circuit": pcvl.Circuit(m=2, name=f"Circuit {self.label}"),
+                "input_state": [1, 0],
+                "input_param_order": [f"theta_{self.label}"],
+            }
+
+    first = LayerWithExportConfig("first")
+    second = LayerWithExportConfig("second")
+    configs_used = []
+
+    def fake_run_chunks_pooled(
+        layer_arg, config, input_tensor, chunks, nsample, state, deadline
+    ):
+        configs_used.append((layer_arg.label, tuple(config.input_param_order)))
+        return torch.tensor([[1.0]])
+
+    proc._run_chunks_pooled = fake_run_chunks_pooled
+
+    proc._offload_quantum_layer_with_chunking(
+        first,
+        torch.zeros(1, 2),
+        None,
+        {},
+        None,
+    )
+    proc._offload_quantum_layer_with_chunking(
+        second,
+        torch.zeros(1, 2),
+        None,
+        {},
+        None,
+    )
+
+    assert first.uid != second.uid
+    assert first.export_config_calls == 1
+    assert second.export_config_calls == 1
+    assert len(proc._layer_cache) == 2
+    assert set(proc._layer_cache) == {first.uid, second.uid}
+    assert configs_used == [
+        ("first", ("theta_first",)),
+        ("second", ("theta_second",)),
+    ]
+
+    proc._offload_quantum_layer_with_chunking(
+        first,
+        torch.zeros(1, 2),
+        None,
+        {},
+        None,
+    )
+
+    assert first.export_config_calls == 1
+    assert second.export_config_calls == 1
+    assert configs_used[-1] == ("first", ("theta_first",))
