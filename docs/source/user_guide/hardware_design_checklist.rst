@@ -16,6 +16,7 @@ To simplify your workflow, this guide classifies QML design components into thre
    * **Input State:** ``BasicState`` initialization (with exactly 1 photon per pair of modes for Dual-Rail).
    * **Output Strategy:** ``MeasurementStrategy.probs()`` or ``mode_expectations()``.
    * **Components:** Native Mach-Zehnder Interferometers (MZI), beam splitters, and shallow circuit depths.
+   * **Superposed states:** But only available with a state-preparation circuit.
 
 2. **Simulation-Only Designs (No-Go on Hardware)**
    These features work perfectly in software simulation but are physically impossible to execute on current QPUs.
@@ -113,7 +114,9 @@ Input-State Constraints
 Dual-Rail Constraints
 ^^^^^^^^^^^^^^^^^^^^^
 
-When using Dual-Rail encoding, you **must** initialize the ``BasicState`` with exactly **one photon per pair of two modes**. Failing to respect this constraint triggers post-selection mechanisms that discard invalid states, resulting in severe information loss and degraded performance.
+When using Dual-Rail encoding, you **must** initialize the ``BasicState`` with exactly **one photon per pair of two modes**. 
+Failing to respect this constraint triggers post-selection mechanisms that discard states that falls outside the computation space,
+resulting in severe information loss and degraded performance.
 
 Circuit Design Recommendations
 ------------------------------
@@ -122,6 +125,7 @@ To ensure efficient execution and high fidelity, adhere to the following hardwar
 
 * **Component Selection:** Favor native photonic components such as Mach-Zehnder Interferometers (MZI), beam splitters, and phase shifters, as they map directly to the QPU's physical architecture.
 * **Circuit Depth:** Avoid unnecessarily deep circuits. Large simulated circuits may scale poorly during hardware compilation (transpilation), leading to suboptimal or inefficient physical implementations on a constrained QPU.
+* **permutations:** They are natively present on the circuit. Avoid design that create excessive bunching
 
 Recommended Pipeline
 --------------------
@@ -158,7 +162,7 @@ Below is a standard hardware-compatible circuit definition using ``merlin`` and 
 
    # 2. Instantiate the hardware-aware Quantum Layer (Fixed for MerLin v0.4)
    core = QuantumLayer(
-      input_size=4,                                      # Number of classical features
+      input_size=6,                                      # Number of classical features
       builder=builder,
       n_photons=3,                                       # Equivalent to input_state = [1, 0, 1, 0, 1, 0]
       dtype=torch.float32,
