@@ -102,7 +102,7 @@ def test_qcnn_basic_api():
     )
     with pytest.raises(AttributeError):
         qcnn_classifier_from_list.input_shape = (2, 2)
-
+    
     qcnn_classifier_above_former_limit = QCNNClassifier(
         input_shape_above_former_limit,
         accepted_num_classes,
@@ -790,3 +790,4 @@ def test_qcnn_state_dict_round_trip_with_export_config():
         restored_logits = restored_qcnn(x)
 
     assert torch.allclose(restored_logits, expected_logits, atol=1e-6, rtol=1e-6)
+

@@ -223,6 +223,10 @@ regular PyTorch workflow.
    loss.backward()
    optimizer.step()
 
+
+Be advised that RAM consumption exhibits quadratic growth relative to the input size. 
+Exceeding dimensions of (24,24) can lead to performance degradation or system crashes.
+
 Examples and References
 -----------------------
 
