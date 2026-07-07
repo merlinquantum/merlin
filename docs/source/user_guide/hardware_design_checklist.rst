@@ -15,11 +15,7 @@ To simplify your workflow, this guide classifies QML design components into thre
    * **State Encoding:** Angle/phase encoding (directly maps to physical phase shifters).
    * **Input State:** ``BasicState`` initialization (with exactly 1 photon per pair of modes for Dual-Rail).
    * **Output Strategy:** ``MeasurementStrategy.probs()`` or ``mode_expectations()``.
-<<<<<<< HEAD
-   * **Components:** Native Mach-Zehnder Interferometers (MZI), beam splitters, and shallow circuit depths.
-=======
    * **Components:** Native Mach-Zehnder Interferometers (MZI), beam splitters, permutations and shallow circuit depths
->>>>>>> 70ca1fde (refactor, added permutations, explained post-selection loss)
    * **Superposed states:** But only available with a state-preparation circuit.
 
 2. **Simulation-Only Designs (No-Go on Hardware)**
