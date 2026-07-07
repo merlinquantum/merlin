@@ -13,7 +13,7 @@ mapped its computational complexity along two main axes:
 
 * **Batch Size**: The computational complexity scales **linearly** with respect 
   to the ``batch_size``.
-* **Input Dimensions**: The complexity scales **expoentially** with respect 
+* **Input Dimensions**: The complexity scales **exponentially** with respect 
   to the input dimensions.
 
 Execution Constraints and Safeguards
@@ -24,7 +24,7 @@ must be observed during configuration:
 
 * **Batch Size**: The ``batch_size`` can safely be scaled beyond **100**, as its 
   overall impact on performance overhead remains minor.
-* **Input Dimension**: The ``input dimension`` is not capped, however, we recommand
+* **Input Dimension**: The ``input dimension`` is not capped, however, we recommend
 
 the user to avoid going above **24** if it is possible.
 
