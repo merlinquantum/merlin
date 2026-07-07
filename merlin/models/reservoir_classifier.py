@@ -230,10 +230,10 @@ class ReservoirClassifier(MerlinModule):
         ----------
         *args : tuple[Any, ...]
             Positional arguments forwarded to :meth:`torch.nn.Module.to` and
-            :meth:`merlin.algorithms.layer.QuantumLayer.to`.
+            the :class:`merlin.algorithms.layer.QuantumLayer`'s to method.
         **kwargs : dict[str, Any]
             Keyword arguments forwarded to :meth:`torch.nn.Module.to` and
-            :meth:`merlin.algorithms.layer.QuantumLayer.to`.
+            the :class:`merlin.algorithms.layer.QuantumLayer`'s to method.
 
         Returns
         -------
