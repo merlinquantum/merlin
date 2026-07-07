@@ -16,7 +16,7 @@ To simplify your workflow, this guide classifies QML design components into thre
    * **Input State:** ``BasicState`` initialization (with exactly 1 photon per pair of modes for Dual-Rail).
    * **Output Strategy:** ``MeasurementStrategy.probs()`` or ``mode_expectations()``.
    * **Components:** Native Mach-Zehnder Interferometers (MZI), beam splitters, permutations and shallow circuit depths
-   * **Superposed states:** But only available with a state-preparation circuit.
+   * **Superposed states:** avoid arbitrary superposition inputs unless there is a real state-preparation path
 
 2. **Simulation-Only Designs (No-Go on Hardware)**
    These features work perfectly in software simulation but are physically impossible to execute on current QPUs.
