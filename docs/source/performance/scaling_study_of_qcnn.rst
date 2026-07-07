@@ -13,7 +13,7 @@ mapped its computational complexity along two main axes:
 
 * **Batch Size**: The computational complexity scales **linearly** with respect 
   to the ``batch_size``.
-* **Input Dimensions**: The complexity scales **quadratically** with respect 
+* **Input Dimensions**: The complexity scales **expoentially** with respect 
   to the input dimensions.
 
 Execution Constraints and Safeguards
