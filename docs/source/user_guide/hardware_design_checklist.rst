@@ -15,7 +15,11 @@ To simplify your workflow, this guide classifies QML design components into thre
    * **State Encoding:** Angle/phase encoding (directly maps to physical phase shifters).
    * **Input State:** ``BasicState`` initialization (with exactly 1 photon per pair of modes for Dual-Rail).
    * **Output Strategy:** ``MeasurementStrategy.probs()`` or ``mode_expectations()``.
+<<<<<<< HEAD
    * **Components:** Native Mach-Zehnder Interferometers (MZI), beam splitters, and shallow circuit depths.
+=======
+   * **Components:** Native Mach-Zehnder Interferometers (MZI), beam splitters, permutations and shallow circuit depths
+>>>>>>> 70ca1fde (refactor, added permutations, explained post-selection loss)
    * **Superposed states:** But only available with a state-preparation circuit.
 
 2. **Simulation-Only Designs (No-Go on Hardware)**
@@ -125,7 +129,7 @@ To ensure efficient execution and high fidelity, adhere to the following hardwar
 
 * **Component Selection:** Favor native photonic components such as Mach-Zehnder Interferometers (MZI), beam splitters, and phase shifters, as they map directly to the QPU's physical architecture.
 * **Circuit Depth:** Avoid unnecessarily deep circuits. Large simulated circuits may scale poorly during hardware compilation (transpilation), leading to suboptimal or inefficient physical implementations on a constrained QPU.
-* **permutations:** They are natively present on the circuit. Avoid design that create excessive bunching
+* **permutations:** They are natively present on the circuit since it enables turing completness. Avoid design that create excessive bunching
 
 Recommended Pipeline
 --------------------
