@@ -332,7 +332,10 @@ def build_version(
     """
     source_path = checkout_path / "docs" / "source"
     version_output_path = output_path / version_name
+    # Keep nbsphinx auxiliary images relative to the exported source tree.
+    doctree_path = checkout_path / "docs" / "build" / "doctrees" / version_name
     version_output_path.mkdir(parents=True, exist_ok=True)
+    doctree_path.mkdir(parents=True, exist_ok=True)
 
     env = os.environ.copy()
     env["MERLIN_DOCS_REPO_PATH"] = str(checkout_path)
@@ -348,6 +351,8 @@ def build_version(
         sphinx_build,
         "-b",
         "html",
+        "-d",
+        str(doctree_path),
         "-D",
         f"smv_metadata_path={metadata_path}",
         "-D",
