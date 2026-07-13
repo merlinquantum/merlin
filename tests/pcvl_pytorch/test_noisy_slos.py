@@ -365,7 +365,7 @@ def test_computation_space_and_indistinguishability_default_value(
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
 def test_noisy_g2_slos_unitary_cuda_graph_cpu():
-    noise = pcvl.NoiseModel(indistinguishability=0.2, g2=0.7)
+    noise = pcvl.NoiseModel(indistinguishability=0.2, g2=0.2)
     groups = classify_noise(noise)
     noisy_slos = NoisyG2SLOSComputeGraph(
         groups, m=5, n_photons=3, computation_space=ComputationSpace.FOCK, device=None
@@ -377,4 +377,4 @@ def test_noisy_g2_slos_unitary_cuda_graph_cpu():
     )
 
     probs = noisy_slos.compute_probs(unitary=unitary, input_state=[1, 0, 1, 0, 1])
-    assert probs.sectors[0].tensor.device == unitary.device
+    assert all(s.tensor.device == unitary.device for s in probs.sectors)
