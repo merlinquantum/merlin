@@ -235,7 +235,7 @@ class NoisyG2SLOSComputeGraph:
         # probability p.  The two are related by g^(2)(0) = 2p/(1+p)^2, so:
         #   p = ((1 - g2) - sqrt(1 - 2*g2)) / g2,  valid for g2 in [0, 0.5].
         # For small g2, p ≈ g2/2 (L'Hôpital).  At g2=0 the limit is p=0.
-        _g2 = torch.as_tensor(self.g2, device=self.device, dtype=self.dtype)
+        _g2 = torch.as_tensor(self.g2, device=unitary.device, dtype=self.dtype)
         _disc = (1.0 - 2.0 * _g2).clamp(min=0.0)
         p_emit = ((1.0 - _g2) - _disc.sqrt()) / _g2.clamp(min=1e-15)
         for num_photons_added in range(len(extra_photons_combinations)):
@@ -251,7 +251,7 @@ class NoisyG2SLOSComputeGraph:
                         scheme="fock", n=self.n_photons + num_photons_added, m=self.m
                     ).compute_space_size(),
                     dtype=self.dtype,
-                    device=self.device,
+                    device=unitary.device,
                 ),
                 n_modes=self.m,
                 n_photons=self.n_photons + num_photons_added,

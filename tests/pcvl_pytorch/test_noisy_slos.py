@@ -7,6 +7,7 @@ from merlin import Combinadics, ComputationSpace
 from merlin.algorithms.layer_utils import NoiseGroups, classify_noise
 from merlin.pcvl_pytorch.locirc_to_tensor import CircuitConverter
 from merlin.pcvl_pytorch.noisy_slos import (
+    NoisyG2SLOSComputeGraph,
     NoisySLOSComputeGraph,
     _InputStateNoisySLOSComputeGraph,
 )
@@ -360,3 +361,20 @@ def test_computation_space_and_indistinguishability_default_value(
         groups, m=5, n_photons=3, computation_space=ComputationSpace.FOCK
     )
     assert noisy_slos.indistinguishability == 1.0
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
+def test_noisy_g2_slos_unitary_cuda_graph_cpu():
+    noise = pcvl.NoiseModel(indistinguishability=0.2, g2=0.7)
+    groups = classify_noise(noise)
+    noisy_slos = NoisyG2SLOSComputeGraph(
+        groups, m=5, n_photons=3, computation_space=ComputationSpace.FOCK, device=None
+    )
+
+    unitary = torch.tensor(
+        np.array(pcvl.Matrix.random_unitary(m=5), dtype=np.complex128),
+        device=torch.device("cuda"),
+    )
+
+    probs = noisy_slos.compute_probs(unitary=unitary, input_state=[1, 0, 1, 0, 1])
+    assert probs.sectors[0].tensor.device == unitary.device
