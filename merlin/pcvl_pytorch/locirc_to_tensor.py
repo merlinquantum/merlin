@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import warnings
 
+import numpy as np
 import torch
 from multipledispatch import dispatch
 from perceval.components import (
@@ -36,6 +37,8 @@ from perceval.components import (
     Circuit,
     Unitary,
 )
+from perceval.utils import Matrix
+from perceval.utils.algorithms.circuit_optimizer import CircuitOptimizer
 
 from ..utils.dtypes import resolve_float_complex
 
@@ -84,6 +87,93 @@ def _circuit_has_local_phase_error(circuit: Circuit) -> bool:
         True when at least one phase shifter has ``max_error > 0``.
     """
     return any(_phase_shifter_max_error(component) > 0.0 for _, component in circuit)
+
+
+def _decompose_unitaries(circuit: Circuit) -> Circuit:
+    """Replace black-box ``Unitary`` blocks with Clements MZI meshes.
+
+    Called when circuit phase noise is configured (``phase_imprecision > 0``
+    or ``phase_error > 0``). Each non-``PERM`` ``Unitary`` component is fitted
+    to a rectangular (Clements) mesh of MZIs with fixed numeric phases plus an
+    output phase-shifter layer, so the configured phase noise reaches every
+    physical phase of the hardware implementation. ``PERM`` components are
+    waveguide crossings with no programmable phases and are left untouched.
+
+    The fit reproduces each target unitary within the optimizer threshold
+    (fidelity error ~1e-6, matrix entries within ~1e-3). Its arbitrary global
+    phase is folded into the mesh's output phase layer so that blocks acting
+    on a subset of modes keep their relative phase with the rest of the
+    circuit. Decomposition happens once, at converter construction (~0.2 s
+    for a 10-mode unitary); the mesh phases differ between constructions
+    because the optimizer uses random starting points, but the reproduced
+    unitary does not.
+
+    Parameters
+    ----------
+    circuit : Circuit
+        Perceval circuit to transform.
+
+    Returns
+    -------
+    Circuit
+        The original circuit object when it contains no non-``PERM``
+        ``Unitary`` component, otherwise a new circuit with each such
+        component replaced by an equivalent MZI mesh.
+
+    Raises
+    ------
+    ValueError
+        If a ``Unitary`` component uses polarization.
+    RuntimeError
+        If the Clements fit does not converge for a component.
+    """
+    if not any(
+        isinstance(component, Unitary) and not isinstance(component, PERM)
+        for _, component in circuit
+    ):
+        return circuit
+
+    new_circuit = Circuit(circuit.m)
+    for r, component in circuit:
+        if not isinstance(component, Unitary) or isinstance(component, PERM):
+            new_circuit.add(r, component)
+            continue
+        if component.requires_polarization:
+            raise ValueError(
+                f"Circuit phase noise cannot be applied to polarized unitary "
+                f"'{component.name}' on modes {tuple(r)}: decomposition into "
+                f"an MZI mesh is not supported for polarized components."
+            )
+        target = np.asarray(component.compute_unitary(), dtype=complex)
+        try:
+            mesh = CircuitOptimizer().optimize_rectangle(Matrix(target))
+        except RuntimeError as exc:
+            raise RuntimeError(
+                f"Clements decomposition did not converge for unitary "
+                f"'{component.name}' on modes {tuple(r)}: {exc}"
+            ) from exc
+
+        # The fit reproduces the target only up to a global phase e^{i*alpha}.
+        # On a block covering a subset of modes that phase is physical (it is
+        # relative to the untouched modes), so fold -alpha into the mesh's
+        # output phase layer, which has exactly one PS per mode.
+        fitted = np.asarray(mesh.compute_unitary(), dtype=complex)
+        alpha = float(np.angle(np.trace(target.conj().T @ fitted)))
+        mesh_parameters = mesh.get_parameters()
+        output_phases = [p for p in mesh_parameters if p.name.startswith("phL")]
+        if len(output_phases) != component.m:
+            raise RuntimeError(
+                f"Unexpected mesh structure from CircuitOptimizer for unitary "
+                f"'{component.name}': expected {component.m} output phases "
+                f"('phL*'), found {len(output_phases)}."
+            )
+        for parameter in mesh_parameters:
+            value = float(parameter)
+            if parameter.name.startswith("phL"):
+                value -= alpha
+            parameter.fix_value(value)
+        new_circuit.add(r[0], mesh, merge=True)
+    return new_circuit
 
 
 class CircuitConverter:
@@ -174,6 +264,16 @@ class CircuitConverter:
 
            The quantization uses nearest-grid rounding through
            :func:`torch.round`; it is not floor or truncation.
+
+    Black-Box Unitaries Under Circuit Noise:
+        When ``phase_imprecision > 0`` or ``phase_error > 0``, every
+        non-``PERM`` ``Unitary`` component is automatically decomposed at
+        construction into a rectangular (Clements) mesh of MZIs with fixed
+        numeric phases, so the configured phase noise applies to every
+        physical phase of its hardware implementation (fidelity error ~1e-6,
+        global phase compensated). Without circuit noise the fast path is
+        kept: ``Unitary`` components stay precomputed constant tensors.
+        ``PERM`` components (waveguide crossings) are never decomposed.
 
     Example:
         Basic usage with a single phase shifter:
@@ -311,6 +411,12 @@ class CircuitConverter:
         assert isinstance(circuit, Circuit), (
             f"Expected a Perceval LO circuit, but got {type(circuit).__name__}"
         )
+        # Circuit phase noise must reach the phases inside black-box Unitary
+        # blocks, so decompose them into MZI meshes before building the
+        # parameter mapping. Without noise the fast path (precomputed constant
+        # tensor per Unitary) is kept.
+        if self._phase_imprecision > 0.0 or self._phase_error > 0.0:
+            circuit = _decompose_unitaries(circuit)
         self.circuit = circuit
         if self._phase_error > 0.0 and _circuit_has_local_phase_error(self.circuit):
             warnings.warn(
