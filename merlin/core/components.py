@@ -25,7 +25,9 @@ Pure descriptive components that describe WHAT we want, not HOW to implement it.
 Components are platform-agnostic and focus on intent rather than implementation.
 """
 
-from dataclasses import dataclass
+import math
+import random
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
@@ -189,6 +191,16 @@ class GenericInterferometer:
         Whether inner phase shifters are trainable.
     trainable_outer : bool | None
         Whether outer phase shifters are trainable.
+    seed : int | None
+        Optional seed controlling the random phases drawn for non-trainable
+        inner/outer phase shifters. ``None`` draws fresh entropy without
+        touching global random state.
+    fixed_inner_values : list[float]
+        Fixed (non-trainable) values for the inner phase shifters, drawn
+        randomly unless explicitly provided.
+    fixed_outer_values : list[float]
+        Fixed (non-trainable) values for the outer phase shifters, drawn
+        randomly unless explicitly provided.
     """
 
     start_mode: int
@@ -198,6 +210,9 @@ class GenericInterferometer:
     model: str = "mzi"
     trainable_inner: bool | None = None
     trainable_outer: bool | None = None
+    seed: int | None = None
+    fixed_inner_values: list[float] = field(default_factory=list)
+    fixed_outer_values: list[float] = field(default_factory=list)
 
     def __post_init__(self):
         """Validate and normalize the interferometer configuration."""
@@ -218,6 +233,23 @@ class GenericInterferometer:
             self.trainable_outer = False
         # Normalise the aggregate flag so downstream logic can rely on it
         self.trainable = bool(self.trainable_inner or self.trainable_outer)
+
+        # Non-trainable phase shifters must still be initialised to random
+        # phases (not a constant 0.0), otherwise a "fixed" interferometer
+        # degenerates into a deterministic swap/identity instead of the
+        # random fixed unitary that untrained entangling layers are meant to
+        # provide (e.g. for reservoir-computing style architectures).
+        count = self.span * (self.span - 1) // 2 if self.span > 1 else 0
+        if count > 0:
+            rng = random.Random(self.seed)
+            if not self.trainable_inner and not self.fixed_inner_values:
+                self.fixed_inner_values = [
+                    rng.uniform(0, 2 * math.pi) for _ in range(count)
+                ]
+            if not self.trainable_outer and not self.fixed_outer_values:
+                self.fixed_outer_values = [
+                    rng.uniform(0, 2 * math.pi) for _ in range(count)
+                ]
 
     def get_params(self) -> dict[str, Any]:
         """Return placeholder names for every internal interferometer parameter.
