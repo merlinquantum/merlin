@@ -459,8 +459,8 @@ class NoisyG2SLOSComputeGraph:
             for graph in self._slos_graphs:
                 graph.to(self.device)
             if hasattr(self, "_regular_slos_graphs"):
-                for graph in self._regular_slos_graphs:
-                    graph.to(self.device)
+                for regular_graph in self._regular_slos_graphs:
+                    regular_graph.to(self.device)
 
         return self
 
