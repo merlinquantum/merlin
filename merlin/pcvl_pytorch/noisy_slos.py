@@ -201,7 +201,7 @@ class NoisyG2SLOSComputeGraph:
     def _augmented_obb_probs(
         self,
         unitary: torch.Tensor,
-        obb: "_InputStateNoisySLOSComputeGraph",
+        obb: _InputStateNoisySLOSComputeGraph,
         extra_vec: torch.Tensor,
         n_augmented: int,
     ) -> torch.Tensor:
