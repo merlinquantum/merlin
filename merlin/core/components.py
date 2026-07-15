@@ -197,10 +197,21 @@ class GenericInterferometer:
         touching global random state.
     fixed_inner_values : list[float]
         Fixed (non-trainable) values for the inner phase shifters, drawn
-        randomly unless explicitly provided.
+        randomly unless explicitly provided. When provided, must contain
+        exactly ``span * (span - 1) // 2`` entries.
     fixed_outer_values : list[float]
         Fixed (non-trainable) values for the outer phase shifters, drawn
-        randomly unless explicitly provided.
+        randomly unless explicitly provided. When provided, must contain
+        exactly ``span * (span - 1) // 2`` entries.
+
+    Raises
+    ------
+    TypeError
+        If ``model`` is not a string.
+    ValueError
+        If ``model`` is not ``"mzi"`` or ``"bell"``, or if a provided
+        ``fixed_inner_values``/``fixed_outer_values`` list does not contain
+        exactly one entry per phase shifter.
     """
 
     start_mode: int
@@ -240,6 +251,18 @@ class GenericInterferometer:
         # random fixed unitary that untrained entangling layers are meant to
         # provide (e.g. for reservoir-computing style architectures).
         count = self.span * (self.span - 1) // 2 if self.span > 1 else 0
+        # A partially filled list would silently fall back to 0.0 phases for
+        # the missing indices downstream, so explicit values must cover every
+        # phase shifter.
+        for label, values in (
+            ("fixed_inner_values", self.fixed_inner_values),
+            ("fixed_outer_values", self.fixed_outer_values),
+        ):
+            if values and len(values) != count:
+                raise ValueError(
+                    f"GenericInterferometer {label} must contain exactly "
+                    f"{count} entries for span {self.span}, got {len(values)}"
+                )
         if count > 0:
             rng = random.Random(self.seed)
             if not self.trainable_inner and not self.fixed_inner_values:
