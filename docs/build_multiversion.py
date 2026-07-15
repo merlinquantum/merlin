@@ -345,7 +345,14 @@ def write_legacy_page_redirects(
     for docname in docnames:
         if docname == "index":
             continue
-        legacy_path = (output_path / docname).with_suffix(".html")
+        # Build the filename by string concatenation rather than
+        # ``Path.with_suffix()``. Many docnames contain dots, for example
+        # generated API reference pages like
+        # ``api_reference/api/merlin.algorithms.feed_forward``.
+        # ``with_suffix()`` replaces everything after the last dot in the
+        # final path component, which would both write the stub at the wrong
+        # path and collapse multiple docnames onto the same file.
+        legacy_path = output_path / f"{docname}.html"
         # Guard against a docname escaping the output directory, for example
         # via a leading "..".
         if output_path.resolve() not in legacy_path.resolve().parents:
