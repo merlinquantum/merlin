@@ -1,0 +1,26 @@
+[
+    {
+        "dataset": "mnist",
+        "learnable scale": true,
+        "best q ACC": 81.64711061507936,
+        "best cl ACC": 90.8771453373016,
+        "q parameters": 2770,
+        "cl parameters": 1642
+    },
+    {
+        "dataset": "mnist",
+        "learnable scale": true,
+        "best q ACC": 81.64711061507936,
+        "best cl ACC": 90.8771453373016,
+        "q parameters": 2770,
+        "cl parameters": 1642
+    },
+    {
+        "dataset": "mnist",
+        "learnable scale": true,
+        "best q ACC": 82.91677827380951,
+        "best cl ACC": 90.00753968253967,
+        "q parameters": 2840,
+        "cl parameters": 1642
+    }
+]
