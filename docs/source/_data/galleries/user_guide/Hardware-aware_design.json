@@ -1,0 +1,9 @@
+[
+  {
+    "title": "Hardware aware design Documentation",
+    "summary": "Documentation guide to make Hardware-aware models",
+    "image": "_static/img/QCNN_adaptive.png",
+    "doc": "user_guide/hardware_design_checklist",
+    "tags": ["Hardware", "models"]
+  }
+]
