@@ -200,6 +200,7 @@ class NoisyG2SLOSComputeGraph:
     ) -> SectoredDistribution:
 
         sector_outputs = []
+        probs_regular: torch.Tensor
 
         if unitary.size(0) == unitary.size(1) and unitary.ndim == 2:
             unitary = unitary.unsqueeze(0)
@@ -228,14 +229,13 @@ class NoisyG2SLOSComputeGraph:
         else:
             # Cast for mypy: _slos_graphs is list when g2_distinguishable is False
             slos_graphs_list = cast(list[NoisySLOSComputeGraph], self._slos_graphs)
-            probs_regular = slos_graphs_list[0].compute_probs(unitary, input_state)
+            slos_output = slos_graphs_list[0].compute_probs(unitary, input_state)
             # Ensure probabilities are on the same device as the unitary
-            if isinstance(probs_regular, tuple):
-                keys_regular, probs_regular = probs_regular
+            if isinstance(slos_output, tuple):
+                keys_regular, probs_regular = slos_output
                 probs_regular = probs_regular.to(unitary.device)
-                probs_regular = (keys_regular, probs_regular)
             else:
-                probs_regular = probs_regular.to(unitary.device)
+                probs_regular = slos_output.to(unitary.device)
 
         # Group possible extra emissions by sector. Entry k contains every
         # source-mode combination that produces n_photons + k output photons.
