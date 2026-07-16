@@ -211,6 +211,8 @@ class NoisyG2SLOSComputeGraph:
             keys_regular, probs_regular = single_graph.compute_probs(
                 unitary, input_state
             )
+            # Ensure probabilities are on the same device as the unitary
+            probs_regular = probs_regular.to(unitary.device)
             # Generate one-hot states for each active mode and compute their probs
             one_hot_slos_graphs = {}
             for mode_idx in range(len(input_state)):
@@ -220,11 +222,20 @@ class NoisyG2SLOSComputeGraph:
                     keys_one_hot, probs_one_hot = single_graph._slos_graphs[
                         0
                     ].compute_probs(unitary, one_hot_state)
+                    # Ensure probabilities are on the same device as the unitary
+                    probs_one_hot = probs_one_hot.to(unitary.device)
                     one_hot_slos_graphs[mode_idx] = (keys_one_hot, probs_one_hot)
         else:
             # Cast for mypy: _slos_graphs is list when g2_distinguishable is False
             slos_graphs_list = cast(list[NoisySLOSComputeGraph], self._slos_graphs)
             probs_regular = slos_graphs_list[0].compute_probs(unitary, input_state)
+            # Ensure probabilities are on the same device as the unitary
+            if isinstance(probs_regular, tuple):
+                keys_regular, probs_regular = probs_regular
+                probs_regular = probs_regular.to(unitary.device)
+                probs_regular = (keys_regular, probs_regular)
+            else:
+                probs_regular = probs_regular.to(unitary.device)
 
         # Group possible extra emissions by sector. Entry k contains every
         # source-mode combination that produces n_photons + k output photons.
@@ -769,7 +780,7 @@ class _InputStateNoisySLOSComputeGraph:
         )
 
         for i, partition in enumerate(self._partitions):
-            bit_weight = self._weights[i]
+            bit_weight = self._weights[i].to(unitary.device)
 
             for cell, count in zip(partition[0], partition[1], strict=True):
                 cell_distributions = [
@@ -782,7 +793,9 @@ class _InputStateNoisySLOSComputeGraph:
                     fock_states,
                     *cell_distributions,
                 )
-                output_probs += bit_weight * convolution * count.item()
+                output_probs += (
+                    bit_weight * convolution.to(unitary.device) * count.item()
+                )
 
         # OBB partition weights do not generally sum to one. This normalization
         # assumes output_probs spans the full Fock basis for self.n_photons; it

@@ -372,7 +372,7 @@ def test_noisy_g2_slos_unitary_cuda_graph_cpu():
     )
 
     unitary = torch.tensor(
-        np.array(pcvl.Matrix.random_unitary(m=5), dtype=np.complex128),
+        np.array(pcvl.Matrix.random_unitary(n=5), dtype=np.complex64),
         device=torch.device("cuda"),
     )
 
