@@ -103,7 +103,6 @@ Application examples
    ../reproduced_papers/reproductions/quantum_adversarial_ml
    ../notebooks/MNIST_classifier_example.ipynb
 
-
 .. merlin-gallery::
    :data: _data/galleries/examples/applications.json
    :columns: 4

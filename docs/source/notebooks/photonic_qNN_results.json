@@ -22,5 +22,109 @@
         "best cl ACC": 90.00753968253967,
         "q parameters": 2840,
         "cl parameters": 1642
+    },
+    {
+        "dataset": "mnist",
+        "learnable scale": true,
+        "best q ACC": 82.91677827380951,
+        "best cl ACC": 90.00753968253967,
+        "q parameters": 2840,
+        "cl parameters": 1642
+    },
+    {
+        "dataset": "mnist",
+        "learnable scale": true,
+        "best q ACC": 82.91677827380951,
+        "best cl ACC": 90.00753968253967,
+        "q parameters": 2840,
+        "cl parameters": 1642
+    },
+    {
+        "dataset": "mnist",
+        "learnable scale": true,
+        "best q ACC": 82.91677827380951,
+        "best cl ACC": 90.00753968253967,
+        "q parameters": 2840,
+        "cl parameters": 1642
+    },
+    {
+        "dataset": "mnist",
+        "learnable scale": true,
+        "best q ACC": 82.91677827380951,
+        "best cl ACC": 90.00753968253967,
+        "q parameters": 2840,
+        "cl parameters": 1642
+    },
+    {
+        "dataset": "mnist",
+        "learnable scale": true,
+        "best q ACC": 82.91677827380951,
+        "best cl ACC": 90.00753968253967,
+        "q parameters": 2840,
+        "cl parameters": 1642
+    },
+    {
+        "dataset": "mnist",
+        "learnable scale": true,
+        "best q ACC": 82.91677827380951,
+        "best cl ACC": 90.00753968253967,
+        "q parameters": 2840,
+        "cl parameters": 1642
+    },
+    {
+        "dataset": "mnist",
+        "learnable scale": true,
+        "best q ACC": 84.30290178571428,
+        "best cl ACC": 90.24248511904763,
+        "q parameters": 2840,
+        "cl parameters": 1642
+    },
+    {
+        "dataset": "mnist",
+        "learnable scale": true,
+        "best q ACC": 80.87819940476189,
+        "best cl ACC": 90.54115823412698,
+        "q parameters": 2840,
+        "cl parameters": 1642
+    },
+    {
+        "dataset": "mnist",
+        "learnable scale": true,
+        "best q ACC": 82.91677827380951,
+        "best cl ACC": 90.00753968253967,
+        "q parameters": 2840,
+        "cl parameters": 1642
+    },
+    {
+        "dataset": "mnist",
+        "learnable scale": true,
+        "best q ACC": 82.91677827380951,
+        "best cl ACC": 90.00753968253967,
+        "q parameters": 2840,
+        "cl parameters": 1642
+    },
+    {
+        "dataset": "mnist",
+        "learnable scale": true,
+        "best q ACC": 82.91677827380951,
+        "best cl ACC": 90.00753968253967,
+        "q parameters": 2840,
+        "cl parameters": 1642
+    },
+    {
+        "dataset": "mnist",
+        "learnable scale": true,
+        "best q ACC": 82.91677827380951,
+        "best cl ACC": 90.00753968253967,
+        "q parameters": 2840,
+        "cl parameters": 1642
+    },
+    {
+        "dataset": "mnist",
+        "learnable scale": true,
+        "best q ACC": 82.91677827380951,
+        "best cl ACC": 90.00753968253967,
+        "q parameters": 2840,
+        "cl parameters": 1642
     }
 ]
