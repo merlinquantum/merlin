@@ -1,4 +1,3 @@
-import copy
 import logging
 import threading
 import time
@@ -13,14 +12,19 @@ import numpy as np
 import perceval as pcvl
 import torch
 import torch.nn as nn
-from perceval.runtime import AProcessor, Processor, RemoteJob, RemoteProcessor
+from perceval.runtime import AProcessor, RemoteJob, RemoteProcessor
 from perceval.runtime.session import ISession
 from torch.futures import Future
 
 from ..algorithms.module import MerlinModule
 from ..utils.combinadics import Combinadics
 from .execution import BatchChunker, RemoteJobRunner
-from .perceval_adapter import PercevalAdapter, TokenExtractionError
+from .perceval_adapter import (
+    LOCAL_EXPERIMENT_SNAPSHOT_ATTR,
+    LocalExperimentSnapshot,
+    PercevalAdapter,
+    TokenExtractionError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -39,33 +43,6 @@ class BackendCapabilities:
 
     name: str
     available_commands: tuple[str]
-
-
-@dataclass(frozen=True)
-class _LocalExperimentMetadata:
-    """Experiment-level state that must survive local circuit replacement."""
-
-    circuit_size: int
-    in_ports: tuple[tuple[Any, tuple[int, ...]], ...]
-    out_ports: tuple[tuple[Any, tuple[int, ...]], ...]
-    detectors: tuple[Any | None, ...]
-    detectors_injected: tuple[int, ...]
-    in_mode_type: tuple[Any, ...]
-    out_mode_type: tuple[Any, ...]
-    anon_herald_num: int
-    postselection: Any
-
-    @property
-    def has_mode_metadata(self) -> bool:
-        """Return whether metadata is tied to a concrete circuit mode layout."""
-
-        return (
-            bool(self.in_ports)
-            or bool(self.out_ports)
-            or any(detector is not None for detector in self.detectors)
-            or bool(self.detectors_injected)
-            or self.postselection != pcvl.PostSelect()
-        )
 
 
 @dataclass(frozen=True)
@@ -1292,6 +1269,10 @@ class MerlinProcessor:
     def _create_fresh_local_processor(self) -> AProcessor:
         """Create an isolated local Perceval processor for one execution.
 
+        Delegates to :meth:`PercevalAdapter.rebuild_local_processor`, which
+        snapshots the experiment metadata and rebuilds the processor from a
+        copied experiment and fresh backend.
+
         Returns
         -------
         AProcessor
@@ -1304,135 +1285,7 @@ class MerlinProcessor:
             If the configured local processor cannot be reconstructed safely.
         """
         assert self.processor is not None
-
-        experiment = getattr(self.processor, "experiment", None)
-        backend_object = getattr(self.processor, "backend", None)
-        experiment_copy = getattr(experiment, "copy", None)
-        if (
-            experiment is None
-            or backend_object is None
-            or not callable(experiment_copy)
-        ):
-            raise TypeError(
-                "Local execution requires a Perceval processor with copyable "
-                "experiment state and a reconstructable local backend."
-            )
-
-        backend_name = getattr(backend_object, "name", None)
-        backend: str | object
-        if isinstance(backend_name, str):
-            backend = backend_name
-        else:
-            try:
-                backend = type(backend_object)()
-            except Exception as exc:
-                raise TypeError(
-                    "Local processor backend cannot be reconstructed safely."
-                ) from exc
-
-        experiment_metadata = self._snapshot_local_experiment_metadata(experiment)
-        copied_experiment = experiment_copy()
-        copied_experiment.clear_input_and_circuit()
-
-        processor = Processor(backend, copied_experiment)
-        processor._merlin_local_experiment_metadata = experiment_metadata
-        return processor
-
-    @staticmethod
-    def _snapshot_local_experiment_metadata(
-        experiment: Any,
-    ) -> _LocalExperimentMetadata:
-        """Copy non-circuit local experiment metadata before Perceval clears it.
-
-        Parameters
-        ----------
-        experiment : Any
-            Perceval experiment owned by the caller's local processor.
-
-        Returns
-        -------
-        _LocalExperimentMetadata
-            Deep-copied metadata that is independent from the caller's processor.
-        """
-
-        in_ports = tuple(
-            (port, tuple(modes))
-            for port, modes in copy.deepcopy(experiment._in_ports).items()
-        )
-        out_ports = tuple(
-            (port, tuple(modes))
-            for port, modes in copy.deepcopy(experiment._out_ports).items()
-        )
-        return _LocalExperimentMetadata(
-            circuit_size=int(experiment.circuit_size),
-            in_ports=in_ports,
-            out_ports=out_ports,
-            detectors=tuple(copy.deepcopy(experiment.detectors)),
-            detectors_injected=tuple(copy.deepcopy(experiment.detectors_injected)),
-            in_mode_type=tuple(copy.deepcopy(experiment._in_mode_type)),
-            out_mode_type=tuple(copy.deepcopy(experiment._out_mode_type)),
-            anon_herald_num=int(experiment._anon_herald_num),
-            postselection=copy.copy(experiment.post_select_fn),
-        )
-
-    @staticmethod
-    def _restore_local_experiment_metadata(
-        experiment: Any, metadata: _LocalExperimentMetadata
-    ) -> None:
-        """Restore local experiment metadata after the execution circuit is set.
-
-        Parameters
-        ----------
-        experiment : Any
-            Perceval experiment owned by the fresh local execution processor.
-        metadata : _LocalExperimentMetadata
-            Metadata copied from the caller's local processor.
-
-        Raises
-        ------
-        ValueError
-            If mode-indexed metadata cannot be applied to the execution circuit
-            because the circuit sizes differ.
-        """
-
-        if metadata.has_mode_metadata:
-            circuit_size = int(experiment.circuit_size)
-            if circuit_size != metadata.circuit_size:
-                raise ValueError(
-                    "Local processor experiment metadata is tied to circuit size "
-                    f"{metadata.circuit_size}, but the execution circuit has size "
-                    f"{circuit_size}."
-                )
-            experiment._in_ports = {
-                port: list(modes) for port, modes in metadata.in_ports
-            }
-            experiment._out_ports = {
-                port: list(modes) for port, modes in metadata.out_ports
-            }
-            experiment._detectors = list(metadata.detectors)
-            experiment.detectors_injected = list(metadata.detectors_injected)
-            experiment._in_mode_type = list(metadata.in_mode_type)
-            experiment._out_mode_type = list(metadata.out_mode_type)
-            experiment._anon_herald_num = metadata.anon_herald_num
-
-        experiment._postselect = copy.copy(metadata.postselection)
-        experiment._circuit_changed()
-
-    @staticmethod
-    def _copy_circuit_for_execution(circuit: pcvl.ACircuit) -> pcvl.ACircuit:
-        """Return a circuit copy for processor execution.
-
-        Parameters
-        ----------
-        circuit : pcvl.ACircuit
-            Circuit exported by the quantum layer.
-
-        Returns
-        -------
-        pcvl.ACircuit
-            Independent circuit object used by a single backend execution.
-        """
-        return circuit.copy()
+        return PercevalAdapter.rebuild_local_processor(self.processor)
 
     def _run_chunk_local(
         self,
@@ -1512,13 +1365,13 @@ class MerlinProcessor:
             iteration_params.append(circuit_params)
 
         processor = self._create_fresh_local_processor()
-        processor.set_circuit(self._copy_circuit_for_execution(config.circuit))
-        experiment_metadata = getattr(
-            processor, "_merlin_local_experiment_metadata", None
+        PercevalAdapter.configure_processor(
+            processor, PercevalAdapter.copy_circuit(config.circuit), None
         )
-        if isinstance(experiment_metadata, _LocalExperimentMetadata):
-            self._restore_local_experiment_metadata(
-                processor.experiment, experiment_metadata
+        experiment_snapshot = getattr(processor, LOCAL_EXPERIMENT_SNAPSHOT_ATTR, None)
+        if isinstance(experiment_snapshot, LocalExperimentSnapshot):
+            PercevalAdapter.restore_experiment(
+                processor.experiment, experiment_snapshot
             )
         PercevalAdapter.set_input(processor, config.input_state)
 
@@ -1995,13 +1848,9 @@ class MerlinProcessor:
             )
         config = ValidatedLayerConfig(layer.export_config())
         child_rp = self._create_fresh_rp()
-        child_rp.set_circuit(config.circuit)
-
-        if config.input_state:
-            input_state = pcvl.BasicState(config.input_state)
-            child_rp.with_input(input_state)
-            n_photons = sum(config.input_state)
-            child_rp.min_detected_photons_filter(n_photons)
+        PercevalAdapter.configure_processor(
+            child_rp, config.circuit, config.input_state
+        )
 
         input_param_names = self._extract_input_params(config)
 
@@ -2020,8 +1869,8 @@ class MerlinProcessor:
             last_ex: Exception | None = None
             for _attempt in range(self._MAX_ESTIMATOR_RETRIES):
                 try:
-                    est = child_rp.estimate_required_shots(
-                        desired_samples_per_input, param_values=param_values
+                    est = PercevalAdapter.estimate_required_shots(
+                        child_rp, desired_samples_per_input, param_values
                     )
                     break
                 except requests.exceptions.ReadTimeout as ex:
