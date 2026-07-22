@@ -204,6 +204,16 @@ class PercevalAdapter:
             photon count.
         """
         processor.set_circuit(circuit)
+        PercevalAdapter.set_input(processor, input_state)
+
+    @staticmethod
+    def set_input(processor: AProcessor, input_state: Any) -> None:
+        """Set the input state and matching photon filter, if provided.
+
+        Split out from :meth:`configure_processor` because the local
+        execution path must restore experiment metadata between installing
+        the circuit and setting the input.
+        """
         if input_state:
             state = pcvl.BasicState(input_state)
             processor.with_input(state)

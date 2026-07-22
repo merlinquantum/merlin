@@ -5,7 +5,6 @@ import time
 import uuid
 import warnings
 from collections.abc import Callable, Iterable, Sequence
-from contextlib import suppress
 from dataclasses import dataclass
 from numbers import Integral
 from typing import Any, Protocol, cast, runtime_checkable
@@ -14,7 +13,6 @@ import numpy as np
 import perceval as pcvl
 import torch
 import torch.nn as nn
-from perceval.algorithm import Sampler
 from perceval.runtime import AProcessor, Processor, RemoteJob, RemoteProcessor
 from perceval.runtime.session import ISession
 from torch.futures import Future
@@ -949,10 +947,7 @@ class MerlinProcessor:
         with self._lock:
             jobs = list(self._active_jobs)
         for job in jobs:
-            cancel = getattr(job, "cancel", None)
-            if callable(cancel):
-                with suppress(Exception):
-                    cancel()
+            PercevalAdapter.cancel_job(job)
 
     def forward(
         self,
@@ -1525,31 +1520,29 @@ class MerlinProcessor:
             self._restore_local_experiment_metadata(
                 processor.experiment, experiment_metadata
             )
-        if config.input_state:
-            input_state = pcvl.BasicState(config.input_state)
-            processor.with_input(input_state)
-            n_photons = sum(config.input_state)
-            processor.min_detected_photons_filter(n_photons)
+        PercevalAdapter.set_input(processor, config.input_state)
 
-        sampler = Sampler(processor, max_shots_per_call=self.max_shots_per_call)
-        sampler.clear_iterations()
-        for params in iteration_params:
-            sampler.add_iteration(circuit_params=params)
+        sampler = PercevalAdapter.create_sampler(
+            processor, self.max_shots_per_call, iteration_params
+        )
 
         is_probability = ("probs" in self.available_commands) and (
             nsample is None or int(nsample) <= 0
         )
 
         if is_probability:
-            raw_results = sampler.probs.execute_sync()
+            raw_results = PercevalAdapter.execute_sync(sampler, "probs")
         else:
             use_shots = self._effective_sample_count(nsample)
             if "sample_count" in self.available_commands:
-                raw_results = sampler.sample_count.execute_sync(max_samples=use_shots)
+                cmd = "sample_count"
             elif "samples" in self.available_commands:
-                raw_results = sampler.samples.execute_sync(max_samples=use_shots)
+                cmd = "samples"
             else:
-                raw_results = sampler.sample_count.execute_sync(max_samples=use_shots)
+                cmd = "sample_count"
+            raw_results = PercevalAdapter.execute_sync(
+                sampler, cmd, max_samples=use_shots
+            )
 
         if state.cancel_requested:
             raise CancelledError("Local call was cancelled")

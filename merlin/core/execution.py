@@ -26,13 +26,12 @@ import threading
 import time
 import zlib
 from collections.abc import Callable
-from contextlib import suppress
 from typing import TYPE_CHECKING
 
-import perceval as pcvl
 import torch
-from perceval.algorithm import Sampler
 from perceval.runtime import RemoteJob, RemoteProcessor
+
+from .perceval_adapter import PercevalAdapter, RemoteJobFailedError
 
 if TYPE_CHECKING:
     from ..algorithms.module import MerlinModule
@@ -250,12 +249,7 @@ class RemoteJobRunner:
             # Build a fresh RemoteProcessor and Sampler on each attempt so that
             # a corrupted RP doesn't poison retries.
             rp = self._create_processor()
-            rp.set_circuit(config.circuit)
-            if config.input_state:
-                input_state = pcvl.BasicState(config.input_state)
-                rp.with_input(input_state)
-                n_photons = sum(config.input_state)
-                rp.min_detected_photons_filter(n_photons)
+            PercevalAdapter.configure_processor(rp, config.circuit, config.input_state)
 
             max_shots_per_call = self._get_max_shots_per_call()
             max_shots_arg = (
@@ -263,10 +257,9 @@ class RemoteJobRunner:
                 if max_shots_per_call is None
                 else int(max_shots_per_call)
             )
-            sampler = Sampler(rp, max_shots_per_call=max_shots_arg)
-            sampler.clear_iterations()
-            for params in iteration_params:
-                sampler.add_iteration(circuit_params=params)
+            sampler = PercevalAdapter.create_sampler(
+                rp, max_shots_arg, iteration_params
+            )
 
             job = None
             try:
@@ -346,53 +339,22 @@ class RemoteJobRunner:
         )
 
         if is_probability:
-            job = sampler.probs
             cmd = "probs"
-            if job_base_label:
-                job.name = capped_name(job_base_label, cmd)
-            self._ensure_serializable_sampler_iterator(job, sampler)
-            return job.execute_async(), is_probability
-
-        use_shots = self._effective_sample_count(nsample)
-
-        if "sample_count" in available_commands:
-            job = sampler.sample_count
-            cmd = "sample_count"
-        elif "samples" in available_commands:
-            job = sampler.samples
-            cmd = "samples"
+            max_samples = None
         else:
-            job = sampler.sample_count
-            cmd = "sample_count"
+            if "sample_count" in available_commands:
+                cmd = "sample_count"
+            elif "samples" in available_commands:
+                cmd = "samples"
+            else:
+                cmd = "sample_count"
+            max_samples = self._effective_sample_count(nsample)
 
-        if job_base_label:
-            job.name = capped_name(job_base_label, cmd)
-        self._ensure_serializable_sampler_iterator(job, sampler)
-        return job.execute_async(max_samples=use_shots), is_probability
-
-    @staticmethod
-    def _ensure_serializable_sampler_iterator(job: RemoteJob, sampler: Sampler) -> None:
-        """Replace Perceval 1.2 iterator objects with JSON-serializable data.
-
-        Perceval 1.1 stores sampler iterations as a plain list. Perceval 1.2
-        stores them in a ``ParameterIterator`` object, but the Scaleway session
-        handler still serializes ``payload["payload"]`` with ``json.dumps``.
-        Until Perceval exposes a public serializer for that object, Merlin
-        normalizes the remote-job payload back to the list shape accepted by
-        the cloud side.
-        """
-        iterator = getattr(sampler, "_iterator", None)
-        iterations = getattr(iterator, "iterations", None)
-        if not iterations:
-            return
-
-        request_data = getattr(job, "_request_data", None)
-        if not isinstance(request_data, dict):
-            return
-
-        payload = request_data.get("payload")
-        if isinstance(payload, dict) and payload.get("iterator") is iterator:
-            payload["iterator"] = list(iterations)
+        name = capped_name(job_base_label, cmd) if job_base_label else None
+        job = PercevalAdapter.submit_async(
+            sampler, cmd, name=name, max_samples=max_samples
+        )
+        return job, is_probability
 
     def poll_job(
         self,
@@ -417,44 +379,37 @@ class RemoteJobRunner:
         sleep_ms = 50
         while True:
             if state.cancel_requested:
-                cancel = getattr(job, "cancel", None)
-                if callable(cancel):
-                    with suppress(Exception):
-                        cancel()
+                PercevalAdapter.cancel_job(job)
                 raise CancelledError("Remote call was cancelled")
 
             if deadline is not None and time.time() >= deadline:
-                cancel = getattr(job, "cancel", None)
-                if callable(cancel):
-                    with suppress(Exception):
-                        cancel()
+                PercevalAdapter.cancel_job(job)
                 raise TimeoutError("Remote call timed out (remote cancel issued)")
 
-            s = getattr(job, "status", None)
+            snapshot = PercevalAdapter.job_snapshot(job)
             state.set_current_status(
-                state=getattr(s, "state", None) if s else None,
-                progress=getattr(s, "progress", None) if s else None,
-                message=getattr(s, "stop_message", None) if s else None,
+                state=snapshot.state,
+                progress=snapshot.progress,
+                message=snapshot.stop_message,
             )
 
-            job_id = getattr(job, "id", None) or getattr(job, "job_id", None)
+            job_id = snapshot.job_id
             if job_id is not None:
                 state.record_job_id(job_id)
 
-            if getattr(job, "is_failed", False):
-                current_status = state.current_status
-                msg = current_status.message if current_status else None
+            if snapshot.is_failed:
+                msg = snapshot.stop_message
                 if msg and "Cancel requested" in str(msg):
                     self._unregister_job(job)
                     raise CancelledError("Remote call was cancelled")
                 self._unregister_job(job)
-                raise RuntimeError(
+                raise RemoteJobFailedError(
                     f"Remote job failed: {msg or 'unknown error'} (job_id={job_id!r})"
                 )
 
-            if getattr(job, "is_complete", False):
+            if snapshot.is_complete:
                 try:
-                    raw = job.get_results()
+                    raw = PercevalAdapter.get_results(job)
                 except RuntimeError as ex:
                     msg = str(ex)
                     if "Results are not available" in msg:

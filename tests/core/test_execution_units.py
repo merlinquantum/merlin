@@ -16,6 +16,7 @@ import pytest
 import torch
 
 import merlin.core.execution as execution_module
+import merlin.core.perceval_adapter as perceval_adapter_module
 from merlin.core.execution import BatchChunker, RemoteJobRunner
 from merlin.core.merlin_processor import CallState
 
@@ -442,7 +443,7 @@ class TestRunChunk:
         runner = make_runner(map_results=MagicMock(return_value=mapped))
         rp = runner._create_processor.return_value
 
-        with patch.object(execution_module, "Sampler", return_value=sampler):
+        with patch.object(perceval_adapter_module, "Sampler", return_value=sampler):
             output = runner.run_chunk(
                 layer,
                 make_chunk_config(),
@@ -494,7 +495,7 @@ class TestRunChunk:
 
         runner = make_runner(create_processor=create_processor)
 
-        with patch.object(execution_module, "Sampler", FlakySampler):
+        with patch.object(perceval_adapter_module, "Sampler", FlakySampler):
             output = run_chunk_with(runner)
 
         assert output.shape == (1, 1)
@@ -509,7 +510,7 @@ class TestRunChunk:
         runner = make_runner(max_retries=3)
 
         with (
-            patch.object(execution_module, "Sampler", return_value=sampler),
+            patch.object(perceval_adapter_module, "Sampler", return_value=sampler),
             pytest.raises(RuntimeError, match="failed after 3 attempts") as excinfo,
         ):
             run_chunk_with(runner)
@@ -550,7 +551,7 @@ class TestRunChunk:
         sampler.probs = FakeCommand(job=job)
         runner = make_runner(get_microbatch_limit=lambda: None)
 
-        with patch.object(execution_module, "Sampler", return_value=sampler):
+        with patch.object(perceval_adapter_module, "Sampler", return_value=sampler):
             run_chunk_with(runner, rows=100)
 
         runner._map_results.assert_called_once()

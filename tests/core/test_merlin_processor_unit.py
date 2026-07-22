@@ -21,6 +21,7 @@ from perceval.runtime import AProcessor, Processor, RemoteProcessor
 from perceval.runtime.session import ISession
 
 import merlin.core.merlin_processor as merlin_processor_module
+import merlin.core.perceval_adapter as perceval_adapter_module
 from merlin.algorithms import QuantumLayer
 from merlin.algorithms.module import MerlinModule
 from merlin.builder.circuit_builder import CircuitBuilder
@@ -1115,7 +1116,7 @@ def test_run_chunk_local_uses_fresh_processor_per_execution():
 
     with (
         patch.object(
-            merlin_processor_module, "Sampler", return_value=sampler
+            perceval_adapter_module, "Sampler", return_value=sampler
         ) as sampler_cls,
     ):
         output = proc._run_chunk_local(
@@ -1152,7 +1153,7 @@ def test_run_chunk_local_uses_sample_count_when_probs_unavailable():
     raw_results = {"results_list": [{"results": {"|1,0>": 3}}]}
     sampler = FakeSyncSampler(raw_results)
 
-    with patch.object(merlin_processor_module, "Sampler", return_value=sampler):
+    with patch.object(perceval_adapter_module, "Sampler", return_value=sampler):
         proc._run_chunk_local(
             layer,
             config,
@@ -1182,7 +1183,7 @@ def test_run_chunk_local_caps_default_sample_count_to_max_shots_per_call():
     sampler = FakeSyncSampler(raw_results)
 
     with patch.object(
-        merlin_processor_module, "Sampler", return_value=sampler
+        perceval_adapter_module, "Sampler", return_value=sampler
     ) as sampler_cls:
         proc._run_chunk_local(
             layer,
@@ -1210,7 +1211,7 @@ def test_run_chunk_local_uses_samples_when_sample_count_unavailable():
     raw_results = {"results_list": [{"results": {"|1,0>": 3}}]}
     sampler = FakeSyncSampler(raw_results)
 
-    with patch.object(merlin_processor_module, "Sampler", return_value=sampler):
+    with patch.object(perceval_adapter_module, "Sampler", return_value=sampler):
         proc._run_chunk_local(
             layer,
             config,
@@ -1236,7 +1237,7 @@ def test_run_chunk_local_defaults_to_sample_count_when_commands_are_empty():
     raw_results = {"results_list": [{"results": {"|1,0>": 3}}]}
     sampler = FakeSyncSampler(raw_results)
 
-    with patch.object(merlin_processor_module, "Sampler", return_value=sampler):
+    with patch.object(perceval_adapter_module, "Sampler", return_value=sampler):
         proc._run_chunk_local(
             layer,
             config,
@@ -1297,7 +1298,7 @@ def test_run_chunk_local_raises_cancelled_after_execution():
     sampler = FakeSyncSampler(raw_results, on_execute=state.request_cancel)
 
     with (
-        patch.object(merlin_processor_module, "Sampler", return_value=sampler),
+        patch.object(perceval_adapter_module, "Sampler", return_value=sampler),
         pytest.raises(CancelledError, match="Local call was cancelled"),
     ):
         proc._run_chunk_local(
@@ -1321,7 +1322,7 @@ def test_run_chunk_local_raises_timeout_after_execution(monkeypatch):
     monkeypatch.setattr(merlin_processor_module.time, "time", lambda: next(time_values))
 
     with (
-        patch.object(merlin_processor_module, "Sampler", return_value=sampler),
+        patch.object(perceval_adapter_module, "Sampler", return_value=sampler),
         pytest.raises(TimeoutError, match="Local call timed out"),
     ):
         proc._run_chunk_local(
@@ -1382,7 +1383,7 @@ def test_run_chunk_local_preserves_processor_experiment_metadata():
             captured_processor["max_shots_per_call"] = max_shots_per_call
             super().__init__(raw_results)
 
-    with patch.object(merlin_processor_module, "Sampler", CapturingSampler):
+    with patch.object(perceval_adapter_module, "Sampler", CapturingSampler):
         output = proc._run_chunk_local(
             layer,
             config,
@@ -1581,7 +1582,7 @@ def test_local_processor_two_quantum_layers_matches_direct_perceval_probabilitie
         processor.set_circuit(circuit.copy())
         processor.with_input(pcvl.BasicState([1, 0, 0]))
 
-        sampler = merlin_processor_module.Sampler(
+        sampler = perceval_adapter_module.Sampler(
             processor,
             max_shots_per_call=MerlinProcessor.DEFAULT_MAX_SHOTS,
         )
