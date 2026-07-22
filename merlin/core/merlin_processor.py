@@ -1046,18 +1046,10 @@ class MerlinProcessor:
         layers: list[Any] = list(self._iter_layers_in_order(module))
 
         fut: Future = Future()
-        state = {
-            "cancel_requested": False,
-            "current_status": None,
-            "job_ids": [],
-            "chunks_total": 0,
-            "chunks_done": 0,
-            "active_chunks": 0,
-            "call_id": uuid.uuid4().hex[:8],
-        }
+        state = CallState.new()
 
         def _cancel_remote():
-            state["cancel_requested"] = True
+            state.request_cancel()
             self.cancel_all()
             if not fut.done():
                 try:
@@ -1070,23 +1062,12 @@ class MerlinProcessor:
                 fut.set_exception(CancelledError("Remote call was cancelled"))
 
         def _status():
-            js = state.get("current_status")
-            return {
-                "state": (
-                    "COMPLETE"
-                    if fut.done() and not js
-                    else (js.get("state") if js else "IDLE")
-                ),
-                "progress": js.get("progress") if js else 0.0,
-                "message": js.get("message") if js else None,
-                "chunks_total": state["chunks_total"],
-                "chunks_done": state["chunks_done"],
-                "active_chunks": state["active_chunks"],
-            }
+            return state.status_snapshot(future_done=fut.done())
 
         fut.cancel_remote = _cancel_remote  # type: ignore[attr-defined]
         fut.status = _status  # type: ignore[attr-defined]
-        fut.job_ids = state["job_ids"]  # type: ignore[attr-defined]
+        # Shared list reference: job ids recorded during polling appear live.
+        fut.job_ids = state.job_ids  # type: ignore[attr-defined]
 
         def _run_pipeline():
             try:
@@ -1103,7 +1084,7 @@ class MerlinProcessor:
                     else:
                         should_offload = False
 
-                    if state["cancel_requested"]:
+                    if state.cancel_requested:
                         raise self._cancelled_error()
 
                     if should_offload:
@@ -1130,7 +1111,7 @@ class MerlinProcessor:
         layer: MerlinModule,
         input_tensor: torch.Tensor,
         nsample: int | None,
-        state: dict,
+        state: CallState,
         deadline: float | None,
     ) -> torch.Tensor:
         """Execute a quantum layer through the selected backend route.
@@ -1179,11 +1160,11 @@ class MerlinProcessor:
         input_tensor: torch.Tensor,
         chunks: list[tuple[int, int]],
         nsample: int | None,
-        state: dict,
+        state: CallState,
         deadline: float | None,
     ) -> torch.Tensor:
         """Submit chunk jobs with limited concurrency and stitch results."""
-        state["chunks_total"] += len(chunks)
+        state.add_planned_chunks(len(chunks))
         outputs: list[torch.Tensor | None] = [None] * len(chunks)
         errors: list[BaseException] = []
 
@@ -1193,7 +1174,7 @@ class MerlinProcessor:
         def _call(s: int, e: int, idx: int):
             try:
                 base_label = (
-                    f"mer:{layer_name}:{state['call_id']}:{idx + 1}/{total_chunks}"
+                    f"mer:{layer_name}:{state.call_id}:{idx + 1}/{total_chunks}"
                 )
                 t = self._run_chunk(
                     layer,
@@ -1214,8 +1195,7 @@ class MerlinProcessor:
         while idx < len(chunks) or in_flight > 0:
             while idx < len(chunks) and in_flight < self.chunk_concurrency:
                 s, e = chunks[idx]
-                with self._lock:
-                    state["active_chunks"] += 1
+                state.mark_chunk_started()
                 th = threading.Thread(target=_call, args=(s, e, idx), daemon=True)
                 th.start()
                 futures.append(th)
@@ -1226,9 +1206,7 @@ class MerlinProcessor:
                 if not th.is_alive():
                     futures.remove(th)
                     in_flight -= 1
-                    with self._lock:
-                        state["active_chunks"] = max(0, state["active_chunks"] - 1)
-                        state["chunks_done"] += 1
+                    state.mark_chunk_finished()
 
             if deadline is not None and time.time() >= deadline:
                 self.cancel_all()
@@ -1247,7 +1225,7 @@ class MerlinProcessor:
         config: ValidatedLayerConfig,
         input_chunk: torch.Tensor,
         nsample: int | None,
-        state: dict,
+        state: CallState,
         deadline: float | None,
         job_base_label: str | None = None,
     ) -> torch.Tensor:
@@ -1292,7 +1270,7 @@ class MerlinProcessor:
 
         last_error: BaseException | None = None
         for attempt in range(self._MAX_CHUNK_RETRIES):
-            if state.get("cancel_requested"):
+            if state.cancel_requested:
                 raise CancelledError("Remote call was cancelled")
             if deadline is not None and time.time() >= deadline:
                 raise TimeoutError("Remote call timed out (remote cancel issued)")
@@ -1500,7 +1478,7 @@ class MerlinProcessor:
         config: ValidatedLayerConfig,
         input_chunk: torch.Tensor,
         nsample: int | None,
-        state: dict,
+        state: CallState,
         deadline: float | None,
     ) -> torch.Tensor:
         """Execute a local AProcessor batch with an isolated processor.
@@ -1528,9 +1506,9 @@ class MerlinProcessor:
         nsample : int | None
             Number of samples per row.  ``None`` or ``<= 0`` triggers exact
             probability computation when the backend supports ``"probs"``.
-        state : dict
-            Shared call-state dictionary.  Must contain the key
-            ``"cancel_requested"`` (bool).
+        state : CallState
+            Typed per-call state; its ``cancel_requested`` flag is checked
+            cooperatively before and after execution.
         deadline : float | None
             Absolute wall-clock deadline (``time.time()`` seconds).  ``None``
             means no deadline.
@@ -1544,14 +1522,14 @@ class MerlinProcessor:
         Raises
         ------
         concurrent.futures.CancelledError
-            If ``state["cancel_requested"]`` is ``True`` before or after
+            If ``state.cancel_requested`` is ``True`` before or after
             execution.
         TimeoutError
             If ``deadline`` has elapsed before or after execution.
         """
         from concurrent.futures import CancelledError
 
-        if state.get("cancel_requested"):
+        if state.cancel_requested:
             raise CancelledError("Local call was cancelled")
         if deadline is not None and time.time() >= deadline:
             raise TimeoutError("Local call timed out")
@@ -1606,7 +1584,7 @@ class MerlinProcessor:
             else:
                 raw_results = sampler.sample_count.execute_sync(max_samples=use_shots)
 
-        if state.get("cancel_requested"):
+        if state.cancel_requested:
             raise CancelledError("Local call was cancelled")
         if deadline is not None and time.time() >= deadline:
             raise TimeoutError("Local call timed out")
@@ -1718,7 +1696,7 @@ class MerlinProcessor:
     def _poll_job(
         self,
         job: RemoteJob,
-        state: dict,
+        state: CallState,
         deadline: float | None,
         batch_size: int,
         layer: MerlinModule,
@@ -1736,8 +1714,8 @@ class MerlinProcessor:
         ----------
         job : RemoteJob
             Submitted Perceval job to poll.
-        state : dict
-            Shared state dict tracking cancellation, chunks, job IDs, etc.
+        state : CallState
+            Typed per-call state tracking cancellation, chunks, job IDs, etc.
         deadline : float | None
             Absolute time (seconds) when execution should timeout.
         batch_size : int
@@ -1764,7 +1742,7 @@ class MerlinProcessor:
         non_dict_retries = 0
         sleep_ms = 50
         while True:
-            if state.get("cancel_requested"):
+            if state.cancel_requested:
                 cancel = getattr(job, "cancel", None)
                 if callable(cancel):
                     with suppress(Exception):
@@ -1779,18 +1757,19 @@ class MerlinProcessor:
                 raise TimeoutError("Remote call timed out (remote cancel issued)")
 
             s = getattr(job, "status", None)
-            state["current_status"] = {
-                "state": getattr(s, "state", None) if s else None,
-                "progress": getattr(s, "progress", None) if s else None,
-                "message": getattr(s, "stop_message", None) if s else None,
-            }
+            state.set_current_status(
+                state=getattr(s, "state", None) if s else None,
+                progress=getattr(s, "progress", None) if s else None,
+                message=getattr(s, "stop_message", None) if s else None,
+            )
 
             job_id = getattr(job, "id", None) or getattr(job, "job_id", None)
-            if job_id is not None and job_id not in state["job_ids"]:
-                state["job_ids"].append(job_id)
+            if job_id is not None:
+                state.record_job_id(job_id)
 
             if getattr(job, "is_failed", False):
-                msg = state["current_status"].get("message")
+                current_status = state.current_status
+                msg = current_status.message if current_status else None
                 if msg and "Cancel requested" in str(msg):
                     with self._lock:
                         self._active_jobs.discard(job)

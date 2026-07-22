@@ -28,6 +28,7 @@ from merlin.core.circuit import Circuit
 from merlin.core.computation_space import ComputationSpace
 from merlin.core.merlin_processor import (
     BackendCapabilities,
+    CallState,
     MerlinProcessor,
     SupportsExportConfig,
     ValidatedLayerConfig,
@@ -237,9 +238,9 @@ def make_poll_processor(output: torch.Tensor | None = None) -> MerlinProcessor:
     return proc
 
 
-def make_state() -> dict:
-    """Return the mutable polling state shape expected by _poll_job."""
-    return {"cancel_requested": False, "job_ids": []}
+def make_state() -> CallState:
+    """Return the typed per-call state expected by _poll_job."""
+    return CallState.new()
 
 
 def make_local_chunk_config() -> SimpleNamespace:
@@ -1018,7 +1019,7 @@ def test_local_aprocessor_backend_executes_quantum_leaf_without_chunking():
         assert layer_arg is layer
         assert isinstance(config, ValidatedLayerConfig)
         assert nsample is None
-        assert state["cancel_requested"] is False
+        assert state.cancel_requested is False
         assert deadline is not None
         observed_chunks.append(input_chunk.clone())
         return torch.ones(input_chunk.shape[0], 2)
@@ -1254,7 +1255,7 @@ def test_run_chunk_local_raises_cancelled_before_execution():
     """Local chunk execution observes cancellation before starting work."""
     proc = make_local_chunk_processor(["probs"])
     state = make_state()
-    state["cancel_requested"] = True
+    state.request_cancel()
 
     with pytest.raises(CancelledError, match="Local call was cancelled"):
         proc._run_chunk_local(
@@ -1293,9 +1294,7 @@ def test_run_chunk_local_raises_cancelled_after_execution():
     proc = make_local_chunk_processor(["probs"])
     state = make_state()
     raw_results = {"results_list": [{"results": {"|1,0>": 1.0}}]}
-    sampler = FakeSyncSampler(
-        raw_results, on_execute=lambda: state.__setitem__("cancel_requested", True)
-    )
+    sampler = FakeSyncSampler(raw_results, on_execute=state.request_cancel)
 
     with (
         patch.object(merlin_processor_module, "Sampler", return_value=sampler),
@@ -1831,7 +1830,7 @@ def test_poll_job_success_processes_dict_payload_and_records_job_id():
     )
 
     assert torch.equal(result, output)
-    assert state["job_ids"] == ["job-success"]
+    assert state.job_ids == ["job-success"]
     assert proc.processed_calls == [(raw_results, 3, layer, None, False)]
     assert job not in proc._active_jobs
 
@@ -1858,7 +1857,7 @@ def test_poll_job_cancel_request_cancels_remote_job():
     proc = make_poll_processor()
     job = FakeJob(is_complete=False)
     state = make_state()
-    state["cancel_requested"] = True
+    state.request_cancel()
 
     with pytest.raises(CancelledError, match=r"Remote call was cancelled"):
         proc._poll_job(job, state, None, 1, object(), None)
