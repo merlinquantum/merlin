@@ -19,6 +19,7 @@ import merlin.core.execution as execution_module
 import merlin.core.perceval_adapter as perceval_adapter_module
 from merlin.core.execution import BatchChunker, RemoteJobRunner
 from merlin.core.merlin_processor import CallState
+from merlin.core.perceval_adapter import RemoteJobFailedError
 
 # ---------------------------------------------------------------------------
 # Fakes
@@ -129,15 +130,19 @@ def make_chunk_config() -> SimpleNamespace:
 
 class TestSplitBatch:
     def test_exact_multiple_produces_equal_chunks(self):
+        """An exact multiple splits into equal-size chunks."""
         assert BatchChunker.split_batch(8, 4) == [(0, 4), (4, 8)]
 
     def test_remainder_produces_short_final_chunk(self):
+        """A remainder yields a short final chunk."""
         assert BatchChunker.split_batch(10, 4) == [(0, 4), (4, 8), (8, 10)]
 
     def test_batch_smaller_than_microbatch_is_one_chunk(self):
+        """Small batches stay as a single chunk."""
         assert BatchChunker.split_batch(3, 32) == [(0, 3)]
 
     def test_empty_batch_produces_no_chunks(self):
+        """An empty batch produces no chunks."""
         assert BatchChunker.split_batch(0, 32) == []
 
 
@@ -332,6 +337,7 @@ class TestBatchChunkerRunChunks:
 
 class TestSubmitJob:
     def test_probs_selected_when_available_and_nsample_none(self):
+        """probs is selected when available and no shots requested."""
         runner = make_runner()
         sampler = FakeSampler()
 
@@ -345,6 +351,7 @@ class TestSubmitJob:
         assert sampler.probs.name == "label:probs"
 
     def test_sampling_selected_when_nsample_positive(self):
+        """A positive nsample forces the sampling command path."""
         runner = make_runner()
         sampler = FakeSampler()
 
@@ -357,6 +364,7 @@ class TestSubmitJob:
         assert sampler.sample_count.execute_kwargs == {"max_samples": 500}
 
     def test_samples_used_when_sample_count_unavailable(self):
+        """samples is the fallback when sample_count is unavailable."""
         runner = make_runner(get_available_commands=lambda: ("samples",))
         sampler = FakeSampler()
 
@@ -368,6 +376,7 @@ class TestSubmitJob:
         assert is_probability is False
 
     def test_sample_count_is_default_fallback_without_commands(self):
+        """sample_count is attempted when no commands are advertised."""
         runner = make_runner(get_available_commands=lambda: ())
         sampler = FakeSampler()
 
@@ -378,6 +387,7 @@ class TestSubmitJob:
         assert job is sampler.sample_count
 
     def test_shot_count_flows_through_effective_sample_count(self):
+        """Submitted shots come from the injected effective_sample_count."""
         runner = make_runner(effective_sample_count=lambda nsample: 42)
         sampler = FakeSampler()
 
@@ -401,11 +411,13 @@ class TestSubmitJob:
 
 class TestCappedName:
     def test_short_names_are_sanitized_verbatim(self):
+        """Short job names are sanitized but otherwise kept verbatim."""
         runner = make_runner()
 
         assert runner._capped_name("mer:layer 1", "probs") == "mer:layer_1:probs"
 
     def test_long_names_are_capped_with_hash_suffix(self):
+        """Long job names are capped with a stable hash suffix."""
         runner = make_runner(job_name_max=20)
 
         name = runner._capped_name("mer:" + "x" * 60, "sample_count")
@@ -434,6 +446,7 @@ def run_chunk_with(runner, *, nsample=None, state=None, deadline=None, rows=1):
 
 class TestRunChunk:
     def test_success_registers_job_and_maps_results(self):
+        """A successful chunk registers, polls, unregisters, and maps results."""
         raw_results = {"results_list": [{"results": {"|1,0>": 1.0}}]}
         job = FakeJob(result_events=[raw_results])
         sampler = FakeSampler()
@@ -520,6 +533,7 @@ class TestRunChunk:
         assert runner._create_processor.call_count == 3  # fresh RP per attempt
 
     def test_cancellation_short_circuits_before_submission(self):
+        """A prior cancel prevents any processor construction."""
         runner = make_runner()
         state = CallState.new()
         state.request_cancel()
@@ -530,6 +544,7 @@ class TestRunChunk:
         runner._create_processor.assert_not_called()
 
     def test_deadline_short_circuits_before_submission(self):
+        """An elapsed deadline prevents any processor construction."""
         runner = make_runner()
 
         with pytest.raises(TimeoutError, match="remote cancel issued"):
@@ -538,6 +553,7 @@ class TestRunChunk:
         runner._create_processor.assert_not_called()
 
     def test_oversized_chunk_raises_value_error(self):
+        """Chunks beyond the microbatch limit fail loudly."""
         runner = make_runner(get_microbatch_limit=lambda: 2)
 
         with pytest.raises(ValueError, match="exceeds microbatch"):
@@ -564,6 +580,7 @@ class TestRunChunk:
 
 class TestPollJob:
     def test_success_records_job_id_and_unregisters(self):
+        """Successful polling records the job id and unregisters the job."""
         raw_results = {"results_list": [{"results": {"|1,0>": 1.0}}]}
         job = FakeJob(job_id="job-42", result_events=[raw_results])
         state = CallState.new()
@@ -577,6 +594,7 @@ class TestPollJob:
         runner._unregister_job.assert_called_once_with(job)
 
     def test_cancel_request_cancels_job_and_raises(self):
+        """Caller cancellation asks the backend job to cancel before raising."""
         job = FakeJob(is_complete=False)
         state = CallState.new()
         state.request_cancel()
@@ -588,6 +606,7 @@ class TestPollJob:
         assert job.cancelled is True
 
     def test_failed_job_raises_with_message_and_unregisters(self):
+        """Failed jobs raise the Merlin error with the backend message."""
         job = FakeJob(
             is_complete=False,
             is_failed=True,
@@ -597,12 +616,13 @@ class TestPollJob:
         )
         runner = make_runner()
 
-        with pytest.raises(RuntimeError, match="hardware rejected job"):
+        with pytest.raises(RemoteJobFailedError, match="hardware rejected job"):
             runner.poll_job(job, CallState.new(), None, 1, object(), None)
 
         runner._unregister_job.assert_called_once_with(job)
 
     def test_status_snapshot_updated_from_job_status(self):
+        """Polling records the backend status into the call state."""
         raw_results = {"results_list": []}
         job = FakeJob(
             result_events=[raw_results],

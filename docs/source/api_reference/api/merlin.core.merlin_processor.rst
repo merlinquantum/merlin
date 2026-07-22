@@ -21,8 +21,8 @@ classical layers local. It supports these backend entry points:
 
 All execution paths support batched execution, per-call/global timeouts,
 cooperative cancellation, and a Torch-friendly async interface returning
-:class:`torch.futures.Future`. Remote backends additionally support chunking
-with limited intra-leaf concurrency.
+:class:`MerlinFuture` (a :class:`torch.futures.Future` subclass). Remote
+backends additionally support chunking with limited intra-leaf concurrency.
 
 Key Capabilities
 ----------------
@@ -90,6 +90,44 @@ BackendCapabilities
       caps = proc.backend_capabilities
       print(f"Platform: {caps.name}")
       print(f"Supports: {caps.available_commands}")
+
+MerlinFuture
+------------
+.. class:: MerlinFuture(call_state, cancel_all)
+
+   Typed async handle returned by :meth:`forward_async`. Subclasses
+   :class:`torch.futures.Future`, so all inherited behavior (``wait``,
+   ``done``, ``then``, ``value``, ...) is unchanged, and adds the
+   Merlin-specific async contract that was previously monkey-patched onto
+   plain Future instances at runtime.
+
+   Instances are constructed by :meth:`forward_async`; user code only
+   consumes them.
+
+   **Attributes**
+
+   .. attribute:: job_ids
+
+      ``list[str]`` — Remote job IDs accumulated across chunk jobs, in
+      observation order. This is a live view: IDs recorded while chunks are
+      polling appear immediately.
+
+   **Methods**
+
+   .. method:: status() -> dict
+
+      Current progress and state of the call:
+      ``{"state", "progress", "message", "chunks_total", "chunks_done",
+      "active_chunks"}``. ``state`` is ``"IDLE"`` before the first backend
+      poll, the backend-reported state while polling, and ``"COMPLETE"``
+      once the future resolves without a recorded backend status.
+
+   .. method:: cancel_remote() -> None
+
+      Cooperatively cancel the call and its in-flight remote jobs. If the
+      future is not already done, it resolves with
+      :class:`concurrent.futures.CancelledError`, which ``wait()`` then
+      raises.
 
 MerlinProcessor
 ---------------
@@ -224,19 +262,12 @@ Execution APIs
    :raises concurrent.futures.CancelledError: If the call is cooperatively
       cancelled via the async API.
 
-.. method:: forward_async(module, input, *, nsample=None, timeout=None) -> torch.futures.Future
+.. method:: forward_async(module, input, *, nsample=None, timeout=None) -> MerlinFuture
 
-   Asynchronous execution. Returns a :class:`torch.futures.Future` with extra
-   helpers attached:
-
-   **Future extensions**
-
-   * ``future.job_ids: list[str]`` — accumulates remote job IDs across chunk jobs.
-   * ``future.status() -> dict`` — current state/progress/message plus chunk
-     counters: ``{"chunks_total", "chunks_done", "active_chunks"}``.
-   * ``future.cancel_remote() -> None`` — cooperative cancel; in-flight jobs are
-     best-effort cancelled and ``future.wait()`` raises
-     ``CancelledError``.
+   Asynchronous execution. Returns a :class:`MerlinFuture` — a
+   :class:`torch.futures.Future` subclass declaring ``job_ids``,
+   ``status()``, and ``cancel_remote()`` on the class (see
+   :class:`MerlinFuture` for details).
 
    :param module: See :meth:`forward`.
    :param input: See :meth:`forward`.

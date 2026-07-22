@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+import time
 
 from merlin.core.merlin_processor import CallState, JobStatus
 
@@ -55,7 +56,7 @@ class TestCancelPropagation:
 
         def worker():
             while not state.cancel_requested:
-                pass
+                time.sleep(0.001)
             observed.set()
 
         thread = threading.Thread(target=worker, daemon=True)

@@ -91,6 +91,14 @@ class CallState:
     """
 
     def __init__(self, call_id: str) -> None:
+        """Initialize an empty call state.
+
+        Parameters
+        ----------
+        call_id : str
+            Short identifier embedded in remote job names for traceability.
+            Use :meth:`new` to generate one automatically.
+        """
         self.call_id = call_id
         self.job_ids: list[str] = []
         self._lock = threading.Lock()
@@ -102,7 +110,13 @@ class CallState:
 
     @classmethod
     def new(cls) -> "CallState":
-        """Create a fresh call state with a short unique call identifier."""
+        """Create a fresh call state with a short unique call identifier.
+
+        Returns
+        -------
+        CallState
+            Empty state carrying an 8-character hex ``call_id``.
+        """
         return cls(call_id=uuid.uuid4().hex[:8])
 
     # ---- cancellation ----
@@ -119,7 +133,14 @@ class CallState:
     # ---- job ids ----
 
     def record_job_id(self, job_id: str) -> None:
-        """Record a remote job id, deduplicating repeated observations."""
+        """Record a remote job id, deduplicating repeated observations.
+
+        Parameters
+        ----------
+        job_id : str
+            Identifier reported by the backend for a submitted job. Re-observing
+            an already-recorded id (each polling cycle re-reads it) is a no-op.
+        """
         with self._lock:
             if job_id not in self.job_ids:
                 self.job_ids.append(job_id)
@@ -134,7 +155,19 @@ class CallState:
     def set_current_status(
         self, *, state: Any = None, progress: Any = None, message: Any = None
     ) -> None:
-        """Record the latest backend job status observed while polling."""
+        """Record the latest backend job status observed while polling.
+
+        Parameters
+        ----------
+        state : Any
+            Backend-reported job state (e.g. ``"RUNNING"``), or ``None``.
+            Default value is None.
+        progress : Any
+            Backend-reported progress value, or ``None``. Default value is None.
+        message : Any
+            Backend-reported stop/status message, or ``None``. Default value
+            is None.
+        """
         self._current_status = JobStatus(
             state=state, progress=progress, message=message
         )
@@ -157,7 +190,13 @@ class CallState:
         return self._active_chunks
 
     def add_planned_chunks(self, count: int) -> None:
-        """Register ``count`` additional chunks planned for submission."""
+        """Register additional chunks planned for submission.
+
+        Parameters
+        ----------
+        count : int
+            Number of chunks about to be submitted for one quantum leaf.
+        """
         with self._lock:
             self._chunks_total += count
 

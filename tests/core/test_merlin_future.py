@@ -60,6 +60,7 @@ class PassthroughLeaf(MerlinModule):
 
 class TestReturnType:
     def test_forward_async_returns_merlin_future(self):
+        """forward_async returns the typed handle, still a torch Future."""
         proc = make_local_processor()
         module = PassthroughLeaf()
         module.eval()
@@ -84,6 +85,7 @@ class TestReturnType:
 
 class TestStatus:
     def test_status_payload_shape_when_idle(self):
+        """A fresh handle reports the exact IDLE status payload."""
         fut, _, _ = make_future()
 
         assert fut.status() == {
@@ -96,6 +98,7 @@ class TestStatus:
         }
 
     def test_status_reflects_call_state_progress(self):
+        """status() mirrors backend status and chunk counters live."""
         fut, state, _ = make_future()
         state.add_planned_chunks(2)
         state.mark_chunk_started()
@@ -110,6 +113,7 @@ class TestStatus:
         assert status["active_chunks"] == 1
 
     def test_status_reports_complete_when_done_without_backend_status(self):
+        """A resolved handle with no backend status reports COMPLETE."""
         fut, _, _ = make_future()
         fut.set_result(torch.ones(1))
 
@@ -118,6 +122,7 @@ class TestStatus:
 
 class TestJobIds:
     def test_job_ids_is_live_view_of_call_state(self):
+        """job_ids is the same live list CallState appends to."""
         fut, state, _ = make_future()
 
         assert fut.job_ids == []
@@ -128,6 +133,7 @@ class TestJobIds:
 
 class TestCancelRemote:
     def test_cancel_remote_requests_cancel_and_cancels_jobs(self):
+        """cancel_remote flags the call state and cancels active jobs."""
         fut, state, cancel_all = make_future()
 
         fut.cancel_remote()
@@ -136,6 +142,7 @@ class TestCancelRemote:
         cancel_all.assert_called_once_with()
 
     def test_cancel_remote_resolves_future_with_cancelled_error(self):
+        """After cancel_remote, waiting raises CancelledError."""
         fut, _, _ = make_future()
 
         fut.cancel_remote()
@@ -156,6 +163,7 @@ class TestCancelRemote:
         assert torch.equal(fut.wait(), result)
 
     def test_forward_async_cancel_propagates_cancelled_error(self):
+        """Cancelling a running pipeline surfaces CancelledError on wait."""
         proc = make_local_processor()
 
         class BlockingLeaf(PassthroughLeaf):
@@ -177,6 +185,7 @@ class TestCancelRemote:
 
 class TestSynchronousForward:
     def test_forward_waits_on_the_typed_handle(self):
+        """Synchronous forward() resolves through the typed handle."""
         proc = make_local_processor()
         module = PassthroughLeaf()
         module.eval()

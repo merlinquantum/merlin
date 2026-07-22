@@ -115,7 +115,16 @@ class PercevalAdapter:
         ``RemoteProcessor`` instances are both handled.
 
         As a last resort, falls back to ``RemoteConfig().get_token()``.
-        Returns ``None`` only if every strategy fails.
+
+        Parameters
+        ----------
+        rp : perceval.runtime.RemoteProcessor
+            Remote processor to probe for authentication material.
+
+        Returns
+        -------
+        str | None
+            The resolved token, or ``None`` if every strategy fails.
         """
         try:
             handler = rp.get_rpc_handler()
@@ -150,7 +159,19 @@ class PercevalAdapter:
 
     @staticmethod
     def get_url(rp: RemoteProcessor) -> str | None:
-        """Return the RPC handler URL of a RemoteProcessor, if exposed."""
+        """Return the RPC handler URL of a RemoteProcessor, if exposed.
+
+        Parameters
+        ----------
+        rp : perceval.runtime.RemoteProcessor
+            Remote processor whose RPC handler is inspected.
+
+        Returns
+        -------
+        str | None
+            The handler URL, or ``None`` when the handler has no ``url``
+            attribute.
+        """
         handler = rp.get_rpc_handler()
         return handler.url if hasattr(handler, "url") else None
 
@@ -166,6 +187,18 @@ class PercevalAdapter:
 
         Forwards the provided token so that inline-token RemoteProcessors
         are cloned correctly.
+
+        Parameters
+        ----------
+        rp : perceval.runtime.RemoteProcessor
+            Processor whose platform name, URL, and proxies are copied.
+        token : str | None
+            Authentication token forwarded to the clone.
+
+        Returns
+        -------
+        perceval.runtime.RemoteProcessor
+            Independent processor targeting the same platform.
         """
         return RemoteProcessor(
             name=rp.name,
@@ -176,12 +209,34 @@ class PercevalAdapter:
 
     @staticmethod
     def build_from_session(session: ISession) -> RemoteProcessor:
-        """Build a fresh RemoteProcessor from a Perceval session."""
+        """Build a fresh RemoteProcessor from a Perceval session.
+
+        Parameters
+        ----------
+        session : perceval.runtime.session.ISession
+            Provider session (e.g. Scaleway) able to build processors.
+
+        Returns
+        -------
+        perceval.runtime.RemoteProcessor
+            Independent processor with its own handler state.
+        """
         return session.build_remote_processor()
 
     @staticmethod
     def get_backend_capabilities(processor: AProcessor) -> tuple[str, tuple[str, ...]]:
-        """Return the backend platform name and available command snapshot."""
+        """Return the backend platform name and available command snapshot.
+
+        Parameters
+        ----------
+        processor : perceval.runtime.AProcessor
+            Local or remote processor to inspect.
+
+        Returns
+        -------
+        tuple[str, tuple[str, ...]]
+            Platform name and immutable snapshot of supported commands.
+        """
         return processor.name, tuple(processor.available_commands)
 
     @staticmethod
@@ -213,6 +268,13 @@ class PercevalAdapter:
         Split out from :meth:`configure_processor` because the local
         execution path must restore experiment metadata between installing
         the circuit and setting the input.
+
+        Parameters
+        ----------
+        processor : perceval.runtime.AProcessor
+            Processor to receive the input state.
+        input_state : Any
+            Sequence of photon counts per mode, or falsy to skip input setup.
         """
         if input_state:
             state = pcvl.BasicState(input_state)
@@ -222,14 +284,40 @@ class PercevalAdapter:
 
     @staticmethod
     def copy_circuit(circuit: pcvl.ACircuit) -> pcvl.ACircuit:
-        """Return an independent copy of a circuit for one execution."""
+        """Return an independent copy of a circuit for one execution.
+
+        Parameters
+        ----------
+        circuit : pcvl.ACircuit
+            Circuit exported by the quantum layer.
+
+        Returns
+        -------
+        pcvl.ACircuit
+            Independent circuit object used by a single backend execution.
+        """
         return circuit.copy()
 
     @staticmethod
     def estimate_required_shots(
         rp: RemoteProcessor, desired_samples: int, param_values: dict[str, float]
     ) -> int | None:
-        """Ask the remote platform estimator for the required shot count."""
+        """Ask the remote platform estimator for the required shot count.
+
+        Parameters
+        ----------
+        rp : perceval.runtime.RemoteProcessor
+            Configured remote processor exposing the platform estimator.
+        desired_samples : int
+            Target number of usable samples.
+        param_values : dict[str, float]
+            Circuit parameter values for the input row being estimated.
+
+        Returns
+        -------
+        int | None
+            Estimated shots, or ``None`` when the platform gives no answer.
+        """
         return rp.estimate_required_shots(desired_samples, param_values=param_values)
 
     # ------------------------------------------------------------------
@@ -242,7 +330,22 @@ class PercevalAdapter:
         max_shots_per_call: int,
         iterations: list[dict[str, float]],
     ) -> Sampler:
-        """Create a Sampler on ``processor`` loaded with the given iterations."""
+        """Create a Sampler on ``processor`` loaded with the given iterations.
+
+        Parameters
+        ----------
+        processor : perceval.runtime.AProcessor
+            Configured processor (circuit and input already set).
+        max_shots_per_call : int
+            Shot cap forwarded to the Perceval sampler.
+        iterations : list[dict[str, float]]
+            One circuit-parameter mapping per batch row.
+
+        Returns
+        -------
+        perceval.algorithm.Sampler
+            Sampler ready for command dispatch.
+        """
         sampler = Sampler(processor, max_shots_per_call=max_shots_per_call)
         sampler.clear_iterations()
         for params in iterations:
@@ -270,6 +373,11 @@ class PercevalAdapter:
         max_samples : int | None
             Shots to request. ``None`` submits without a shot argument
             (exact probabilities).
+
+        Returns
+        -------
+        perceval.runtime.RemoteJob
+            Handle of the submitted asynchronous job.
         """
         job = getattr(sampler, command)
         if name:
@@ -285,7 +393,24 @@ class PercevalAdapter:
         command: str,
         max_samples: int | None = None,
     ) -> Any:
-        """Execute a sampler command synchronously and return the raw results."""
+        """Execute a sampler command synchronously and return the raw results.
+
+        Parameters
+        ----------
+        sampler : perceval.algorithm.Sampler
+            Sampler prepared with circuit and iterations.
+        command : str
+            Sampler command to dispatch: ``"probs"``, ``"sample_count"``,
+            or ``"samples"``.
+        max_samples : int | None
+            Shots to request. ``None`` executes without a shot argument
+            (exact probabilities). Default value is None.
+
+        Returns
+        -------
+        Any
+            Raw Perceval results object for the executed command.
+        """
         job = getattr(sampler, command)
         if max_samples is None:
             return job.execute_sync()
@@ -295,6 +420,15 @@ class PercevalAdapter:
     def ensure_serializable_sampler_iterator(job: RemoteJob, sampler: Sampler) -> None:
         """Replace Perceval 1.2 iterator objects with JSON-serializable data.
 
+        Parameters
+        ----------
+        job : perceval.runtime.RemoteJob
+            Prepared job whose private request payload may hold an iterator.
+        sampler : perceval.algorithm.Sampler
+            Sampler used to prepare the job.
+
+        Notes
+        -----
         Perceval 1.1 stores sampler iterations as a plain list. Perceval 1.2
         stores them in a ``ParameterIterator`` object, but the Scaleway session
         handler still serializes ``payload["payload"]`` with ``json.dumps``.
@@ -321,7 +455,18 @@ class PercevalAdapter:
 
     @staticmethod
     def job_snapshot(job: RemoteJob) -> JobStatusSnapshot:
-        """Read a job's status fields into a Merlin-normalized snapshot."""
+        """Read a job's status fields into a Merlin-normalized snapshot.
+
+        Parameters
+        ----------
+        job : perceval.runtime.RemoteJob
+            Job to inspect. Missing attributes map to ``None``/``False``.
+
+        Returns
+        -------
+        JobStatusSnapshot
+            Immutable view of the job's id, state, and completion flags.
+        """
         status = getattr(job, "status", None)
         return JobStatusSnapshot(
             job_id=getattr(job, "id", None) or getattr(job, "job_id", None),
@@ -334,12 +479,36 @@ class PercevalAdapter:
 
     @staticmethod
     def get_results(job: RemoteJob) -> Any:
-        """Retrieve a job's raw results, propagating Perceval errors."""
+        """Retrieve a job's raw results, propagating Perceval errors.
+
+        Parameters
+        ----------
+        job : perceval.runtime.RemoteJob
+            Completed job to read.
+
+        Returns
+        -------
+        Any
+            Raw Perceval results object.
+
+        Raises
+        ------
+        RuntimeError
+            Propagated unchanged from Perceval (e.g. results not yet
+            available, cancel requested); the polling loop interprets it.
+        """
         return job.get_results()
 
     @staticmethod
     def cancel_job(job: RemoteJob) -> None:
-        """Request best-effort cancellation of a job, swallowing errors."""
+        """Request best-effort cancellation of a job, swallowing errors.
+
+        Parameters
+        ----------
+        job : perceval.runtime.RemoteJob
+            Job to cancel. Objects without a callable ``cancel`` are ignored;
+            cancellation errors are suppressed by design (best-effort path).
+        """
         cancel = getattr(job, "cancel", None)
         if callable(cancel):
             with suppress(Exception):
@@ -356,6 +525,17 @@ class PercevalAdapter:
         The returned processor carries a :class:`LocalExperimentSnapshot`
         under :data:`LOCAL_EXPERIMENT_SNAPSHOT_ATTR` so the caller can restore
         experiment metadata after installing the execution circuit.
+
+        Parameters
+        ----------
+        processor : perceval.runtime.AProcessor
+            Local processor whose experiment and backend are copied.
+
+        Returns
+        -------
+        perceval.runtime.AProcessor
+            Fresh local processor with copied non-circuit experiment state
+            and a fresh backend instance.
 
         Raises
         ------
