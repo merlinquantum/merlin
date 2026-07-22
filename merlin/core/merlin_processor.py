@@ -22,6 +22,7 @@ from torch.futures import Future
 from ..algorithms.module import MerlinModule
 from ..utils.combinadics import Combinadics
 from .execution import BatchChunker, RemoteJobRunner
+from .perceval_adapter import PercevalAdapter, TokenExtractionError
 
 logger = logging.getLogger(__name__)
 
@@ -791,7 +792,7 @@ class MerlinProcessor:
 
                 # Build ONE initial processor to extract metadata (backend name, available commands).
                 # Fresh processors will be created per chunk via _create_fresh_rp().
-                _init_rp = self.session.build_remote_processor()
+                _init_rp = PercevalAdapter.build_from_session(self.session)
                 remote_processor = _init_rp
             else:
                 self.backend_kind = "remote_processor"
@@ -811,11 +812,12 @@ class MerlinProcessor:
         assert capability_processor is not None
 
         # Extract backend capabilities (name and available commands)
-        backend_name = capability_processor.name
-        available_cmds = capability_processor.available_commands
+        backend_name, available_cmds = PercevalAdapter.get_backend_capabilities(
+            capability_processor
+        )
         self.backend_capabilities = BackendCapabilities(
             name=backend_name,
-            available_commands=tuple(available_cmds),
+            available_commands=available_cmds,
         )
 
         # Check if commands list is empty and warn
@@ -838,7 +840,7 @@ class MerlinProcessor:
                 self._token = self._extract_rp_token(remote_processor)
 
             if self._token is None:
-                raise ValueError(
+                raise TokenExtractionError(
                     "Could not extract auth token from RemoteProcessor. "
                     "Either pass token= to MerlinProcessor or call "
                     "RemoteConfig.set_token() before constructing the "
@@ -1681,7 +1683,7 @@ class MerlinProcessor:
         """
         if self.session is not None:
             # Session path: create a fresh processor from the session
-            return self.session.build_remote_processor()
+            return PercevalAdapter.build_from_session(self.session)
         if self.remote_processor is None:
             raise RuntimeError(
                 "Fresh RemoteProcessor creation is only available for remote "
@@ -1696,61 +1698,21 @@ class MerlinProcessor:
         """Create a sibling RemoteProcessor with its own RPC handler (thread-safe).
 
         Forwards the token extracted at init time so that inline-token
-        RemoteProcessors are cloned correctly.
+        RemoteProcessors are cloned correctly. Delegates the Perceval
+        handler access to :class:`PercevalAdapter`.
         """
-        return RemoteProcessor(
-            name=rp.name,
-            token=self._token,
-            url=(
-                rp.get_rpc_handler().url
-                if hasattr(rp.get_rpc_handler(), "url")
-                else None
-            ),
-            proxies=rp.proxies,
-        )
+        return PercevalAdapter.clone_remote_processor(rp, self._token)
 
     @staticmethod
     def _extract_rp_token(rp: RemoteProcessor) -> str | None:
         """Extract the auth token from a RemoteProcessor.
 
-        Perceval stores the token on the RPC handler as ``handler.token``
-        and also embeds it in ``handler.headers['Authorization']``.  We
-        probe both locations so that inline-token and global-config
-        ``RemoteProcessor`` instances are both handled.
-
-        As a last resort, falls back to ``RemoteConfig().get_token()``.
-        Returns ``None`` only if every strategy fails.
+        Delegates to :meth:`PercevalAdapter.extract_token`, which probes the
+        RPC handler token attributes, the Authorization header, and the
+        global ``RemoteConfig`` fallback. Returns ``None`` only if every
+        strategy fails.
         """
-        try:
-            handler = rp.get_rpc_handler()
-        except Exception:
-            handler = None
-
-        if handler is not None:
-            # Primary: handler.token (set by RPCHandler.__init__)
-            for attr in ("token", "_token", "auth_token"):
-                val = getattr(handler, attr, None)
-                if isinstance(val, str) and val:
-                    return val
-
-            # Fallback: parse 'Bearer <token>' from Authorization header
-            headers = getattr(handler, "headers", None)
-            if isinstance(headers, dict):
-                auth = headers.get("Authorization", "")
-                if auth.startswith("Bearer ") and len(auth) > 7:
-                    return auth[7:]
-
-        # Last resort: check the global config
-        try:
-            from perceval.runtime import RemoteConfig
-
-            global_token = (RemoteConfig().get_token() or "").strip()
-            if global_token:
-                return global_token
-        except Exception:
-            logger.debug("RemoteConfig token lookup failed", exc_info=True)
-
-        return None
+        return PercevalAdapter.extract_token(rp)
 
     def _iter_layers_in_order(self, module: nn.Module) -> Iterable[nn.Module]:
         """Yield execution leaves in deterministic order.
