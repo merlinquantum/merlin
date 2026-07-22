@@ -4,7 +4,7 @@ import threading
 import time
 import uuid
 import warnings
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
 from numbers import Integral
@@ -227,6 +227,71 @@ class CallState:
             "chunks_done": self._chunks_done,
             "active_chunks": self._active_chunks,
         }
+
+
+class MerlinFuture(Future):
+    """Typed async handle returned by :meth:`MerlinProcessor.forward_async`.
+
+    Extends ``torch.futures.Future[torch.Tensor]`` with the Merlin-specific
+    async contract that was previously monkey-patched onto plain Future
+    instances at runtime: remote-job visibility (:attr:`job_ids`), progress
+    reporting (:meth:`status`), and cooperative cancellation
+    (:meth:`cancel_remote`). All inherited Future behavior (``wait``,
+    ``done``, ``then``, ``value``, ...) is unchanged.
+
+    Parameters
+    ----------
+    call_state : CallState
+        Typed per-call state backing this handle. Job ids, chunk counters,
+        and backend status recorded during execution are read live from it.
+    cancel_all : Callable[[], None]
+        Processor-level callback cancelling all in-flight remote jobs; used
+        by :meth:`cancel_remote`.
+    """
+
+    def __init__(self, call_state: CallState, cancel_all: Callable[[], None]) -> None:
+        super().__init__()
+        self._call_state = call_state
+        self._cancel_all = cancel_all
+
+    @property
+    def job_ids(self) -> list[str]:
+        """Remote job ids accumulated across chunks, in observation order.
+
+        This is a live view of the underlying :class:`CallState` list: ids
+        recorded while chunks are polling appear here immediately.
+        """
+        return self._call_state.job_ids
+
+    def status(self) -> dict:
+        """Return the current progress and state of this call.
+
+        Returns
+        -------
+        dict
+            ``{"state", "progress", "message", "chunks_total", "chunks_done",
+            "active_chunks"}``. ``state`` is ``"IDLE"`` before the first
+            backend poll, the backend-reported state while polling, and
+            ``"COMPLETE"`` once the future resolves without a recorded
+            backend status.
+        """
+        return self._call_state.status_snapshot(future_done=self.done())
+
+    def cancel_remote(self) -> None:
+        """Cooperatively cancel this call and its in-flight remote jobs.
+
+        Requests cancellation on the per-call state (observed by chunk and
+        polling threads), cancels all active remote jobs best-effort, and
+        resolves this future with ``concurrent.futures.CancelledError`` if
+        it is not already done. Awaiting the future afterwards raises that
+        error.
+        """
+        from concurrent.futures import CancelledError
+
+        self._call_state.request_cancel()
+        self._cancel_all()
+        if not self.done():
+            self.set_exception(CancelledError("Remote call was cancelled"))
 
 
 _ALLOWED_STATE_TYPES = (
@@ -953,10 +1018,11 @@ class MerlinProcessor:
         *,
         nsample: int | None = None,
         timeout: float | None = None,
-    ) -> Future:
+    ) -> MerlinFuture:
         """Asynchronously execute a module against the configured Perceval backend.
 
-        Returns a ``torch.futures.Future`` that resolves to the output tensor.
+        Returns a :class:`MerlinFuture` (a ``torch.futures.Future`` subclass)
+        that resolves to the output tensor.
         Remote batches are automatically chunked and submitted with limited
         concurrency. Local processor inputs are kept as one Merlin-level batch
         and represented as Perceval sampler iterations using an isolated
@@ -992,8 +1058,8 @@ class MerlinProcessor:
 
         Returns
         -------
-        Future
-            ``torch.futures.Future[torch.Tensor]`` with extra attributes:
+        MerlinFuture
+            Typed ``torch.futures.Future[torch.Tensor]`` subclass exposing:
 
             - ``future.job_ids: list[str]`` — accumulates remote job IDs
               across chunks.
@@ -1045,29 +1111,8 @@ class MerlinProcessor:
         original_dtype = input.dtype
         layers: list[Any] = list(self._iter_layers_in_order(module))
 
-        fut: Future = Future()
         state = CallState.new()
-
-        def _cancel_remote():
-            state.request_cancel()
-            self.cancel_all()
-            if not fut.done():
-                try:
-                    from concurrent.futures import CancelledError
-                except Exception:  # pragma: no cover
-
-                    class CancelledError(RuntimeError):
-                        pass
-
-                fut.set_exception(CancelledError("Remote call was cancelled"))
-
-        def _status():
-            return state.status_snapshot(future_done=fut.done())
-
-        fut.cancel_remote = _cancel_remote  # type: ignore[attr-defined]
-        fut.status = _status  # type: ignore[attr-defined]
-        # Shared list reference: job ids recorded during polling appear live.
-        fut.job_ids = state.job_ids  # type: ignore[attr-defined]
+        fut = MerlinFuture(state, self.cancel_all)
 
         def _run_pipeline():
             try:
