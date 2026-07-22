@@ -15,6 +15,8 @@ Nearest Centroid Classification on a Trapped Ion Quantum Computer
 
    **DOI**: `arXiv:2012.04145 <https://arxiv.org/abs/2012.04145>`_
 
+   .. merlin-citations-badge:: nearest_centroids
+
    **Reproduction Status**: Complete
 
    **Reproducer**: Benjamin Stott (benjamin.stott@quandela.com)

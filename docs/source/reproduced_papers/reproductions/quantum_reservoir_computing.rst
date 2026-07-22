@@ -15,6 +15,8 @@ Quantum Optical Reservoir Computing Powered by Boson Sampling
 
    **DOI**: `https://doi.org/10.1364/OPTICAQ.541432 <https://doi.org/10.1364/OPTICAQ.541432>`_
 
+   .. merlin-citations-badge:: quantum_reservoir_computing
+
    **Reproduction Status**: 🚧In Progress
 
    **Reproducer**: Jean Senellart (jean.senellart@quandela.com)

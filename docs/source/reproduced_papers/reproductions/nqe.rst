@@ -13,6 +13,8 @@ Neural Quantum Embedding: Pushing the Limits of Quantum Supervised Learning
 
    **DOI**: `https://arxiv.org/abs/2311.11412 <https://arxiv.org/abs/2311.11412>`_
 
+   .. merlin-citations-badge:: nqe
+
    **Reproduction Status**: ✅ Complete
 
    **Reproducer**: Louis-Félix Vigneux (louis-felix.vigneux@quandela.com)

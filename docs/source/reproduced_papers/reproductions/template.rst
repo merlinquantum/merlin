@@ -15,6 +15,11 @@ Template for Reproducing a Quantum ML Paper in MerLin
 
    **DOI**: `[DOI URL] <[DOI URL]>`_
 
+   .. Citation tracking: register the paper in _data/citations/papers.json
+      (key, title, authors_short, year, venue, doi, doc), run
+      docs/fetch_citations.py, then replace this comment with the badge
+      directive (two dots, one space):  merlin-citations-badge:: [paper-key]
+
    **Reproduction Status**: [✅ Complete | 🚧 In Progress | ⚠️ Partial | 📋 Planned]
 
    **Reproducer**: [Reproducer Name] ([Reproducer Email])

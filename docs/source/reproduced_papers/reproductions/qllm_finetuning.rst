@@ -15,6 +15,8 @@ Quantum Large Language Model Fine-Tuning
 
    **DOI**: `10.1109/QCE65121.2025.00258 <https://doi.org/10.1109/QCE65121.2025.00258>`_
 
+   .. merlin-citations-badge:: qllm_finetuning
+
    **ArXiv**: `2504.08732 <https://arxiv.org/abs/2504.08732>`_
 
    **Reproduction Status**: ✅ Complete
