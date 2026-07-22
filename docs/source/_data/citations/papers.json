@@ -1,0 +1,165 @@
+[
+  {
+    "key": "quantum_transfer_learning",
+    "title": "Transfer Learning in Hybrid Classical-Quantum Neural Networks",
+    "authors_short": "Mari et al.",
+    "year": 2020,
+    "venue": "Quantum",
+    "doi": "10.22331/q-2020-10-09-340",
+    "doc": "reproduced_papers/reproductions/quantum_transfer_learning"
+  },
+  {
+    "key": "QCNN_data_classification",
+    "title": "Quantum Convolutional Neural Network for Classical Data Classification",
+    "authors_short": "Hur et al.",
+    "year": 2022,
+    "venue": "Quantum Machine Intelligence",
+    "doi": "10.1007/s42484-021-00061-x",
+    "doc": "reproduced_papers/reproductions/QCNN_data_classification"
+  },
+  {
+    "key": "quantum_adversarial_ml",
+    "title": "Quantum Adversarial Machine Learning",
+    "authors_short": "Lu et al.",
+    "year": 2020,
+    "venue": "Physical Review Research",
+    "doi": "10.1103/PhysRevResearch.2.033212",
+    "doc": "reproduced_papers/reproductions/quantum_adversarial_ml"
+  },
+  {
+    "key": "qssl",
+    "title": "Quantum Self-Supervised Learning",
+    "authors_short": "Jaderberg et al.",
+    "year": 2022,
+    "venue": "Quantum Science and Technology",
+    "doi": "10.1088/2058-9565/ac6825",
+    "doc": "reproduced_papers/reproductions/qssl"
+  },
+  {
+    "key": "fock_state_expressivity",
+    "title": "Fock State-enhanced Expressivity of Quantum Machine Learning Models",
+    "authors_short": "Gan et al.",
+    "year": 2022,
+    "venue": "EPJ Quantum Technology",
+    "doi": "10.1140/epjqt/s40507-022-00135-0",
+    "doc": "reproduced_papers/reproductions/fock_state_expressivity"
+  },
+  {
+    "key": "photonic_kernel",
+    "title": "Experimental Quantum-enhanced Kernel-based Machine Learning on a Photonic Processor",
+    "authors_short": "Yin et al.",
+    "year": 2025,
+    "venue": "Nature Photonics",
+    "doi": "10.1038/s41566-025-01682-5",
+    "doc": "reproduced_papers/reproductions/photonic_kernel"
+  },
+  {
+    "key": "hqnn-myth",
+    "title": "Computational Advantage in Hybrid Quantum Neural Networks: Myth or Reality?",
+    "authors_short": "Kashif et al.",
+    "year": 2025,
+    "venue": "ACM/IEEE DAC",
+    "doi": "10.1109/DAC63849.2025.11132906",
+    "doc": "reproduced_papers/reproductions/hqnn-myth"
+  },
+  {
+    "key": "nqe",
+    "title": "Neural Quantum Embedding: Pushing the Limits of Quantum Supervised Learning",
+    "authors_short": "Hur et al.",
+    "year": 2024,
+    "venue": "Physical Review A",
+    "doi": "10.1103/PhysRevA.110.022411",
+    "doc": "reproduced_papers/reproductions/nqe"
+  },
+  {
+    "key": "quantum_reservoir_computing",
+    "title": "Quantum Optical Reservoir Computing Powered by Boson Sampling",
+    "authors_short": "Sakurai et al.",
+    "year": 2025,
+    "venue": "Optica Quantum",
+    "doi": "10.1364/OPTICAQ.541432",
+    "doc": "reproduced_papers/reproductions/quantum_reservoir_computing"
+  },
+  {
+    "key": "photonic_QGAN",
+    "title": "Photonic Quantum Generative Adversarial Networks for Classical Data",
+    "authors_short": "Sedrakyan and Salavrakos",
+    "year": 2024,
+    "venue": "Optica Quantum",
+    "doi": "10.1364/OPTICAQ.530346",
+    "doc": "reproduced_papers/reproductions/photonic_QGAN"
+  },
+  {
+    "key": "nearest_centroids",
+    "title": "Nearest Centroid Classification on a Trapped Ion Quantum Computer",
+    "authors_short": "Johri et al.",
+    "year": 2021,
+    "venue": "npj Quantum Information",
+    "doi": "10.1038/s41534-021-00456-5",
+    "doc": "reproduced_papers/reproductions/nearest_centroids"
+  },
+  {
+    "key": "hqpinn",
+    "title": "Hybrid Quantum Physics-informed Neural Network: Towards Efficient Learning of High-speed Flows",
+    "authors_short": "Leong et al.",
+    "year": 2025,
+    "venue": "Computers & Fluids",
+    "doi": "10.1016/j.compfluid.2025.106782",
+    "doc": "reproduced_papers/reproductions/hqpinn"
+  },
+  {
+    "key": "qllm_finetuning",
+    "title": "Quantum Large Language Model Fine-Tuning",
+    "authors_short": "Kim et al.",
+    "year": 2025,
+    "venue": "IEEE QCE",
+    "doi": "10.1109/QCE65121.2025.00258",
+    "doc": "reproduced_papers/reproductions/qllm_finetuning"
+  },
+  {
+    "key": "amplitude_limitations",
+    "title": "Limitations of Amplitude Encoding on Quantum Classification",
+    "authors_short": "Wang et al.",
+    "year": 2025,
+    "venue": "arXiv preprint",
+    "doi": "10.48550/arXiv.2503.01545",
+    "doc": "reproduced_papers/reproductions/amplitude_limitations"
+  },
+  {
+    "key": "distributed_nn",
+    "title": "Distributed Quantum Neural Networks on Distributed Photonic Quantum Computing",
+    "authors_short": "Chen et al.",
+    "year": 2025,
+    "venue": "arXiv preprint",
+    "doi": "10.48550/arXiv.2505.08474",
+    "doc": "reproduced_papers/reproductions/distributed_nn"
+  },
+  {
+    "key": "photonic_memristor",
+    "title": "Experimental Neuromorphic Computing Based on Quantum Memristor",
+    "authors_short": "Selimovic et al.",
+    "year": 2025,
+    "venue": "arXiv preprint",
+    "doi": "10.48550/arXiv.2504.18694",
+    "doc": "reproduced_papers/reproductions/photonic_memristor"
+  },
+  {
+    "key": "photonic_qcnn",
+    "title": "Photonic Quantum Convolutional Neural Networks with Adaptive State Injection",
+    "authors_short": "Monbroussou et al.",
+    "year": 2025,
+    "venue": "arXiv preprint",
+    "doi": "10.48550/arXiv.2504.20989",
+    "doc": "reproduced_papers/reproductions/photonic_qcnn"
+  },
+  {
+    "key": "data_reuploading",
+    "title": "Experimental Data Re-uploading with Provable Enhanced Learning Capabilities",
+    "authors_short": "Mauser et al.",
+    "year": 2025,
+    "venue": "arXiv preprint",
+    "doi": "10.48550/arXiv.2507.05120",
+    "doc": "reproduced_papers/reproductions/data_reuploading",
+    "not_indexed": true
+  }
+]
