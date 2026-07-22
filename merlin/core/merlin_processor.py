@@ -4,7 +4,6 @@ import threading
 import time
 import uuid
 import warnings
-import zlib
 from collections.abc import Iterable, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
@@ -22,6 +21,7 @@ from torch.futures import Future
 
 from ..algorithms.module import MerlinModule
 from ..utils.combinadics import Combinadics
+from .execution import BatchChunker, RemoteJobRunner
 
 logger = logging.getLogger(__name__)
 
@@ -1143,12 +1143,7 @@ class MerlinProcessor:
                 layer, config, input_tensor, nsample, state, deadline
             )
 
-        chunks: list[tuple[int, int]] = []
-        start = 0
-        while start < B:
-            end = min(start + self.microbatch_size, B)
-            chunks.append((start, end))
-            start = end
+        chunks = BatchChunker.split_batch(B, self.microbatch_size)
         return self._run_chunks_pooled(
             layer, config, input_tensor, chunks, nsample, state, deadline
         )
@@ -1163,61 +1158,64 @@ class MerlinProcessor:
         state: CallState,
         deadline: float | None,
     ) -> torch.Tensor:
-        """Submit chunk jobs with limited concurrency and stitch results."""
-        state.add_planned_chunks(len(chunks))
-        outputs: list[torch.Tensor | None] = [None] * len(chunks)
-        errors: list[BaseException] = []
+        """Submit chunk jobs with limited concurrency and stitch results.
 
-        total_chunks = len(chunks)
-        layer_name = getattr(layer, "name", layer.__class__.__name__)
+        Delegates chunk orchestration to :class:`BatchChunker`; kept as the
+        processor-level entry point so callers and tests interact with the
+        coordinator rather than the execution unit directly.
+        """
+        return self._make_batch_chunker().run_chunks(
+            layer, config, input_tensor, chunks, nsample, state, deadline
+        )
 
-        def _call(s: int, e: int, idx: int):
-            try:
-                base_label = (
-                    f"mer:{layer_name}:{state.call_id}:{idx + 1}/{total_chunks}"
-                )
-                t = self._run_chunk(
-                    layer,
-                    config,
-                    input_tensor[s:e],
-                    nsample,
-                    state,
-                    deadline,
-                    job_base_label=base_label,
-                )
-                outputs[idx] = t
-            except BaseException as ex:
-                errors.append(ex)
+    # ---------------- Execution unit factories ----------------
 
-        in_flight = 0
-        idx = 0
-        futures: list[threading.Thread] = []
-        while idx < len(chunks) or in_flight > 0:
-            while idx < len(chunks) and in_flight < self.chunk_concurrency:
-                s, e = chunks[idx]
-                state.mark_chunk_started()
-                th = threading.Thread(target=_call, args=(s, e, idx), daemon=True)
-                th.start()
-                futures.append(th)
-                idx += 1
-                in_flight += 1
+    def _make_batch_chunker(self) -> BatchChunker:
+        """Build the chunk orchestration unit wired to this processor.
 
-            for th in list(futures):
-                if not th.is_alive():
-                    futures.remove(th)
-                    in_flight -= 1
-                    state.mark_chunk_finished()
+        ``run_chunk`` is bound at call time so monkeypatched processor
+        methods remain observable, matching pre-extraction behavior.
+        """
+        return BatchChunker(
+            run_chunk=self._run_chunk,
+            chunk_concurrency=self.chunk_concurrency,
+            cancel_all=self.cancel_all,
+        )
 
-            if deadline is not None and time.time() >= deadline:
-                self.cancel_all()
-                raise TimeoutError("Remote call timed out (remote cancel issued)")
+    def _make_job_runner(self) -> RemoteJobRunner:
+        """Build the remote chunk execution unit wired to this processor.
 
-            time.sleep(0.01)
+        Dependencies are injected as bound methods and deferred lambdas so
+        that live attribute mutation (e.g. ``max_shots_per_call``) and
+        monkeypatched processor methods keep working exactly as before the
+        extraction.
+        """
+        return RemoteJobRunner(
+            create_processor=self._create_fresh_rp,
+            get_available_commands=lambda: self.available_commands,
+            effective_sample_count=self._effective_sample_count,
+            get_max_shots_per_call=lambda: self.max_shots_per_call,
+            default_shots_per_call=self.DEFAULT_SHOTS_PER_CALL,
+            map_results=self._process_batch_results,
+            register_job=self._register_job,
+            unregister_job=self._unregister_job,
+            get_microbatch_limit=(
+                lambda: None if self.session is not None else self.microbatch_size
+            ),
+            max_retries=self._MAX_CHUNK_RETRIES,
+            job_name_max=self._JOB_NAME_MAX,
+        )
 
-        if errors:
-            raise errors[0]
+    def _register_job(self, job: RemoteJob) -> None:
+        """Track a submitted job for cancellation and history."""
+        with self._lock:
+            self._active_jobs.add(job)
+            self._job_history.append(job)
 
-        return torch.cat(outputs, dim=0)  # type: ignore[arg-type]
+    def _unregister_job(self, job: RemoteJob) -> None:
+        """Remove a job from active cancellation tracking."""
+        with self._lock:
+            self._active_jobs.discard(job)
 
     def _run_chunk(
         self,
@@ -1229,103 +1227,25 @@ class MerlinProcessor:
         deadline: float | None,
         job_base_label: str | None = None,
     ) -> torch.Tensor:
-        """Submit a single chunk job with retries and return the mapped tensor."""
-        from concurrent.futures import CancelledError
+        """Submit a single chunk job with retries and return the mapped tensor.
 
+        Local backends are dispatched to :meth:`_run_chunk_local`; remote
+        chunk execution is delegated to :class:`RemoteJobRunner`.
+        """
         if self.backend_kind == "local_processor":
             return self._run_chunk_local(
                 layer, config, input_chunk, nsample, state, deadline
             )
 
-        batch_size = input_chunk.shape[0]
-        if self.session is None and batch_size > self.microbatch_size:
-            raise ValueError(
-                f"Chunk size {batch_size} exceeds microbatch {self.microbatch_size}. "
-                "Please report this bug."
-            )
-
-        input_param_names = self._extract_input_params(config)
-        input_np = input_chunk.detach().cpu().numpy()
-
-        # Pre-compute iteration params (cheap, only done once).
-        iteration_params: list[dict[str, float]] = []
-        for i in range(batch_size):
-            circuit_params = {}
-            for j, param_name in enumerate(input_param_names):
-                circuit_params[param_name] = (
-                    float(input_np[i, j]) if j < input_chunk.shape[1] else 0.0
-                )
-            iteration_params.append(circuit_params)
-
-        def _capped_name(base: str, cmd: str) -> str:
-            name = f"{base}:{cmd}"
-            name = "".join(ch if ch.isalnum() or ch in "-_:/=." else "_" for ch in name)
-            if len(name) <= self._JOB_NAME_MAX:
-                return name
-            h = f"{zlib.adler32(name.encode()):08x}"
-            keep = self._JOB_NAME_MAX - 1 - len(h)
-            if keep < 1:
-                return h[: self._JOB_NAME_MAX]
-            return name[:keep] + "~" + h
-
-        last_error: BaseException | None = None
-        for attempt in range(self._MAX_CHUNK_RETRIES):
-            if state.cancel_requested:
-                raise CancelledError("Remote call was cancelled")
-            if deadline is not None and time.time() >= deadline:
-                raise TimeoutError("Remote call timed out (remote cancel issued)")
-
-            # Build a fresh RemoteProcessor and Sampler on each attempt so that
-            # a corrupted RP doesn't poison retries.
-            rp = self._create_fresh_rp()
-            rp.set_circuit(config.circuit)
-            if config.input_state:
-                input_state = pcvl.BasicState(config.input_state)
-                rp.with_input(input_state)
-                n_photons = sum(config.input_state)
-                rp.min_detected_photons_filter(n_photons)
-
-            max_shots_arg = (
-                self.DEFAULT_SHOTS_PER_CALL
-                if self.max_shots_per_call is None
-                else int(self.max_shots_per_call)
-            )
-            sampler = Sampler(rp, max_shots_per_call=max_shots_arg)
-            sampler.clear_iterations()
-            for params in iteration_params:
-                sampler.add_iteration(circuit_params=params)
-
-            job = None
-            try:
-                job, is_probability = self._submit_job(
-                    sampler, nsample, job_base_label, _capped_name
-                )
-                with self._lock:
-                    self._active_jobs.add(job)
-                    self._job_history.append(job)
-
-                return self._poll_job(
-                    job, state, deadline, batch_size, layer, nsample, is_probability
-                )
-            except (CancelledError, TimeoutError, KeyboardInterrupt):
-                raise
-            except Exception as exc:
-                last_error = exc
-                if job is not None:
-                    with self._lock:
-                        self._active_jobs.discard(job)
-                logger.warning(
-                    "Chunk attempt %d/%d failed: %s",
-                    attempt + 1,
-                    self._MAX_CHUNK_RETRIES,
-                    exc,
-                )
-                if attempt < self._MAX_CHUNK_RETRIES - 1:
-                    time.sleep(min(1.0 * (2**attempt), 5.0))
-
-        raise RuntimeError(
-            f"Chunk failed after {self._MAX_CHUNK_RETRIES} attempts"
-        ) from last_error
+        return self._make_job_runner().run_chunk(
+            layer,
+            config,
+            input_chunk,
+            nsample,
+            state,
+            deadline,
+            job_base_label=job_base_label,
+        )
 
     def _create_fresh_local_processor(self) -> AProcessor:
         """Create an isolated local Perceval processor for one execution.
@@ -1630,68 +1550,9 @@ class MerlinProcessor:
             - **bool**: ``is_probability`` flag indicating execution mode:
               ``True`` if using exact probabilities, ``False`` if sampling.
         """
-        is_probability = ("probs" in self.available_commands) and (
-            nsample is None or int(nsample) <= 0
+        return self._make_job_runner().submit_job(
+            sampler, nsample, job_base_label, _capped_name
         )
-
-        if is_probability:
-            job = sampler.probs
-            cmd = "probs"
-            if job_base_label:
-                job.name = _capped_name(job_base_label, cmd)
-            self._ensure_serializable_sampler_iterator(job, sampler)
-            return job.execute_async(), is_probability
-
-        use_shots = self._effective_sample_count(nsample)
-
-        if "sample_count" in self.available_commands:
-            job = sampler.sample_count
-            cmd = "sample_count"
-        elif "samples" in self.available_commands:
-            job = sampler.samples
-            cmd = "samples"
-        else:
-            job = sampler.sample_count
-            cmd = "sample_count"
-
-        if job_base_label:
-            job.name = _capped_name(job_base_label, cmd)
-        self._ensure_serializable_sampler_iterator(job, sampler)
-        return job.execute_async(max_samples=use_shots), is_probability
-
-    @staticmethod
-    def _ensure_serializable_sampler_iterator(job: RemoteJob, sampler: Sampler) -> None:
-        """Replace Perceval 1.2 iterator objects with JSON-serializable data.
-
-        Parameters
-        ----------
-        job : RemoteJob
-            Prepared Perceval remote job whose private request payload may contain
-            a sampler iterator.
-        sampler : Sampler
-            Perceval sampler used to prepare the job.
-
-        Notes
-        -----
-        Perceval 1.1 stores sampler iterations as a plain list. Perceval 1.2
-        stores them in a ``ParameterIterator`` object, but the Scaleway session
-        handler still serializes ``payload["payload"]`` with ``json.dumps``.
-        Until Perceval exposes a public serializer for that object, Merlin
-        normalizes the remote-job payload back to the list shape accepted by the
-        cloud side.
-        """
-        iterator = getattr(sampler, "_iterator", None)
-        iterations = getattr(iterator, "iterations", None)
-        if not iterations:
-            return
-
-        request_data = getattr(job, "_request_data", None)
-        if not isinstance(request_data, dict):
-            return
-
-        payload = request_data.get("payload")
-        if isinstance(payload, dict) and payload.get("iterator") is iterator:
-            payload["iterator"] = list(iterations)
 
     def _poll_job(
         self,
@@ -1736,88 +1597,9 @@ class MerlinProcessor:
             from the remote job results. Probability vs. sample interpretation is
             determined by ``is_probability``.
         """
-        from concurrent.futures import CancelledError
-
-        _MAX_NON_DICT_RETRIES = 60  # 60 * 0.1s = 6s
-        non_dict_retries = 0
-        sleep_ms = 50
-        while True:
-            if state.cancel_requested:
-                cancel = getattr(job, "cancel", None)
-                if callable(cancel):
-                    with suppress(Exception):
-                        cancel()
-                raise CancelledError("Remote call was cancelled")
-
-            if deadline is not None and time.time() >= deadline:
-                cancel = getattr(job, "cancel", None)
-                if callable(cancel):
-                    with suppress(Exception):
-                        cancel()
-                raise TimeoutError("Remote call timed out (remote cancel issued)")
-
-            s = getattr(job, "status", None)
-            state.set_current_status(
-                state=getattr(s, "state", None) if s else None,
-                progress=getattr(s, "progress", None) if s else None,
-                message=getattr(s, "stop_message", None) if s else None,
-            )
-
-            job_id = getattr(job, "id", None) or getattr(job, "job_id", None)
-            if job_id is not None:
-                state.record_job_id(job_id)
-
-            if getattr(job, "is_failed", False):
-                current_status = state.current_status
-                msg = current_status.message if current_status else None
-                if msg and "Cancel requested" in str(msg):
-                    with self._lock:
-                        self._active_jobs.discard(job)
-                    raise CancelledError("Remote call was cancelled")
-                with self._lock:
-                    self._active_jobs.discard(job)
-                raise RuntimeError(
-                    f"Remote job failed: {msg or 'unknown error'} (job_id={job_id!r})"
-                )
-
-            if getattr(job, "is_complete", False):
-                try:
-                    raw = job.get_results()
-                except RuntimeError as ex:
-                    msg = str(ex)
-                    if "Results are not available" in msg:
-                        time.sleep(0.05)
-                        continue
-                    if "Cancel requested" in msg:
-                        with self._lock:
-                            self._active_jobs.discard(job)
-                        raise CancelledError("Remote call was cancelled")
-                    raise
-
-                if isinstance(raw, dict):
-                    with self._lock:
-                        self._active_jobs.discard(job)
-                    return self._process_batch_results(
-                        raw, batch_size, layer, nsample, is_probability
-                    )
-
-                # The backend sometimes reports completion before the dict
-                # payload is actually available.  Re-poll the same job for a
-                # bounded window before giving up to the outer retry loop.
-                non_dict_retries += 1
-                if non_dict_retries >= _MAX_NON_DICT_RETRIES:
-                    with self._lock:
-                        self._active_jobs.discard(job)
-                    raise RuntimeError(
-                        f"Job complete but results were not a dict after "
-                        f"{_MAX_NON_DICT_RETRIES} re-polls; "
-                        f"job_id={job_id!r}, type={type(raw)}, value={raw!r}"
-                    )
-                time.sleep(0.1)
-                continue
-
-            time.sleep(sleep_ms / 1000.0)
-            sleep_ms = min(sleep_ms * 2, 400)
+        return self._make_job_runner().poll_job(
+            job, state, deadline, batch_size, layer, nsample, is_probability
+        )
 
     # ---------------- Per-call RP pool helpers ----------------
 
