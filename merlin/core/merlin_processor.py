@@ -69,6 +69,166 @@ class _LocalExperimentMetadata:
         )
 
 
+@dataclass(frozen=True)
+class JobStatus:
+    """Immutable snapshot of the most recently observed backend job status.
+
+    Attributes
+    ----------
+    state : Any
+        Backend-reported job state (e.g. ``"RUNNING"``), or ``None`` when the
+        backend did not expose one.
+    progress : Any
+        Backend-reported progress value, or ``None``.
+    message : Any
+        Backend-reported stop/status message, or ``None``.
+    """
+
+    state: Any = None
+    progress: Any = None
+    message: Any = None
+
+
+class CallState:
+    """Typed per-call execution state for one :meth:`MerlinProcessor.forward_async` call.
+
+    Replaces the anonymous mutable ``state`` dict previously threaded through
+    ``forward_async()``, chunk orchestration, chunk execution, and job polling.
+    All per-call runtime state is owned by this object and mutated only through
+    named helpers, making the contract explicit and searchable.
+
+    **Thread ownership**
+
+    - ``call_id``: immutable after creation; readable from any thread.
+    - ``cancel_requested``: set (never cleared) by the caller thread through
+      :meth:`request_cancel`; read cooperatively by the pipeline, chunk, and
+      polling threads.
+    - ``current_status``: written by polling threads through
+      :meth:`set_current_status`; read by :meth:`status_snapshot`.
+    - ``job_ids``: appended (with deduplication) by polling threads through
+      :meth:`record_job_id`. The list object is intentionally shared with
+      ``future.job_ids`` so recorded ids appear on the future as they arrive.
+    - Chunk counters (``chunks_total``, ``chunks_done``, ``active_chunks``):
+      mutated by the chunk orchestration thread through
+      :meth:`add_planned_chunks`, :meth:`mark_chunk_started`, and
+      :meth:`mark_chunk_finished` under the internal lock.
+    """
+
+    def __init__(self, call_id: str) -> None:
+        self.call_id = call_id
+        self.job_ids: list[str] = []
+        self._lock = threading.Lock()
+        self._cancel_requested = False
+        self._current_status: JobStatus | None = None
+        self._chunks_total = 0
+        self._chunks_done = 0
+        self._active_chunks = 0
+
+    @classmethod
+    def new(cls) -> "CallState":
+        """Create a fresh call state with a short unique call identifier."""
+        return cls(call_id=uuid.uuid4().hex[:8])
+
+    # ---- cancellation ----
+
+    @property
+    def cancel_requested(self) -> bool:
+        """Whether cooperative cancellation has been requested for this call."""
+        return self._cancel_requested
+
+    def request_cancel(self) -> None:
+        """Request cooperative cancellation of this call (irreversible)."""
+        self._cancel_requested = True
+
+    # ---- job ids ----
+
+    def record_job_id(self, job_id: str) -> None:
+        """Record a remote job id, deduplicating repeated observations."""
+        with self._lock:
+            if job_id not in self.job_ids:
+                self.job_ids.append(job_id)
+
+    # ---- backend job status ----
+
+    @property
+    def current_status(self) -> JobStatus | None:
+        """Most recent backend job status, or ``None`` before first poll."""
+        return self._current_status
+
+    def set_current_status(
+        self, *, state: Any = None, progress: Any = None, message: Any = None
+    ) -> None:
+        """Record the latest backend job status observed while polling."""
+        self._current_status = JobStatus(
+            state=state, progress=progress, message=message
+        )
+
+    # ---- chunk counters ----
+
+    @property
+    def chunks_total(self) -> int:
+        """Total number of chunks planned so far for this call."""
+        return self._chunks_total
+
+    @property
+    def chunks_done(self) -> int:
+        """Number of chunks that finished (successfully or not)."""
+        return self._chunks_done
+
+    @property
+    def active_chunks(self) -> int:
+        """Number of chunk jobs currently in flight."""
+        return self._active_chunks
+
+    def add_planned_chunks(self, count: int) -> None:
+        """Register ``count`` additional chunks planned for submission."""
+        with self._lock:
+            self._chunks_total += count
+
+    def mark_chunk_started(self) -> None:
+        """Mark one chunk job as submitted and in flight."""
+        with self._lock:
+            self._active_chunks += 1
+
+    def mark_chunk_finished(self) -> None:
+        """Mark one in-flight chunk job as finished."""
+        with self._lock:
+            self._active_chunks = max(0, self._active_chunks - 1)
+            self._chunks_done += 1
+
+    # ---- snapshots ----
+
+    def status_snapshot(self, future_done: bool = False) -> dict:
+        """Return the public status dict exposed through ``future.status()``.
+
+        Parameters
+        ----------
+        future_done : bool
+            Whether the owning future has already resolved. A resolved future
+            with no recorded backend status reports state ``"COMPLETE"``.
+
+        Returns
+        -------
+        dict
+            ``{"state", "progress", "message", "chunks_total", "chunks_done",
+            "active_chunks"}`` with the same semantics as before the CallState
+            refactor.
+        """
+        js = self._current_status
+        return {
+            "state": (
+                "COMPLETE"
+                if future_done and js is None
+                else (js.state if js else "IDLE")
+            ),
+            "progress": js.progress if js else 0.0,
+            "message": js.message if js else None,
+            "chunks_total": self._chunks_total,
+            "chunks_done": self._chunks_done,
+            "active_chunks": self._active_chunks,
+        }
+
+
 _ALLOWED_STATE_TYPES = (
     pcvl.StateVector,
     pcvl.FockState,
