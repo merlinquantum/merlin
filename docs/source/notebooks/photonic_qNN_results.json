@@ -126,5 +126,53 @@
         "best cl ACC": 90.00753968253967,
         "q parameters": 2840,
         "cl parameters": 1642
+    },
+    {
+        "dataset": "mnist",
+        "learnable scale": true,
+        "best q ACC": 82.91677827380951,
+        "best cl ACC": 90.00753968253967,
+        "q parameters": 2840,
+        "cl parameters": 1642
+    },
+    {
+        "dataset": "mnist",
+        "learnable scale": true,
+        "best q ACC": 82.91677827380951,
+        "best cl ACC": 89.31556299603173,
+        "q parameters": 2840,
+        "cl parameters": 1642
+    },
+    {
+        "dataset": "mnist",
+        "learnable scale": true,
+        "best q ACC": 82.91677827380951,
+        "best cl ACC": 89.31556299603173,
+        "q parameters": 2840,
+        "cl parameters": 1642
+    },
+    {
+        "dataset": "mnist",
+        "learnable scale": true,
+        "best q ACC": 82.91677827380951,
+        "best cl ACC": 89.31556299603173,
+        "q parameters": 2840,
+        "cl parameters": 1642
+    },
+    {
+        "dataset": "mnist",
+        "learnable scale": true,
+        "best q ACC": 82.91677827380951,
+        "best cl ACC": 89.31556299603173,
+        "q parameters": 2840,
+        "cl parameters": 1642
+    },
+    {
+        "dataset": "mnist",
+        "learnable scale": true,
+        "best q ACC": 83.03180803571429,
+        "best cl ACC": 89.31556299603173,
+        "q parameters": 2840,
+        "cl parameters": 1642
     }
 ]
