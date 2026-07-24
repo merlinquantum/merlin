@@ -13,6 +13,7 @@ from ..algorithms import QuantumLayer
 from ..core import ComputationSpace, StateVector
 from ..core.partial_measurement import PartialMeasurement
 from ..measurement import MeasurementStrategy
+from ..utils.dtypes import complex_dtype_for
 
 
 class QCNNClassifier(torch.nn.Module):
@@ -897,6 +898,26 @@ class QCNNClassifier(torch.nn.Module):
 
         return torch.tensor(basis_indices, dtype=torch.long)
 
+    def _model_complex_dtype(self) -> torch.dtype:
+        """Return the complex dtype matching the model's floating-point dtype.
+
+        The quantum layers hold the authoritative ``complex_dtype`` (kept in
+        sync with device/dtype conversions such as
+        :meth:`~torch.nn.Module.to` and :meth:`~torch.nn.Module.double`), so
+        the first quantum layer's value is used. If no quantum layer exists,
+        the dtype is derived from the model parameters instead.
+
+        Returns
+        -------
+        torch.dtype
+            ``torch.complex64`` for a float32 model, ``torch.complex128``
+            for a float64 model.
+        """
+        for layer in self.layers:
+            if isinstance(layer, QuantumLayer):
+                return layer.complex_dtype
+        return complex_dtype_for(next(self.parameters()).dtype)
+
     def amplitude_encode(self, x: torch.Tensor):
         """Encode image pixels as amplitudes of a two-photon state vector.
 
@@ -904,6 +925,11 @@ class QCNNClassifier(torch.nn.Module):
         ``i`` of the first register and one photon in mode
         ``input_shape[0] + j`` of the second register. The resulting state vector
         is normalized before being passed to the quantum layers.
+
+        The encoding follows the model's precision: amplitudes are created
+        with the complex dtype matching the model dtype (``complex64`` for a
+        float32 model, ``complex128`` for a float64 model), regardless of the
+        input tensor's dtype.
 
         Parameters
         ----------
@@ -924,10 +950,11 @@ class QCNNClassifier(torch.nn.Module):
         )
         basis_size = state_vector.basis_size
 
+        complex_dtype = self._model_complex_dtype()
         state_tensor = torch.zeros(
-            (batch_size, basis_size), dtype=torch.complex64, device=x.device
+            (batch_size, basis_size), dtype=complex_dtype, device=x.device
         )
-        pixel_amplitudes = x[:, 0, :, :].reshape(batch_size, -1).to(torch.complex64)
+        pixel_amplitudes = x[:, 0, :, :].reshape(batch_size, -1).to(complex_dtype)
         basis_indices = self._amplitude_basis_indices.to(x.device)
         expanded_indices = basis_indices.unsqueeze(0).expand(batch_size, -1)
         state_tensor = state_tensor.scatter(1, expanded_indices, pixel_amplitudes)

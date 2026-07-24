@@ -102,7 +102,7 @@ def test_qcnn_basic_api():
     )
     with pytest.raises(AttributeError):
         qcnn_classifier_from_list.input_shape = (2, 2)
-    
+
     qcnn_classifier_above_former_limit = QCNNClassifier(
         input_shape_above_former_limit,
         accepted_num_classes,
@@ -791,3 +791,59 @@ def test_qcnn_state_dict_round_trip_with_export_config():
 
     assert torch.allclose(restored_logits, expected_logits, atol=1e-6, rtol=1e-6)
 
+
+def test_amplitude_encode_follows_model_dtype_after_to_float64():
+    """to(float64) yields complex128 encoding and float64 logits end to end."""
+    model = QCNNClassifier((4, 4), 10).to(torch.float64)
+    x = torch.rand(2, 1, 4, 4, dtype=torch.float64)
+
+    encoded = model.amplitude_encode(x)
+    assert encoded.tensor.dtype == torch.complex128
+
+    logits = model(x)
+    assert logits.dtype == torch.float64
+
+
+def test_amplitude_encode_default_model_uses_complex64():
+    """A default (float32) model keeps the historical complex64 encoding."""
+    model = QCNNClassifier((4, 4), 10)
+    x = torch.rand(2, 1, 4, 4)
+
+    assert model.amplitude_encode(x).tensor.dtype == torch.complex64
+
+
+def test_amplitude_encode_input_dtype_follows_model_not_input():
+    """A float64 input on a float32 model encodes at the model's precision."""
+    model = QCNNClassifier((4, 4), 10)
+    x = torch.rand(2, 1, 4, 4, dtype=torch.float64)
+
+    assert model.amplitude_encode(x).tensor.dtype == torch.complex64
+
+
+def test_amplitude_encode_float64_preserves_double_precision():
+    """Encoded amplitudes match an exact complex128 reference (no truncation)."""
+    model = QCNNClassifier((4, 4), 10).to(torch.float64)
+    x = torch.rand(2, 1, 4, 4, dtype=torch.float64)
+    batch_size = x.shape[0]
+
+    encoded = model.amplitude_encode(x).tensor
+
+    pixels = x[:, 0].reshape(batch_size, -1).to(torch.complex128)
+    indices = model._amplitude_basis_indices.unsqueeze(0).expand(batch_size, -1)
+    reference = torch.zeros_like(encoded).scatter(1, indices, pixels)
+    reference = reference / reference.abs().pow(2).sum(dim=1, keepdim=True).sqrt()
+
+    torch.testing.assert_close(encoded, reference, rtol=0.0, atol=1e-14)
+
+    # The truncated complex64 encoding would deviate by ~1e-8; double precision
+    # must beat that by orders of magnitude.
+    truncated = reference.to(torch.complex64).to(torch.complex128)
+    assert not torch.allclose(encoded, truncated, rtol=0.0, atol=1e-12)
+
+
+def test_to_unsupported_dtype_raises_clear_error():
+    """Half precision is rejected loudly instead of degrading silently."""
+    model = QCNNClassifier((4, 4), 10)
+
+    with pytest.raises(ValueError, match="torch.float32 or torch.float64"):
+        model.to(torch.float16)
