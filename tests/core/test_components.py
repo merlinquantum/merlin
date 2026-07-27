@@ -49,6 +49,9 @@ def test_generic_interferometer_non_trainable_gets_random_phases():
     count = gi.span * (gi.span - 1) // 2
     assert len(gi.fixed_inner_values) == count
     assert len(gi.fixed_outer_values) == count
+    # random.uniform() draws from a continuous distribution; all values being
+    # exactly 0.0 has measure-zero probability and is effectively impossible.
+    # These assertions guard against the old bug where phases were hardcoded to 0.0.
     assert any(v != 0.0 for v in gi.fixed_inner_values)
     assert any(v != 0.0 for v in gi.fixed_outer_values)
     for value in gi.fixed_inner_values + gi.fixed_outer_values:

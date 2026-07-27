@@ -399,6 +399,9 @@ def test_non_trainable_entangling_layer_uses_random_phases_not_zero():
     # Phases must be populated and not trivially all-zero.
     assert component.fixed_inner_values
     assert component.fixed_outer_values
+    # random.uniform() draws from a continuous distribution; all values being
+    # exactly 0.0 has measure-zero probability and is effectively impossible.
+    # These assertions guard against the old bug where phases were hardcoded to 0.0.
     assert any(v != 0.0 for v in component.fixed_inner_values)
     assert any(v != 0.0 for v in component.fixed_outer_values)
     for v in component.fixed_inner_values + component.fixed_outer_values:
@@ -457,6 +460,8 @@ def test_non_trainable_entangling_layer_partial_trainable_mix():
     assert component.trainable_outer is False
     assert component.fixed_inner_values == []
     assert component.fixed_outer_values
+    # random.uniform() draws from a continuous distribution; all values being
+    # exactly 0.0 has measure-zero probability and is effectively impossible.
     assert any(v != 0.0 for v in component.fixed_outer_values)
 
     pcvl_circuit = builder.to_pcvl_circuit(pcvl)
