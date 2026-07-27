@@ -217,3 +217,78 @@ def test_non_convergence_error_names_component(monkeypatch):
 
     with pytest.raises(RuntimeError, match=r"did not converge .* modes \(0, 1, 2, 3\)"):
         _decompose_unitaries(circuit)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
+def test_circuit_converter_with_phase_noise_on_gpu():
+    """Test CircuitConverter unitary decomposition and phase noise on GPU.
+
+    Verifies that:
+    - Unitary decomposition works on GPU device
+    - Phase imprecision and phase_error produce correct outputs on GPU
+    - Tensors are created on the specified GPU device
+    - Stochastic sampling works correctly with fresh samples per call
+    - Results match CPU baseline (fidelity check)
+    """
+    np.random.seed(42)
+    circuit = _single_unitary_circuit(4)
+    original_unitary = _circuit_unitary(circuit)
+
+    # Create converter with phase noise on GPU
+    converter_gpu = CircuitConverter(
+        circuit,
+        dtype=torch.float64,
+        device="cuda",
+        phase_imprecision=0.1,
+        phase_error=0.05,
+    )
+
+    assert str(converter_gpu.device) == "cuda:0" or str(converter_gpu.device) == "cuda"
+
+    # Get unitary on GPU
+    unitary_gpu = converter_gpu.to_tensor()
+    assert unitary_gpu.device.type == "cuda"
+    assert unitary_gpu.shape == (4, 4)
+
+    # Verify decomposition occurred
+    assert converter_gpu.circuit is not circuit
+    assert any(isinstance(c, PS) for _, c in converter_gpu.list_rct)
+
+    # Noiseless evaluation should match original (within decomposition tolerance)
+    unitary_gpu_numpy = unitary_gpu.cpu().numpy()
+    assert _fidelity(original_unitary, unitary_gpu_numpy) == pytest.approx(
+        1.0, abs=_FIDELITY_ATOL
+    )
+    assert np.allclose(unitary_gpu_numpy, original_unitary, atol=_ELEMENTWISE_ATOL)
+
+    # Phase error sampling should vary on GPU
+    torch.manual_seed(123)
+    first_sample_gpu = converter_gpu.to_tensor(apply_phase_error=True)
+    second_sample_gpu = converter_gpu.to_tensor(apply_phase_error=True)
+
+    assert first_sample_gpu.device.type == "cuda"
+    assert second_sample_gpu.device.type == "cuda"
+    assert not torch.allclose(first_sample_gpu, second_sample_gpu)
+
+    # Verify reproducibility with same seed
+    torch.manual_seed(456)
+    third_sample_gpu = converter_gpu.to_tensor(apply_phase_error=True)
+    torch.manual_seed(456)
+    replayed_sample_gpu = converter_gpu.to_tensor(apply_phase_error=True)
+
+    assert torch.allclose(third_sample_gpu, replayed_sample_gpu)
+
+    # Compare CPU and GPU (noiseless) — should be very close
+    torch.manual_seed(789)
+    converter_cpu = CircuitConverter(
+        circuit,
+        dtype=torch.float64,
+        device="cpu",
+        phase_imprecision=0.1,
+        phase_error=0.05,
+    )
+    unitary_cpu = converter_cpu.to_tensor()
+
+    # Results should be identical (deterministic quantization, no stochastic error)
+    unitary_gpu_on_cpu = unitary_gpu.cpu()
+    assert torch.allclose(unitary_gpu_on_cpu, unitary_cpu, atol=1e-12)
