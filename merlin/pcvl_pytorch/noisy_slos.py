@@ -200,6 +200,7 @@ class NoisyG2SLOSComputeGraph:
     ) -> SectoredDistribution:
 
         sector_outputs = []
+        probs_regular: torch.Tensor
 
         if unitary.size(0) == unitary.size(1) and unitary.ndim == 2:
             unitary = unitary.unsqueeze(0)
@@ -211,6 +212,8 @@ class NoisyG2SLOSComputeGraph:
             keys_regular, probs_regular = single_graph.compute_probs(
                 unitary, input_state
             )
+            # Ensure probabilities are on the same device as the unitary
+            probs_regular = probs_regular.to(unitary.device)
             # Generate one-hot states for each active mode and compute their probs
             one_hot_slos_graphs = {}
             for mode_idx in range(len(input_state)):
@@ -220,11 +223,19 @@ class NoisyG2SLOSComputeGraph:
                     keys_one_hot, probs_one_hot = single_graph._slos_graphs[
                         0
                     ].compute_probs(unitary, one_hot_state)
+                    # Ensure probabilities are on the same device as the unitary
+                    probs_one_hot = probs_one_hot.to(unitary.device)
                     one_hot_slos_graphs[mode_idx] = (keys_one_hot, probs_one_hot)
         else:
             # Cast for mypy: _slos_graphs is list when g2_distinguishable is False
             slos_graphs_list = cast(list[NoisySLOSComputeGraph], self._slos_graphs)
-            probs_regular = slos_graphs_list[0].compute_probs(unitary, input_state)
+            slos_output = slos_graphs_list[0].compute_probs(unitary, input_state)
+            # Ensure probabilities are on the same device as the unitary
+            if isinstance(slos_output, tuple):
+                keys_regular, probs_regular = slos_output
+                probs_regular = probs_regular.to(unitary.device)
+            else:
+                probs_regular = slos_output.to(unitary.device)
 
         # Group possible extra emissions by sector. Entry k contains every
         # source-mode combination that produces n_photons + k output photons.
@@ -235,7 +246,7 @@ class NoisyG2SLOSComputeGraph:
         # probability p.  The two are related by g^(2)(0) = 2p/(1+p)^2, so:
         #   p = ((1 - g2) - sqrt(1 - 2*g2)) / g2,  valid for g2 in [0, 0.5].
         # For small g2, p ≈ g2/2 (L'Hôpital).  At g2=0 the limit is p=0.
-        _g2 = torch.as_tensor(self.g2, device=self.device, dtype=self.dtype)
+        _g2 = torch.as_tensor(self.g2, device=unitary.device, dtype=self.dtype)
         _disc = (1.0 - 2.0 * _g2).clamp(min=0.0)
         p_emit = ((1.0 - _g2) - _disc.sqrt()) / _g2.clamp(min=1e-15)
         for num_photons_added in range(len(extra_photons_combinations)):
@@ -251,7 +262,7 @@ class NoisyG2SLOSComputeGraph:
                         scheme="fock", n=self.n_photons + num_photons_added, m=self.m
                     ).compute_space_size(),
                     dtype=self.dtype,
-                    device=self.device,
+                    device=unitary.device,
                 ),
                 n_modes=self.m,
                 n_photons=self.n_photons + num_photons_added,
@@ -769,7 +780,7 @@ class _InputStateNoisySLOSComputeGraph:
         )
 
         for i, partition in enumerate(self._partitions):
-            bit_weight = self._weights[i]
+            bit_weight = self._weights[i].to(unitary.device)
 
             for cell, count in zip(partition[0], partition[1], strict=True):
                 cell_distributions = [
@@ -782,7 +793,9 @@ class _InputStateNoisySLOSComputeGraph:
                     fock_states,
                     *cell_distributions,
                 )
-                output_probs += bit_weight * convolution * count.item()
+                output_probs += (
+                    bit_weight * convolution.to(unitary.device) * count.item()
+                )
 
         # OBB partition weights do not generally sum to one. This normalization
         # assumes output_probs spans the full Fock basis for self.n_photons; it
