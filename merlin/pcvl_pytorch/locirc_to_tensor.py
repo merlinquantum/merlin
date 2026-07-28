@@ -251,9 +251,37 @@ def _decompose_unitaries(
         if cache_key in _DECOMPOSITION_CACHE and optimizer_is_default:
             # Reuse a deep copy of the cached mesh so each CircuitConverter
             # gets an independent set of components.
-            new_circuit.add(
-                r[0], copy.deepcopy(_DECOMPOSITION_CACHE[cache_key]), merge=True
-            )
+            cached_mesh = copy.deepcopy(_DECOMPOSITION_CACHE[cache_key])
+            cached_fitted = np.asarray(cached_mesh.compute_unitary(), dtype=complex)
+            if not np.allclose(
+                cached_fitted.conj().T @ cached_fitted,
+                np.eye(component.m),
+                atol=1e-10,
+            ):
+                raise RuntimeError(
+                    f"Cached Clements decomposition is not unitary for "
+                    f"unitary '{component.name}' on modes {tuple(r)}."
+                )
+            cached_overlap = np.trace(target.conj().T @ cached_fitted) / component.m
+            if abs(cached_overlap) < 1.0 - _FIT_TOLERANCE:
+                raise RuntimeError(
+                    f"Cached Clements decomposition failed the fit quality check "
+                    f"for unitary '{component.name}' on modes {tuple(r)}: "
+                    f"overlap magnitude = {abs(cached_overlap):.6e}."
+                )
+            cached_parameters = cached_mesh.get_parameters()
+            cached_output_phases = [
+                parameter
+                for parameter in cached_parameters
+                if parameter.name.startswith("phL")
+            ]
+            if len(cached_output_phases) != component.m:
+                raise RuntimeError(
+                    f"Unexpected cached mesh structure for unitary "
+                    f"'{component.name}': expected {component.m} output phases "
+                    f"('phL*'), found {len(cached_output_phases)}."
+                )
+            new_circuit.add(r[0], cached_mesh, merge=True)
             continue
 
         try:
@@ -308,7 +336,8 @@ def _decompose_unitaries(
             )
             if fit_error > 0.1 * noise_scale:
                 warnings.warn(
-                    f"Unitary decomposition fit error (1 - |overlap| = {fit_error:.3e}) is "
+                    f"Unitary decomposition phase-aligned fit residual "
+                    f"({fit_error:.3e}) is "
                     f"comparable to or exceeds the configured phase noise scale "
                     f"(max(phase_imprecision, phase_error)={noise_scale:.3e}). "
                     f"For component '{component.name}' on modes {tuple(r)}, the "
@@ -330,26 +359,12 @@ def _decompose_unitaries(
             value = float(parameter)
             if parameter.name.startswith("phL"):
                 value -= alpha
-            freeze_parameter = getattr(parameter, "fix_value", None)
-            if freeze_parameter is not None:
-                freeze_parameter(value)
+            parameter.fix_value(value)
 
         # Store the completed mesh in the cache before adding to the circuit,
         # so that future builds for the same matrix skip the optimizer entirely.
-        try:
-            new_circuit.add(r[0], mesh, merge=True)
-            _DECOMPOSITION_CACHE[cache_key] = copy.deepcopy(mesh)
-        except AssertionError as exc:
-            if not np.allclose(
-                fitted.conj().T @ fitted,
-                np.eye(component.m),
-                atol=1e-10,
-            ):
-                # Lightweight optimizer doubles may expose a fitted matrix
-                # for diagnostics without implementing a physical mesh.
-                new_circuit.add(r[0], component)
-            else:
-                raise exc
+        new_circuit.add(r[0], mesh, merge=True)
+        _DECOMPOSITION_CACHE[cache_key] = copy.deepcopy(mesh)
     return new_circuit
 
 
