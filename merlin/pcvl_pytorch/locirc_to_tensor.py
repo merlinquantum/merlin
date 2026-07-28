@@ -415,9 +415,10 @@ class CircuitConverter:
         When ``phase_imprecision > 0`` or ``phase_error > 0``, every
         non-``PERM`` ``Unitary`` component is automatically decomposed at
         construction into a rectangular (Clements) mesh of MZIs with fixed
-        numeric phases, so the configured phase noise applies to every
-        physical phase of its hardware implementation (fidelity error ~1e-6,
-        global phase compensated). Without circuit noise the fast path is
+        numeric phases plus an output PS layer. Phase noise is then applied
+        to the PS components of the mesh (fidelity error ~1e-6, global phase
+        compensated), matching Perceval's convention that ``phase_imprecision``
+        targets phase shifters only. Without circuit noise the fast path is
         kept: ``Unitary`` components stay precomputed constant tensors.
         ``PERM`` components (waveguide crossings) are never decomposed.
 
@@ -932,10 +933,9 @@ class CircuitConverter:
         2. Stochastic uniform perturbation when ``self._apply_phase_error`` is
            ``True`` and ``phase_error_half_width > 0``.
 
-        This helper is shared by :meth:`_compute_tensor` overloads for ``PS``
-        and ``BS`` so that every physical phase in the circuit — including the
-        ``theta`` and ``phi`` parameters of beam splitters — receives identical
-        noise treatment.
+        This helper is used by the :meth:`_compute_tensor` overload for ``PS``.
+        Phase noise is not applied to ``BS`` parameters, matching Perceval's
+        ``phase_imprecision`` noise model which targets only phase shifters.
 
         Parameters
         ----------
@@ -945,10 +945,8 @@ class CircuitConverter:
             calling code.
         phase_error_half_width : float
             Half-width of the ``Uniform(-w, w)`` perturbation to apply when
-            ``self._apply_phase_error`` is ``True``. Pass ``self._phase_error``
-            for ``BS`` parameters (no per-component override). For ``PS``,
-            the caller selects the per-component ``max_error`` or falls back
-            to ``self._phase_error``.
+            ``self._apply_phase_error`` is ``True``. The caller selects the
+            per-component ``max_error`` or falls back to ``self._phase_error``.
 
         Returns
         -------
@@ -996,11 +994,9 @@ class CircuitConverter:
         Handles different BS conventions (Rx, Ry, H) and processes 5 parameters:
         theta, phi_tl, phi_bl, phi_tr, phi_br.
 
-        Phase noise (``phase_imprecision`` and ``phase_error``) is applied to
-        every BS parameter, including those with fixed numeric values that arise
-        from the Clements mesh decomposition of a ``Unitary`` block.  This
-        ensures that hardware-level noise affects all physical phases in the
-        mesh, not only the explicit output ``PS`` layer.
+        Phase noise (``phase_imprecision`` and ``phase_error``) is not applied to
+        BS parameters. Noise is applied exclusively to PS (phase shifter)
+        components, matching Perceval's ``phase_imprecision`` noise model.
 
         Parameters
         ----------
@@ -1027,10 +1023,7 @@ class CircuitConverter:
                 raw = torch.tensor(
                     float(param), dtype=self.tensor_fdtype, device=self.device
                 )
-            # Apply phase_imprecision and phase_error to every BS parameter.
-            # BS has no per-component max_error override, so always use
-            # self._phase_error as the perturbation half-width.
-            param_values.append(self._apply_phase_noise(raw, self._phase_error))
+            param_values.append(raw)
 
         cos_theta = torch.cos(param_values[0] / 2)
         sin_theta = torch.sin(param_values[0] / 2)
