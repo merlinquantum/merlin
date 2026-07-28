@@ -138,6 +138,28 @@ def test_phase_error_triggers_decomposition_and_noiseless_eval_matches():
     assert np.allclose(unitary, original, atol=_ELEMENTWISE_ATOL)
 
 
+def test_decomposed_mesh_keeps_all_phase_shifters_noise_sensitive():
+    """Test that every phase shifter in a Clements mesh receives phase noise."""
+    np.random.seed(31)
+    mode_count = 4
+    circuit = _single_unitary_circuit(mode_count)
+
+    converter = CircuitConverter(
+        circuit,
+        dtype=torch.float64,
+        phase_error=0.1,
+    )
+
+    expected_phase_shifter_count = (
+        2 * (mode_count * (mode_count - 1) // 2) + mode_count
+    )
+    noisy_phase_shifters = [
+        component for _, component in converter.list_rct if isinstance(component, PS)
+    ]
+
+    assert len(noisy_phase_shifters) == expected_phase_shifter_count
+
+
 def test_phase_error_sampling_varies_and_is_reproducible():
     np.random.seed(4)
     circuit = _single_unitary_circuit(4)
