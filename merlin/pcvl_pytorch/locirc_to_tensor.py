@@ -44,6 +44,15 @@ from perceval.utils.algorithms.circuit_optimizer import CircuitOptimizer
 from ..utils.dtypes import resolve_float_complex
 
 SUPPORTED_COMPONENTS = (PS, BS, PERM, Unitary, Barrier)
+"""Tuple of quantum components supported by CircuitConverter.
+
+Components:
+    PS: Phase shifter with single phi parameter
+    BS: Beam splitter with theta and four phi parameters
+    PERM: Mode permutation (no parameters)
+    Unitary: Generic unitary matrix (no parameters)
+    Barrier: Synchronization barrier (removed during compilation)
+"""
 
 _DECOMPOSITION_CACHE: dict[bytes, Circuit] = {}
 """Cache mapping target-matrix bytes to its alpha-corrected Clements mesh.
@@ -72,15 +81,6 @@ not incorrect output.
 
 _DEFAULT_OPTIMIZE_RECTANGLE = CircuitOptimizer.optimize_rectangle
 """Optimizer implementation used to create entries in the decomposition cache."""
-"""Tuple of quantum components supported by CircuitConverter.
-
-Components:
-    PS: Phase shifter with single phi parameter
-    BS: Beam splitter with theta and four phi parameters
-    PERM: Mode permutation (no parameters)
-    Unitary: Generic unitary matrix (no parameters)
-    Barrier: Synchronization barrier (removed during compilation)
-"""
 
 _FIT_TOLERANCE = 1e-3
 """Tolerance for unitary decomposition fit quality.
@@ -364,7 +364,8 @@ def _decompose_unitaries(
         # Store the completed mesh in the cache before adding to the circuit,
         # so that future builds for the same matrix skip the optimizer entirely.
         new_circuit.add(r[0], mesh, merge=True)
-        _DECOMPOSITION_CACHE[cache_key] = copy.deepcopy(mesh)
+        if optimizer_is_default:
+            _DECOMPOSITION_CACHE[cache_key] = copy.deepcopy(mesh)
     return new_circuit
 
 

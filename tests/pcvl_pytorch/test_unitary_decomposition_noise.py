@@ -48,6 +48,14 @@ _ELEMENTWISE_ATOL = 1e-2
 _FIDELITY_ATOL = 1e-5
 
 
+@pytest.fixture(autouse=True)
+def clear_decomposition_cache():
+    """Keep process-global decomposition state isolated between tests."""
+    locirc_to_tensor._DECOMPOSITION_CACHE.clear()
+    yield
+    locirc_to_tensor._DECOMPOSITION_CACHE.clear()
+
+
 def _circuit_unitary(circuit: pcvl.Circuit) -> np.ndarray:
     return np.asarray(circuit.compute_unitary(), dtype=complex)
 
