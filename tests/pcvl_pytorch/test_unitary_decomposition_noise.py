@@ -40,6 +40,7 @@ from perceval.components import PS, Unitary
 import merlin.pcvl_pytorch.locirc_to_tensor as locirc_to_tensor
 from merlin.pcvl_pytorch.locirc_to_tensor import (
     CircuitConverter,
+    _DECOMPOSITION_CACHE,
     _decompose_unitaries,
 )
 
@@ -111,6 +112,46 @@ def test_decompose_compensates_global_phase_of_sub_mode_blocks():
     assert np.allclose(
         _circuit_unitary(decomposed), _circuit_unitary(circuit), atol=_ELEMENTWISE_ATOL
     )
+
+
+def test_decomposition_cache_reuses_fixed_mesh(monkeypatch):
+    """Reuse a cached mesh after all of its parameters are fixed."""
+    np.random.seed(101)
+    circuit = _single_unitary_circuit(4)
+    _DECOMPOSITION_CACHE.clear()
+
+    first = _decompose_unitaries(circuit)
+    first_mesh = next(component for _, component in first)
+    first_parameters = [
+        float(parameter)
+        for parameter in first_mesh.get_parameters(all_params=True)
+        if parameter.name.startswith("phL")
+    ]
+
+    optimizer_call_count = 0
+    original_optimizer = locirc_to_tensor.CircuitOptimizer.optimize_rectangle
+
+    def count_optimizer_calls(self, target):
+        nonlocal optimizer_call_count
+        optimizer_call_count += 1
+        return original_optimizer(self, target)
+
+    monkeypatch.setattr(
+        locirc_to_tensor.CircuitOptimizer,
+        "optimize_rectangle",
+        count_optimizer_calls,
+    )
+    monkeypatch.setattr(locirc_to_tensor, "_DEFAULT_OPTIMIZE_RECTANGLE", count_optimizer_calls)
+    second = _decompose_unitaries(circuit)
+    second_mesh = next(component for _, component in second)
+    second_parameters = [
+        float(parameter)
+        for parameter in second_mesh.get_parameters(all_params=True)
+        if parameter.name.startswith("phL")
+    ]
+
+    assert optimizer_call_count == 0
+    assert second_parameters == first_parameters
 
 
 def test_no_noise_converter_keeps_unitary_fast_path():

@@ -269,7 +269,7 @@ def _decompose_unitaries(
                     f"for unitary '{component.name}' on modes {tuple(r)}: "
                     f"overlap magnitude = {abs(cached_overlap):.6e}."
                 )
-            cached_parameters = cached_mesh.get_parameters(all_params=False)
+            cached_parameters = cached_mesh.get_parameters(all_params=True)
             cached_output_phases = [
                 parameter
                 for parameter in cached_parameters
