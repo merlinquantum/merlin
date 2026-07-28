@@ -219,6 +219,139 @@ def test_non_convergence_error_names_component(monkeypatch):
         _decompose_unitaries(circuit)
 
 
+def test_one_mode_unitary_creates_single_ps():
+    """Test that a 1-mode unitary is replaced by a single PS without optimizer."""
+    np.random.seed(2)
+    # Create a 1-mode circuit with a bare global phase
+    circuit = pcvl.Circuit(1)
+    phase_value = np.pi / 4
+    u = pcvl.Matrix.random_unitary(1)
+    circuit.add(0, pcvl.Unitary(u))
+
+    # Decompose with phase noise enabled
+    decomposed = _decompose_unitaries(circuit, phase_imprecision=0.1, phase_error=0.05)
+
+    # Should replace Unitary with PS, not an MZI mesh
+    assert decomposed is not circuit
+    components = [c for _, c in decomposed]
+    assert len(components) == 1
+    assert isinstance(components[0], PS)
+
+
+def test_slow_decomposition_warning_for_large_unitary():
+    """Test that a warning is emitted for m >= 16 mode unitaries."""
+    np.random.seed(3)
+    circuit = pcvl.Circuit(16)
+    circuit.add((0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15),
+                pcvl.Unitary(pcvl.Matrix.random_unitary(16)))
+
+    # Should emit warning about slow decomposition
+    with pytest.warns(UserWarning, match=r"16-mode.*Clements mesh.*O\(m\^3\)"):
+        _decompose_unitaries(circuit, phase_imprecision=0.1)
+
+
+def test_fit_error_vs_noise_scale_warning(monkeypatch):
+    """Test that a warning is emitted when fit error exceeds 0.1 * noise_scale."""
+    np.random.seed(4)
+    circuit = _single_unitary_circuit(4)
+
+    # Mock CircuitOptimizer.optimize_rectangle to return a mesh with controlled fit error
+    class MockMesh:
+        def __init__(self, target):
+            self.target = target
+
+        def get_parameters(self):
+            # Return a mock parameter list with phL* entries
+            param_list = [
+                type('param', (), {'name': f'phL{i}', '__float__': lambda self: 0.1})()
+                for i in range(4)
+            ]
+            # Add some non-phL parameters to simulate full mesh structure
+            for i in range(10):
+                param_list.append(
+                    type('param', (), {'name': f'other{i}', '__float__': lambda self: 0.1})()
+                )
+            return param_list
+
+        def compute_unitary(self):
+            # Return target with small perturbation to create fit_error just above threshold
+            # fit_error = 1 - |overlap|, and overlap = trace(target.H @ fitted) / m
+            # For a 4x4 matrix: if fitted = target * (1 + 0.0005j), then 
+            # overlap ≈ trace(target.H @ target) / 4 * (1 - small_error) ≈ 0.999
+            # This gives fit_error ≈ 0.001, which with noise_scale = 0.005 triggers the warning
+            return self.target + 0.001j * np.ones((4, 4), dtype=complex)
+
+    def mock_optimize(self, target):
+        return MockMesh(target)
+
+    monkeypatch.setattr(locirc_to_tensor.CircuitOptimizer, "optimize_rectangle", mock_optimize)
+
+    # Use phase_error small enough that 0.1 * noise_scale < fit_error (≈0.001)
+    # With phase_error = 0.005, noise_scale = 0.005, threshold = 0.0005 < 0.001 ✓
+    with pytest.warns(UserWarning, match=r"fit error.*comparable.*phase noise scale"):
+        _decompose_unitaries(circuit, phase_error=0.005)
+
+
+def test_fit_quality_error_if_overlap_too_small(monkeypatch):
+    """Test that RuntimeError is raised if fit overlap magnitude is too small."""
+    np.random.seed(5)
+    circuit = _single_unitary_circuit(4)
+
+    # Mock CircuitOptimizer.optimize_rectangle to return a mesh with terrible fit
+    class BadMesh:
+        def __init__(self, target):
+            self.target = target
+
+        def get_parameters(self):
+            return []
+
+        def compute_unitary(self):
+            # Return an orthogonal matrix unrelated to target
+            # This gives overlap ≈ 0, triggering the fit quality error
+            return np.array([[0, 1, 0, 0],
+                            [-1, 0, 0, 0],
+                            [0, 0, 0, 1],
+                            [0, 0, -1, 0]], dtype=complex)
+
+    def mock_optimize(self, target):
+        return BadMesh(target)
+
+    monkeypatch.setattr(locirc_to_tensor.CircuitOptimizer, "optimize_rectangle", mock_optimize)
+
+    with pytest.raises(RuntimeError, match=r"fit quality check failed.*overlap magnitude"):
+        _decompose_unitaries(circuit)
+
+
+def test_phL_count_mismatch_error(monkeypatch):
+    """Test that RuntimeError is raised if mesh has wrong number of output phases."""
+    np.random.seed(6)
+    circuit = _single_unitary_circuit(4)
+
+    # Mock CircuitOptimizer.optimize_rectangle to return a mesh with wrong structure
+    class BadStructureMesh:
+        def __init__(self, target):
+            self.target = target
+
+        def get_parameters(self):
+            # Return parameters with no phL entries (missing output layer)
+            # This simulates a malformed mesh structure
+            return [type('param', (), {'name': f'other{i}', '__float__': lambda self: 0.1})()
+                    for i in range(5)]
+
+        def compute_unitary(self):
+            # Return the target itself so overlap check passes (overlap = 1)
+            # Then the phL count check fails
+            return self.target
+
+    def mock_optimize(self, target):
+        return BadStructureMesh(target)
+
+    monkeypatch.setattr(locirc_to_tensor.CircuitOptimizer, "optimize_rectangle", mock_optimize)
+
+    with pytest.raises(RuntimeError, match=r"Unexpected mesh structure.*expected 4 output phases.*found 0"):
+        _decompose_unitaries(circuit)
+
+
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
 def test_circuit_converter_with_phase_noise_on_gpu():
     """Test CircuitConverter unitary decomposition and phase noise on GPU.
@@ -253,10 +386,9 @@ def test_circuit_converter_with_phase_noise_on_gpu():
     assert converter_gpu.circuit is not circuit
     assert any(isinstance(c, PS) for _, c in converter_gpu.list_rct)
 
-    # phase_imprecision=0.1 quantizes every BS and PS phase in the mesh, so the
-    # effective unitary intentionally deviates from the target (that is the
-    # modelled hardware behaviour). Verify the output is still a valid unitary
-    # (U†U ≈ I) rather than comparing against the unquantized original.
+    # Decomposed mesh parameters are fixed constants and receive no phase noise.
+    # The converter's output should still be a valid unitary (U†U ≈ I).
+    # Verify this rather than comparing against the unquantized original.
     unitary_gpu_numpy = unitary_gpu.cpu().numpy()
     identity = np.eye(unitary_gpu_numpy.shape[0], dtype=complex)
     assert np.allclose(
