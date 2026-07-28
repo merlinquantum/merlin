@@ -278,30 +278,32 @@ def test_fit_error_vs_noise_scale_warning(monkeypatch):
     circuit = _single_unitary_circuit(4)
 
     # Mock CircuitOptimizer.optimize_rectangle to return a mesh with controlled fit error
-    class MockMesh:
+    class MockMesh(pcvl.Circuit):
         def __init__(self, target):
+            super().__init__(4)
             self.target = target
+            for index in range(4):
+                self.add(index, PS(pcvl.P(f"phL{index}")))
 
-        def get_parameters(self):
-            # Return a mock parameter list with phL* entries
-            param_list = [
-                type('param', (), {'name': f'phL{i}', '__float__': lambda self: 0.1})()
-                for i in range(4)
+        def get_parameters(self, all_params=False):
+            return [
+                type(
+                    "MockParameter",
+                    (),
+                    {
+                        "name": f"phL{index}",
+                        "__float__": lambda self: 0.1,
+                        "fix_value": lambda self, value: None,
+                    },
+                )()
+                for index in range(4)
             ]
-            # Add some non-phL parameters to simulate full mesh structure
-            for i in range(10):
-                param_list.append(
-                    type('param', (), {'name': f'other{i}', '__float__': lambda self: 0.1})()
-                )
-            return param_list
 
         def compute_unitary(self):
-            # Return target with small perturbation to create fit_error just above threshold
-            # fit_error = 1 - |overlap|, and overlap = trace(target.H @ fitted) / m
-            # For a 4x4 matrix: if fitted = target * (1 + 0.0005j), then 
-            # overlap ≈ trace(target.H @ target) / 4 * (1 - small_error) ≈ 0.999
-            # This gives fit_error ≈ 0.001, which with noise_scale = 0.005 triggers the warning
-            return self.target + 0.001j * np.ones((4, 4), dtype=complex)
+            # Apply a small unitary perturbation that is larger than the
+            # configured noise threshold after global-phase alignment.
+            phase_rotation = np.diag(np.exp(1j * np.array([0.002, 0, 0, 0])))
+            return self.target @ phase_rotation
 
     def mock_optimize(self, target):
         return MockMesh(target)
@@ -310,7 +312,7 @@ def test_fit_error_vs_noise_scale_warning(monkeypatch):
 
     # Use phase_error small enough that 0.1 * noise_scale < fit_error (≈0.001)
     # With phase_error = 0.005, noise_scale = 0.005, threshold = 0.0005 < 0.001 ✓
-    with pytest.warns(UserWarning, match=r"fit error.*comparable.*phase noise scale"):
+    with pytest.warns(UserWarning, match=r"fit residual.*comparable.*phase noise scale"):
         _decompose_unitaries(circuit, phase_error=0.005)
 
 
@@ -354,7 +356,7 @@ def test_phL_count_mismatch_error(monkeypatch):
         def __init__(self, target):
             self.target = target
 
-        def get_parameters(self):
+        def get_parameters(self, all_params=False):
             # Return parameters with no phL entries (missing output layer)
             # This simulates a malformed mesh structure
             return [type('param', (), {'name': f'other{i}', '__float__': lambda self: 0.1})()

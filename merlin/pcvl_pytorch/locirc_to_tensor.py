@@ -269,20 +269,19 @@ def _decompose_unitaries(
                     f"for unitary '{component.name}' on modes {tuple(r)}: "
                     f"overlap magnitude = {abs(cached_overlap):.6e}."
                 )
-            cached_parameters = cached_mesh.get_parameters()
+            cached_parameters = cached_mesh.get_parameters(all_params=False)
             cached_output_phases = [
                 parameter
                 for parameter in cached_parameters
                 if parameter.name.startswith("phL")
             ]
-            if len(cached_output_phases) != component.m:
-                raise RuntimeError(
-                    f"Unexpected cached mesh structure for unitary "
-                    f"'{component.name}': expected {component.m} output phases "
-                    f"('phL*'), found {len(cached_output_phases)}."
-                )
-            new_circuit.add(r[0], cached_mesh, merge=True)
-            continue
+            if len(cached_output_phases) == component.m:
+                new_circuit.add(r[0], cached_mesh, merge=True)
+                continue
+
+            # Entries created by an older optimizer/template are not valid
+            # for the current output-phase contract. Treat them as misses.
+            del _DECOMPOSITION_CACHE[cache_key]
 
         try:
             mesh = CircuitOptimizer().optimize_rectangle(Matrix(target))
@@ -347,7 +346,7 @@ def _decompose_unitaries(
                     stacklevel=3,
                 )
 
-        mesh_parameters = mesh.get_parameters()
+        mesh_parameters = mesh.get_parameters(all_params=False)
         output_phases = [p for p in mesh_parameters if p.name.startswith("phL")]
         if len(output_phases) != component.m:
             raise RuntimeError(
