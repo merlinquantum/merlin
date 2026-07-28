@@ -451,7 +451,7 @@ def test_circuit_converter_with_phase_noise_on_gpu():
     assert converter_gpu.circuit is not circuit
     assert any(isinstance(c, PS) for _, c in converter_gpu.list_rct)
 
-    # Decomposed mesh parameters are fixed constants and receive no phase noise.
+    # Decomposed mesh PS phases receive noise; BS parameters do not.
     # The converter's output should still be a valid unitary (U†U ≈ I).
     # Verify this rather than comparing against the unquantized original.
     unitary_gpu_numpy = unitary_gpu.cpu().numpy()

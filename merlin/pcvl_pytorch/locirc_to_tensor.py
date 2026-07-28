@@ -139,8 +139,9 @@ def _decompose_unitaries(
     Called when circuit phase noise is configured (``phase_imprecision > 0``
     or ``phase_error > 0``). Each non-``PERM`` ``Unitary`` component is fitted
     to a rectangular (Clements) mesh of MZIs with all parameters fixed as
-    constants. This makes the unitary's structure explicit, though the fixed
-    mesh parameters themselves are not tunable and receive no phase noise.
+    constants. This makes the unitary's structure explicit. The mesh phases
+    are represented by ``PS`` components and receive phase noise; the fixed
+    ``BS`` parameters do not.
     ``PERM`` components (waveguide crossings with no programmable phases) are
     left untouched.
     A 1-mode ``Unitary`` (a bare global phase) is replaced by a single ``PS``
