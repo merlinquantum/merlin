@@ -53,6 +53,17 @@ Components:
     Barrier: Synchronization barrier (removed during compilation)
 """
 
+_FIT_TOLERANCE = 1e-3
+"""Tolerance for unitary decomposition fit quality.
+
+After fitting a unitary to an MZI mesh, the overlap magnitude
+    abs(trace(target^H @ fitted) / dimension)
+should be close to 1.0. If the overlap falls below (1 - tolerance),
+the fit is considered to have failed and a RuntimeError is raised.
+With default CircuitOptimizer settings (fidelity error ~1e-6),
+the overlap should be > 0.999 in all normal cases.
+"""
+
 
 def _phase_shifter_max_error(component: AComponent) -> float:
     """Return the local Perceval phase-error half-width for a phase shifter.
@@ -89,7 +100,11 @@ def _circuit_has_local_phase_error(circuit: Circuit) -> bool:
     return any(_phase_shifter_max_error(component) > 0.0 for _, component in circuit)
 
 
-def _decompose_unitaries(circuit: Circuit) -> Circuit:
+def _decompose_unitaries(
+    circuit: Circuit,
+    phase_imprecision: float = 0.0,
+    phase_error: float = 0.0,
+) -> Circuit:
     """Replace black-box ``Unitary`` blocks with Clements MZI meshes.
 
     Called when circuit phase noise is configured (``phase_imprecision > 0``
@@ -108,10 +123,21 @@ def _decompose_unitaries(circuit: Circuit) -> Circuit:
     because the optimizer uses random starting points, but the reproduced
     unitary does not.
 
+    When phase noise is configured, a warning is emitted if the decomposition
+    fit error is comparable to or exceeds the configured noise scale. In this
+    case, the fit error becomes an uncontrolled artifact that can dominate
+    over the modeled physical noise.
+
     Parameters
     ----------
     circuit : Circuit
         Perceval circuit to transform.
+    phase_imprecision : float
+        Deterministic phase quantization step in radians. Used to estimate
+        the physical noise scale for warning purposes.
+    phase_error : float
+        Stochastic phase perturbation half-width in radians. Used to estimate
+        the physical noise scale for warning purposes.
 
     Returns
     -------
@@ -158,7 +184,48 @@ def _decompose_unitaries(circuit: Circuit) -> Circuit:
         # relative to the untouched modes), so fold -alpha into the mesh's
         # output phase layer, which has exactly one PS per mode.
         fitted = np.asarray(mesh.compute_unitary(), dtype=complex)
-        alpha = float(np.angle(np.trace(target.conj().T @ fitted)))
+        overlap = np.trace(target.conj().T @ fitted) / component.m
+
+        # Verify fit quality: if overlap magnitude is too small, the fit failed
+        # and alpha becomes meaningless (trace near zero makes phase arbitrary).
+        # So failures are raised explicitly and not hidden.
+        if abs(overlap) < 1.0 - _FIT_TOLERANCE:
+            raise RuntimeError(
+                f"Clements decomposition fit quality check failed for unitary "
+                f"'{component.name}' on modes {tuple(r)}: overlap magnitude "
+                f"|trace(target^H @ fitted) / m| = {abs(overlap):.6e} < "
+                f"{1.0 - _FIT_TOLERANCE:.6e}. The fitted mesh does not adequately "
+                f"reproduce the target unitary. This may indicate a bug in "
+                f"CircuitOptimizer or insufficient optimization iterations."
+            )
+
+        alpha = float(np.angle(overlap))
+
+        # Warn if decomposition fit error is comparable to configured phase noise.
+        # For unitary matrices, the fit quality is measured by the overlap magnitude:
+        # overlap = trace(target^H @ fitted) / m, which is bounded in [0, 1].
+        # The fit error is 1 - |overlap|. With default CircuitOptimizer settings
+        # (fidelity error ~1e-6), we expect |overlap| > 0.999, i.e., fit_error < 0.001.
+        #
+        # For comparison, a phase error of delta_phi rad induces a unitary entry
+        # change ~delta_phi, so the noise scale is approximately
+        # max(phase_imprecision, phase_error). If fit_error > 0.1 * noise_scale,
+        # the fit error likely dominates the physical noise being modeled.
+        if phase_imprecision > 0.0 or phase_error > 0.0:
+            noise_scale = max(phase_imprecision, phase_error)
+            fit_error = 1.0 - abs(overlap)
+            if fit_error > 0.1 * noise_scale:
+                warnings.warn(
+                    f"Unitary decomposition fit error (1 - |overlap| = {fit_error:.3e}) is "
+                    f"comparable to or exceeds the configured phase noise scale "
+                    f"(max(phase_imprecision, phase_error)={noise_scale:.3e}). "
+                    f"For component '{component.name}' on modes {tuple(r)}, the "
+                    f"decomposition artifact may dominate over the modeled physical noise. "
+                    f"Consider using smaller phase noise values or an exact decomposition method.",
+                    UserWarning,
+                    stacklevel=3,
+                )
+
         mesh_parameters = mesh.get_parameters()
         output_phases = [p for p in mesh_parameters if p.name.startswith("phL")]
         if len(output_phases) != component.m:
@@ -416,7 +483,11 @@ class CircuitConverter:
         # parameter mapping. Without noise the fast path (precomputed constant
         # tensor per Unitary) is kept.
         if self._phase_imprecision > 0.0 or self._phase_error > 0.0:
-            circuit = _decompose_unitaries(circuit)
+            circuit = _decompose_unitaries(
+                circuit,
+                phase_imprecision=self._phase_imprecision,
+                phase_error=self._phase_error,
+            )
         self.circuit = circuit
         if self._phase_error > 0.0 and _circuit_has_local_phase_error(self.circuit):
             warnings.warn(

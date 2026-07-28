@@ -912,6 +912,7 @@ def test_reservoir_classifier_with_phase_imprecision_and_phase_error():
     - NoiseModel with phase_imprecision and phase_error can be set
     - Model fits and predicts successfully with phase noise
     - Phase noise invalidates the fitted state (triggering refitting)
+    - Multiple predictions differ due to phase_error stochastic sampling (cache disabled)
     """
     X, y = _toy_data()
     model = ReservoirClassifier(
@@ -919,6 +920,7 @@ def test_reservoir_classifier_with_phase_imprecision_and_phase_error():
         out_features=2,
         n_photons=1,
         reduction=PCA(n_components=2),
+        cache=False,  # Disable cache to test noise variability
     )
     
     # Fit without noise
@@ -952,6 +954,13 @@ def test_reservoir_classifier_with_phase_imprecision_and_phase_error():
     # Verify predictions work with noise
     logits = model.predict(X)
     assert logits.shape == (len(X), 2)
+    
+    # With cache=False, phase_error causes stochastic sampling, so predictions differ
+    logits1 = model.predict(X)
+    logits2 = model.predict(X)
+    assert not torch.allclose(logits1, logits2, rtol=0.1), (
+        "With cache=False and phase_error, predictions should differ due to stochastic sampling"
+    )
     
     # Note: Features will differ due to phase noise, but shouldn't be drastically different
     # (they should remain within reasonable bounds for classification to still work)
@@ -998,13 +1007,14 @@ def test_reservoir_classifier_with_phase_error_only():
     
     Verifies that:
     - Phase error (without quantization) can be configured
-    - WITHOUT apply_phase_error flag: phase_error is NOT sampled (deterministic results)
-    - WITH both phase_imprecision AND phase_error: produces different results
+    - With cache=False, phase_error triggers stochastic sampling on every forward pass
+    - Each prediction produces different results due to stochastic sampling
     - Model fits and predicts successfully
     
-    Note: phase_error only produces different results per call when apply_phase_error=True
-    is passed to the quantum layer's forward method. For typical use (fit/predict without
-    explicit stochastic sampling), only phase_imprecision (if configured) affects outputs.
+    Note: phase_error automatically triggers stochastic sampling via
+    ComputationProcess._compute_phase_error_probabilities() on every forward pass.
+    With caching enabled (default), identical input X returns the cached result.
+    With cache=False, each call re-runs the quantum circuit with new noise samples.
     """
     X, y = _toy_data()
     model = ReservoirClassifier(
@@ -1012,27 +1022,30 @@ def test_reservoir_classifier_with_phase_error_only():
         out_features=2,
         n_photons=1,
         reduction=PCA(n_components=2),
+        cache=False,  # Disable cache to observe stochastic phase_error sampling
     )
     model.fit_reservoir(X)
     
     # Set phase_error only (no deterministic quantization)
-    # Without apply_phase_error=True, stochastic sampling is NOT triggered
     noise_model = pcvl.NoiseModel(phase_error=0.1)
     model.layer.noise = noise_model
     model.fit_reservoir(X)
     
-    # Multiple calls WITHOUT explicit stochastic sampling should produce IDENTICAL results
-    # (because phase_error requires apply_phase_error=True to sample)
+    # With cache=False, multiple calls trigger stochastic sampling and produce DIFFERENT results
     features1 = model.transform_reservoir(X)
     features2 = model.transform_reservoir(X)
     
-    # Should be identical (phase_error not triggered without apply_phase_error=True)
-    assert torch.allclose(features1, features2, rtol=1e-5)
+    # Should differ due to stochastic phase_error sampling
+    assert not torch.allclose(features1, features2, rtol=0.1), (
+        "With cache=False and phase_error, features should differ due to stochastic sampling"
+    )
     
-    # Predictions should also be identical
+    # Predictions should also differ
     logits1 = model.predict(X)
     logits2 = model.predict(X)
-    assert torch.allclose(logits1, logits2, rtol=1e-5)
+    assert not torch.allclose(logits1, logits2, rtol=0.1), (
+        "With cache=False and phase_error, predictions should differ due to stochastic sampling"
+    )
     
     # Verify model can be moved and still works
     assert model.layer.noise is noise_model
@@ -1044,8 +1057,8 @@ def test_reservoir_classifier_with_phase_imprecision_and_error_combined():
     
     Verifies that:
     - Combined noise (quantization + stochastic error) works correctly
-    - phase_imprecision always produces deterministic quantization
-    - Results vary when accessing the quantum layer with different seeds (due to imprecision)
+    - With cache=True (default), identical input returns cached result (deterministic)
+    - With cache=False, phase_error causes stochastic variation on each forward pass
     - Model fits and predicts successfully
     """
     X, y = _toy_data()
@@ -1054,29 +1067,33 @@ def test_reservoir_classifier_with_phase_imprecision_and_error_combined():
         out_features=2,
         n_photons=1,
         reduction=PCA(n_components=2),
+        cache=False,  # Disable cache to observe combined noise effects
     )
     model.fit_reservoir(X)
     
     # Set both phase_imprecision AND phase_error
     noise_model = pcvl.NoiseModel(
-        phase_imprecision=0.05,  # Coarse quantization step
-        phase_error=0.02,        # Additional stochastic noise (not sampled without explicit flag)
+        phase_imprecision=0.05,  # Deterministic quantization step
+        phase_error=0.02,        # Stochastic noise sampled on every forward pass
     )
     model.layer.noise = noise_model
     model.fit_reservoir(X)
     
-    # Multiple calls should produce IDENTICAL results without explicit apply_phase_error
+    # With cache=False, phase_error causes stochastic sampling, so multiple calls differ
     features1 = model.transform_reservoir(X)
     features2 = model.transform_reservoir(X)
     
-    # These should be the same because phase_imprecision is deterministic
-    # and phase_error is not sampled without apply_phase_error=True
-    assert torch.allclose(features1, features2, rtol=1e-5)
+    # Should differ due to phase_error stochastic sampling
+    assert not torch.allclose(features1, features2, rtol=0.1), (
+        "With cache=False and phase_error, features should differ due to stochastic sampling"
+    )
     
-    # Predictions should be consistent
+    # Predictions should also differ
     logits1 = model.predict(X)
     logits2 = model.predict(X)
-    assert torch.allclose(logits1, logits2, rtol=1e-5)
+    assert not torch.allclose(logits1, logits2, rtol=0.1), (
+        "With cache=False and phase_error, predictions should differ due to stochastic sampling"
+    )
     
     # Verify the noise affected output compared to no-noise case
     model_clean = ReservoirClassifier(
@@ -1102,6 +1119,7 @@ def test_reservoir_classifier_with_phase_noise_on_gpu():
     - Phase noise configuration works on GPU device
     - Model can be moved to CUDA and still apply noise correctly
     - Forward pass (fit + predict) works end-to-end on GPU
+    - Multiple forward passes with noise produce different results (cache disabled)
     - Tensor outputs remain on GPU
     """
     X, y = _toy_data()
@@ -1110,6 +1128,7 @@ def test_reservoir_classifier_with_phase_noise_on_gpu():
         out_features=2,
         n_photons=1,
         reduction=PCA(n_components=2),
+        cache=False,  # Disable cache to allow re-running quantum layer with noise
     )
     
     # Move model to GPU
