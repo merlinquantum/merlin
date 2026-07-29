@@ -25,6 +25,40 @@ below were generated from
 ``benchmarks/gpu_benchmark/plot_gpu_memory_results.py``. Photon-count plots
 use batch size 8. Memory is the larger forward/backward peak allocated delta.
 
+How to read these results
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The computation space determines how many quantum amplitudes the layer must
+store and update. ``FOCK`` uses photon-number occupation states, whose count
+for ``n_modes`` modes and ``n_photons`` photons is
+``comb(n_modes + n_photons - 1, n_photons)``. ``UNBUNCHED`` uses states with at
+most one photon per mode, whose count is ``comb(n_modes, n_photons)``.
+Consequently, basis-state
+counts—not mode count alone—are the most useful first indicator of memory and
+execution cost. The count is the size of one quantum state; a batch requires
+the corresponding work and storage for every item in the batch.
+
+The timings describe different phases of using a layer:
+
+* *Graph-building time* is the one-time cost of constructing the computational
+  graph. It is not included in the forward or backward timings.
+* *Forward time* is one evaluation of the layer for a batch.
+* *Backward time* is the gradient evaluation for that same batch.
+
+The reported memory value is the largest increase in memory allocated by the
+PyTorch CUDA allocator during either measured pass. It is an incremental
+pressure estimate, not the total GPU memory used by the process, and it does
+not include memory held by other processes or necessarily all allocator
+reservations. The measurements use the configured batch size and are therefore
+not directly comparable across rows with different batches.
+
+These are single-GPU reference measurements, not hardware-independent limits.
+They include framework, driver, circuit-construction, and measurement
+overheads, and should be used to compare scaling trends or reproduce the
+benchmark rather than to predict an exact runtime on another system. The
+representative rows below intentionally cover different spaces and system
+sizes; they are examples, not a ranking of the two computation spaces.
+
 At batch size 8, representative results are:
 
 .. list-table::
