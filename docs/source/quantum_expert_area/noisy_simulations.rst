@@ -108,12 +108,12 @@ Black-box unitaries under circuit phase noise
 
 ``pcvl.Unitary`` components contain no explicit phase shifters, but on hardware
 they are implemented by a programmable interferometer. When ``phase_imprecision``
-    or ``phase_error`` is active, Merlin decomposes every ``pcvl.Unitary`` component
-    into a rectangular (Clements) mesh of Mach-Zehnder interferometers. The mesh
-    phases are represented by ``pcvl.PS`` components and receive phase noise. The
-    fixed 50:50 ``pcvl.BS`` (beam splitter) parameters carry no phase noise.
-    ``pcvl.PERM`` components are waveguide crossings without programmable phases
-    and are never decomposed.
+or ``phase_error`` is active, Merlin decomposes every ``pcvl.Unitary`` component
+into a rectangular (Clements) mesh of Mach-Zehnder interferometers. The mesh
+phases are represented by ``pcvl.PS`` components and receive phase noise. The
+fixed 50:50 ``pcvl.BS`` (beam splitter) parameters carry no phase noise.
+``pcvl.PERM`` components are waveguide crossings without programmable phases
+and are never decomposed.
 
 The decomposition runs once, when the layer is built (about 0.2 s for a
 10-mode unitary), and only when circuit phase noise is configured; without
