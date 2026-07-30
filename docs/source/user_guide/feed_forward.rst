@@ -213,7 +213,8 @@ Key implementation details:
        """Feedforward model with branch-local parameters, trainable via gradient descent.
 
        **Note:** This example assumes a single measured mode (e.g., measured_modes=[0]).
-       For arbitrary measured modes, adapt the key reconstruction accordingly.
+       The implementation below reconstructs full-system keys for arbitrary
+       measured modes.
        """
 
        def __init__(self, input_state, prefix_circuit):
@@ -246,13 +247,13 @@ Key implementation details:
 
            c2 = Circuit(2)  # vacuum branch after measuring two photons
 
-           branch_configs = {
+           self.branch_configs = {
                (0,): (c0, ["A"], ["x"]),
                (1,): (c1, ["B"], ["x"]),
                (2,): (c2, [], []),
            }
 
-           for outcome, (circuit, trainable_params, input_params) in branch_configs.items():
+           for outcome, (circuit, trainable_params, input_params) in self.branch_configs.items():
                key = str(outcome)
                if sum(input_state) - sum(outcome) == 0:
                    continue
@@ -273,8 +274,13 @@ Key implementation details:
            probabilities = {}
            for branch in partial_measurement.branches:
                key = str(branch.outcome)
-               if sum(branch.outcome) == sum(input_state):
-                   probabilities[(branch.outcome[0], 0, 0)] = branch.probability
+               if sum(branch.outcome) == sum(self.partial_layer.input_state):
+                   vacuum_key = [0] * len(self.partial_layer.input_state)
+                   for mode, value in zip(partial_measurement.measured_modes, branch.outcome):
+                       vacuum_key[mode] = value
+                   probabilities[tuple(vacuum_key)] = branch.probability.expand(
+                       x.shape[0] if x is not None else 1
+                   )
                    continue
                branch_layer = self.branch_layers[key]
 
@@ -284,11 +290,7 @@ Key implementation details:
                branch_layer.set_input_state(branch.amplitudes)
 
                # Execute the branch layer with its local classical inputs (if any).
-               branch_config = {
-                   (0,): ["x"],
-                   (1,): ["x"],
-               }
-               input_params = branch_config[branch.outcome]
+               _circuit, _trainable_params, input_params = self.branch_configs[branch.outcome]
                if input_params:
                    branch_output = branch_layer(x)  # shape: (batch_size, n_keys)
                else:
@@ -300,9 +302,13 @@ Key implementation details:
                branch_prob_weighted = branch.probability.unsqueeze(-1)  # (batch_size, 1)
 
                for index, remaining_key in enumerate(branch_layer.output_keys):
-                   # Construct full output key: (measured_outcome, *remaining_outcomes)
-                   # For measured_modes=[0], this places the measurement outcome first.
-                   output_key = (branch.outcome[0], *remaining_key)
+                   # Reconstruct the full-system key in the original mode order.
+                   output_key = [0] * len(self.partial_layer.input_state)
+                   for mode, value in zip(partial_measurement.measured_modes, branch.outcome):
+                       output_key[mode] = value
+                   for mode, value in zip(partial_measurement.unmeasured_modes, remaining_key):
+                       output_key[mode] = value
+                   output_key = tuple(output_key)
                    branch_probs_for_key = branch_output[:, index]  # (batch_size,)
                    weighted_probs = branch_prob_weighted.squeeze(-1) * branch_probs_for_key
                    probabilities[output_key] = weighted_probs
@@ -331,9 +337,10 @@ Key implementation details:
    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
    # ... training loop ...
 
-This manual composition reproduces the same probabilities as ``FeedForwardBlock``
-(for single-stage experiments) while allowing branch-local classical inputs and
-preserving trainable parameters that persist across calls.
+This manual composition reproduces the same output structure as ``FeedForwardBlock``
+for single-stage PNR experiments. It uses partial Fock measurement rather than
+``FeedForwardBlock``'s amplitude-based detector transform, so equivalence should
+not be assumed for non-PNR detectors or multi-stage experiments.
 
 .. note::
 

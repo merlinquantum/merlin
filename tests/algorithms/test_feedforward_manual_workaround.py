@@ -91,10 +91,21 @@ class BranchFeedforward(nn.Module):
         partial_measurement = self.partial_layer()
 
         probabilities = {}
+        measured_modes = partial_measurement.measured_modes
+        unmeasured_modes = partial_measurement.unmeasured_modes
+
+        def reconstruct_full_key(remaining_key: tuple[int, ...]) -> tuple[int, ...]:
+            full_key = [0] * len(self.partial_layer.input_state)
+            for mode, value in zip(measured_modes, branch.outcome):
+                full_key[mode] = value
+            for mode, value in zip(unmeasured_modes, remaining_key):
+                full_key[mode] = value
+            return tuple(full_key)
+
         for branch in partial_measurement.branches:
             key = str(branch.outcome)
             if sum(branch.outcome) == sum(self.partial_layer.input_state):
-                probabilities[(branch.outcome[0], 0, 0)] = branch.probability.expand(
+                probabilities[reconstruct_full_key((0,) * len(unmeasured_modes))] = branch.probability.expand(
                     x.shape[0] if x is not None else 1
                 )
                 continue
@@ -118,9 +129,7 @@ class BranchFeedforward(nn.Module):
             branch_prob_weighted = branch.probability.unsqueeze(-1)  # (batch, 1)
 
             for index, remaining_key in enumerate(branch_layer.output_keys):
-                # Construct full output key: (measured_outcomes, *remaining_outcomes)
-                # This works for arbitrary measured_modes because we use the branch outcome directly.
-                output_key = (branch.outcome[0], *remaining_key)
+                output_key = reconstruct_full_key(remaining_key)
                 branch_probs_for_key = branch_output[:, index]  # (batch,)
                 weighted_probs = branch_prob_weighted.squeeze(-1) * branch_probs_for_key
                 probabilities[output_key] = weighted_probs
@@ -287,39 +296,37 @@ def test_feedforwardblock_input_at_branch_fails():
     m = 4
     prefix = Circuit(m) // pcvl.Unitary.random(m)
 
-    # Branch-local parameters are only used inside branch circuits
-    # Note: each branch uses distinct parameters to avoid duplicate names
+    # Branch-local trainable parameters are distinct from the shared input.
     experiment = pcvl.Experiment(m)
     experiment.add(0, prefix)
     experiment.add(0, pcvl.Detector.pnr())  # Measure first mode
 
     # FFCircuitProvider with branch-local parameters
     # Use unique parameter names per branch to avoid circuit conflicts
+    x = pcvl.P("x")
     c0 = Circuit(m - 1)
-    c0.add(0, pcvl.BS(pcvl.P("A_branch")))
+    c0.add(0, pcvl.BS(x) // pcvl.BS(pcvl.P("A")))
     
     c1 = Circuit(m - 1)
-    c1.add(0, pcvl.BS(pcvl.P("B_branch")))
+    c1.add(0, pcvl.BS(x) // pcvl.BS(pcvl.P("B")))
     
     provider = pcvl.FFCircuitProvider(1, 0, Circuit(m - 1))
     provider.add_configuration([0], c0)
     provider.add_configuration([1], c1)
     experiment.add(0, provider)
 
-    # FeedForwardBlock should reject this because branch parameters aren't in the first stage
-    with pytest.raises(ValueError):
+    # FeedForwardBlock should reject this because x is only used in branches.
+    with pytest.raises(ValueError, match="The first stage must use all of the input parameters"):
         FeedForwardBlock(
             experiment,
             input_state=BasicState([1, 1, 0, 0]),
-            trainable_parameters=["A_branch", "B_branch"],
-            input_parameters=["A_branch", "B_branch"],
+            trainable_parameters=["A", "B"],
+            input_parameters=["x"],
         )
 
 
 def test_manual_feedforward_keys_arbitrary_measured_modes():
-    """Verify key reconstruction works for arbitrary measured modes, not just mode 0."""
-    # This test ensures the workaround generalizes beyond the simplistic measured_modes=[0] case.
-    # For demonstration, we use measured_modes=[0] but verify the key structure is correct.
+    """Verify key reconstruction places outcomes in their measured modes."""
     input_state = [1, 1, 0]
     prefix = Circuit(3) // pcvl.Unitary.random(3)
 
@@ -340,14 +347,11 @@ def test_manual_feedforward_keys_arbitrary_measured_modes():
         (2,): (c2, [], []),
     }
 
-    model = BranchFeedforward(input_state, prefix, branch_configs, measured_modes=[0])
+    model = BranchFeedforward(input_state, prefix, branch_configs, measured_modes=[1])
 
     x = torch.tensor([[0.2]])
     probabilities = model(x)
 
-    # All keys should start with one of the measurement outcomes
-    expected_outcomes = (0, 1, 2)
-    for key in probabilities.keys():
-        assert key[0] in expected_outcomes, (
-            f"First element of key {key} should be one of {expected_outcomes}, got {key[0]}"
-        )
+    assert probabilities
+    for key in probabilities:
+        assert key[1] in (0, 1, 2)
