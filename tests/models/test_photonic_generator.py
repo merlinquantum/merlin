@@ -94,6 +94,20 @@ class ConstantLatent(ML.LatentDistribution):
         )
 
 
+class LegacyLatent(ML.LatentDistribution):
+    """Latent sampler written before the generator parameter was introduced."""
+
+    def sample(
+        self,
+        batch_size: int,
+        *,
+        device: torch.device | None = None,
+        dtype: torch.dtype | None = None,
+    ) -> torch.Tensor:
+        resolved_dtype = dtype if dtype is not None else torch.get_default_dtype()
+        return torch.zeros(batch_size, self.dim, device=device, dtype=resolved_dtype)
+
+
 class FirstFeatureAdapter(ML.OutputAdapter):
     """OutputAdapter subclass used to prove the extension contract works."""
 
@@ -456,11 +470,29 @@ def test_generate_accepts_explicit_generator():
         output_adapter=ML.VectorAdapter(size=5),
     )
 
-    output = generator.generate(
+    first = generator.generate(
+        batch_size=3, generator=torch.Generator().manual_seed(1234)
+    )
+    second = generator.generate(
         batch_size=3, generator=torch.Generator().manual_seed(1234)
     )
 
-    assert output.shape == (3, 5)
+    assert first.shape == (3, 5)
+    assert torch.equal(first, second)
+
+
+def test_latent_distribution_without_generator_parameter_is_supported():
+    generator = ML.PhotonicGenerator(
+        layers=[_make_layer(input_size=2)],
+        output_adapter=ML.VectorAdapter(size=4),
+        latent=LegacyLatent(dim=2),
+    )
+
+    z = generator.sample_latent(batch_size=3)
+    output = generator.generate(batch_size=3)
+
+    assert z.shape == (3, 2)
+    assert output.shape == (3, 4)
 
 
 def test_custom_latent_distribution_is_supported():

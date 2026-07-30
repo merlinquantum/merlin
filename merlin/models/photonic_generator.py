@@ -581,6 +581,12 @@ class PhotonicGenerator(nn.Module):
         resolved_device, resolved_dtype = self._resolve_sample_device_dtype(
             device, dtype
         )
+        if generator is None:
+            # Forward the generator argument only when set so latent
+            # distributions implemented before it existed keep working.
+            return self.latent.sample(
+                batch_size, device=resolved_device, dtype=resolved_dtype
+            )
         return self.latent.sample(
             batch_size,
             device=resolved_device,
