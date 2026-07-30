@@ -56,6 +56,11 @@ The adversarial loop in ``lib/qgan.py`` is fully differentiable:
 * BCE-with-logits loss is used for both adversaries,
 * optional label smoothing and configurable ``d_steps`` / ``g_steps`` are supported.
 
+For reproducible generated batches, the MerLin ``PhotonicGenerator`` accepts a
+dedicated ``torch.Generator`` through ``sample_latent`` and ``generate``. This
+controls normal latent sampling without advancing PyTorch's global random
+number generator; use a generator compatible with the latent sampling device.
+
 At this stage:
 
 * ``smoke`` mode is a lightweight wiring check,

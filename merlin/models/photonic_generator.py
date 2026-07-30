@@ -87,6 +87,7 @@ class LatentDistribution(ABC):
         *,
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
+        generator: torch.Generator | None = None,
     ) -> torch.Tensor:
         """Sample a latent batch.
 
@@ -100,6 +101,8 @@ class LatentDistribution(ABC):
         dtype : torch.dtype | None
             Floating dtype of the returned tensor. If omitted, the concrete
             distribution chooses its default.
+        generator : torch.Generator | None
+            Generator used for random sampling. Default is ``None``.
 
         Returns
         -------
@@ -146,6 +149,7 @@ class NormalLatent(LatentDistribution):
         *,
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
+        generator: torch.Generator | None = None,
     ) -> torch.Tensor:
         """Sample normally distributed latent vectors.
 
@@ -158,6 +162,8 @@ class NormalLatent(LatentDistribution):
         dtype : torch.dtype | None
             Floating dtype of the returned tensor. If omitted, the current
             PyTorch default dtype is used.
+        generator : torch.Generator | None
+            Generator used for random sampling. Default is ``None``.
 
         Returns
         -------
@@ -183,6 +189,7 @@ class NormalLatent(LatentDistribution):
                 self.dim,
                 device=device,
                 dtype=resolved_dtype,
+                generator=generator,
             )
             .mul(self.std)
             .add(self.mean)
@@ -547,6 +554,7 @@ class PhotonicGenerator(nn.Module):
         *,
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
+        generator: torch.Generator | None = None,
     ) -> torch.Tensor:
         """Sample latent vectors from the configured latent distribution.
 
@@ -562,6 +570,8 @@ class PhotonicGenerator(nn.Module):
             Floating dtype of the returned tensor. If omitted, the generator
             uses the first floating parameter or buffer dtype, falling back to
             the current PyTorch default dtype. Default is ``None``.
+        generator : torch.Generator | None
+            Generator used for latent sampling. Default is ``None``.
 
         Returns
         -------
@@ -572,7 +582,10 @@ class PhotonicGenerator(nn.Module):
             device, dtype
         )
         return self.latent.sample(
-            batch_size, device=resolved_device, dtype=resolved_dtype
+            batch_size,
+            device=resolved_device,
+            dtype=resolved_dtype,
+            generator=generator,
         )
 
     def generate(
@@ -581,6 +594,7 @@ class PhotonicGenerator(nn.Module):
         *,
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
+        generator: torch.Generator | None = None,
     ) -> torch.Tensor:
         """Sample latent vectors and generate classical samples.
 
@@ -596,13 +610,17 @@ class PhotonicGenerator(nn.Module):
             Floating dtype of sampled latent vectors. If omitted, the generator
             chooses a dtype from its parameters and buffers. Default is
             ``None``.
+        generator : torch.Generator | None
+            Generator used for latent sampling. Default is ``None``.
 
         Returns
         -------
         torch.Tensor
             Generated samples returned by ``output_adapter``.
         """
-        z = self.sample_latent(batch_size, device=device, dtype=dtype)
+        z = self.sample_latent(
+            batch_size, device=device, dtype=dtype, generator=generator
+        )
         return self(z)
 
     def measure(self, z: torch.Tensor) -> GeneratorMeasurements:
