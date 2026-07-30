@@ -124,6 +124,116 @@ without passing a tensor (an empty feature tensor is injected automatically).
    are not accepted as ``input_state``; wrap amplitude tensors with
    :meth:`~merlin.core.state_vector.StateVector.from_tensor` first.
 
+Known Limitation: Input Parameters Used Only Inside a Branch
+--------------------------------------------------------------
+
+.. note::
+
+   This is a known limitation of ``FeedForwardBlock`` in MerLin 0.4, tracked in
+   `issue #274 <https://github.com/merlinquantum/merlin/issues/274>`_. It is
+   expected to be solved in **MerLin 0.5** with a new ``FeedForwardBlock`` backend.
+   Until then, we propose the manual workaround below.
+
+``FeedForwardBlock`` currently requires that every entry of ``input_parameters`` be
+consumed by the **first** pre-measurement stage of the experiment. If a classical
+parameter is only referenced inside one or more ``pcvl.FFCircuitProvider`` branch
+configurations — i.e. it encodes a value *after* the measurement, in a specific
+branch — construction fails immediately with:
+
+.. code-block:: text
+
+   ValueError: The first stage must use all of the input parameters. Create you own
+   stages with variable input parameters with the partial measurement strategy instead
+
+For example, the following experiment is rejected because ``x`` is only used inside the
+branch circuits of the ``FFCircuitProvider``, not in the prefix unitary:
+
+.. code-block:: python
+
+   x = pcvl.P("x")
+   provider = pcvl.FFCircuitProvider(1, 0, pcvl.Circuit(2))
+   provider.add_configuration([0], pcvl.BS(x) // pcvl.BS(pcvl.P("A")))
+   provider.add_configuration([1], pcvl.BS(x) // pcvl.BS(pcvl.P("B")))
+   experiment.add(0, provider)
+
+   FeedForwardBlock(
+       experiment,
+       trainable_parameters=["A", "B"],
+       input_parameters=["x"],   # raises ValueError: "x" is not used in the first stage
+   )
+
+**Workaround: build the stages manually with partial measurement**
+
+Until MerLin 0.5 ships, the same physical workflow can be reproduced by chaining
+:class:`~merlin.algorithms.layer.QuantumLayer` instances yourself with the
+:doc:`partial measurement strategy </quantum_expert_area/partial_measurement>`:
+
+1. Run the prefix circuit with ``measurement_strategy=MeasurementStrategy.partial(...)``.
+2. Inspect the returned :class:`~merlin.core.partial_measurement.PartialMeasurement`;
+   it exposes one branch per possible detector outcome.
+3. For each branch, build a downstream ``QuantumLayer`` using ``branch.amplitudes``
+   (the conditional ``StateVector`` on the unmeasured modes) as ``input_state``, and
+   declare whichever branch-local ``trainable_parameters`` / ``input_parameters`` that
+   branch needs.
+4. Feed the branch-local classical inputs to that downstream layer, and weight its
+   output probabilities by ``branch.probability``.
+
+.. code-block:: python
+
+   import torch
+   import perceval as pcvl
+   from perceval import Circuit
+   from merlin.algorithms.layer import QuantumLayer
+   from merlin.core.computation_space import ComputationSpace
+   from merlin.measurement.strategies import MeasurementStrategy
+
+   input_state = [1, 1, 0]
+   prefix = Circuit(3) // pcvl.Unitary.random(3)
+
+   # Branch-specific circuits, each with its own local parameters.
+   branch_circuits = {
+       (0,): (pcvl.BS(pcvl.P("x")) // pcvl.BS(pcvl.P("A")), ["A"], ["x"]),
+       (1,): (pcvl.BS(pcvl.P("x")) // pcvl.BS(pcvl.P("B")), ["B"], ["x"]),
+       (2,): (Circuit(2), [], []),
+   }
+
+   # 1. Run the prefix stage and measure mode 0 only.
+   partial_layer = QuantumLayer(
+       circuit=prefix,
+       input_state=input_state,
+       measurement_strategy=MeasurementStrategy.partial(
+           modes=[0],
+           computation_space=ComputationSpace.FOCK,
+       ),
+   )
+   partial_measurement = partial_layer()
+
+   x = torch.tensor([[0.2]])  # branch-local classical input
+
+   probabilities = {}
+   for branch in partial_measurement.branches:
+       circuit, trainable_parameters, input_parameters = branch_circuits[branch.outcome]
+
+       # 2-3. Route the conditional state into the branch-specific layer.
+       branch_layer = QuantumLayer(
+           circuit=circuit,
+           input_state=branch.amplitudes,          # conditional StateVector
+           trainable_parameters=trainable_parameters,
+           input_parameters=input_parameters,
+           measurement_strategy=MeasurementStrategy.probs(ComputationSpace.FOCK),
+       )
+
+       # 4. Feed x only to branches that actually use it, then weight by branch.probability.
+       branch_output = (
+           branch_layer(x).squeeze(0) if input_parameters else branch_layer().squeeze(0)
+       )
+       for index, remaining_key in enumerate(branch_layer.output_keys):
+           output_key = (branch.outcome[0], *remaining_key)
+           probabilities[output_key] = branch.probability.squeeze(0) * branch_output[index]
+
+This manual composition is exactly what ``FeedForwardBlock`` does internally for the
+supported case (branch-local inputs aside), so it reproduces the same probabilities
+while additionally allowing branch-local classical inputs.
 
 Further Reading
 ---------------
