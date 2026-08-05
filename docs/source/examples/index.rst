@@ -174,9 +174,15 @@ Browse through our notebooks
    ../notebooks/reproduced_papers/GanEtAl_VQC_fourier_series
    ../notebooks/reproduced_papers/GanEtAl_q_gaussian_kernel
    ../notebooks/reproduced_papers/GanEtAl_q_random_kitchen_sinks
+   ../notebooks/MNIST_classifier_example
 
 .. merlin-gallery::
    :data: _data/galleries/examples/other_notebooks_1.json
+   :columns: 3
+   :contour-color: #5648ED
+
+.. merlin-gallery::
+   :data: _data/galleries/examples/MNIST_Image_classification.json
    :columns: 3
    :contour-color: #5648ED
 
