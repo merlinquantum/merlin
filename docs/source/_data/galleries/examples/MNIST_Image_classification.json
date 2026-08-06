@@ -2,7 +2,7 @@
   {
     "title": "MNIST Image Classification",
     "summary": "Classify handwritten digits from the MNIST dataset using QuantumLayer models.",
-    "image": "_static/img/merlin_black.png",
+    "image": "_static/img/photonic_qNN(1).png",
     "doc": "notebooks/MNIST_classifier_example.ipynb",
     "tags": ["Classification", "MNIST", "QuantumLayer"]
   },
