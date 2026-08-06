@@ -211,3 +211,4 @@ Based on reproduced papers
    ../notebooks/reproduced_papers/photonic_QCNN
    ../notebooks/reproduced_papers/photonic_QGAN
    ../notebooks/reproduced_papers/quantum_reservoir
+   ../notebooks/reproduced_papers/bve_qnn

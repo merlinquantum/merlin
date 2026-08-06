@@ -82,6 +82,7 @@ Advanced Training Paradigms
    reproductions/quantum_adversarial_ml
    reproductions/photonic_QGAN
    reproductions/hqpinn
+   reproductions/bve_qnn
    reproductions/quantum_transfer_learning
 
 .. merlin-gallery::
