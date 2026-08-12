@@ -5,5 +5,12 @@
     "image": "_static/reproduced_papers/bve_qnn.png",
     "url": "https://github.com/merlinquantum/reproduced_papers/tree/main/papers/bve_qnn",
     "tags": ["Reproduced papers", "BVE", "QSciML", "Weather", "MerLin", "Dual-rail"]
+  },
+  {
+    "title": "BVE QNN interactive notebook",
+    "summary": "Dataset loading, dual-rail circuit construction, checkpoint evaluation (MRE / PPMCC), and Mollweide SEM vs Quantum comparison.",
+    "image": "_static/reproduced_papers/bve_qnn.png",
+    "doc": "notebooks/reproduced_papers/bve_qnn",
+    "tags": ["Notebook", "BVE", "Dual-rail", "Evaluation"]
   }
 ]
