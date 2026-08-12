@@ -22,8 +22,10 @@
 
 from __future__ import annotations
 
+import copy
 import warnings
 
+import numpy as np
 import torch
 from multipledispatch import dispatch
 from perceval.components import (
@@ -36,6 +38,8 @@ from perceval.components import (
     Circuit,
     Unitary,
 )
+from perceval.utils import Matrix
+from perceval.utils.algorithms.circuit_optimizer import CircuitOptimizer
 
 from ..utils.dtypes import resolve_float_complex
 
@@ -48,6 +52,45 @@ Components:
     PERM: Mode permutation (no parameters)
     Unitary: Generic unitary matrix (no parameters)
     Barrier: Synchronization barrier (removed during compilation)
+"""
+
+_DECOMPOSITION_CACHE: dict[bytes, Circuit] = {}
+"""Cache mapping target-matrix bytes to its alpha-corrected Clements mesh.
+
+Keys are ``ndarray.tobytes()`` of the complex128 target matrix (so identical
+unitaries — same bytes — always hit the same entry). Values are the completed
+(fixed-parameter, alpha-corrected) ``Circuit`` objects from the first
+successful ``CircuitOptimizer().optimize_rectangle`` call for that matrix.
+
+Consequences:
+
+* Each target matrix is decomposed at most once regardless of how many
+  ``CircuitConverter`` instances are built for circuits that contain it.
+* The global NumPy RNG state is perturbed at most once per unique matrix,
+  so repeated or rebuild operations are deterministic from the caller's
+  perspective and do not accumulate RNG drift.
+* ``phase_imprecision`` quantization, being a discontinuous function of the
+  mesh phases, now also produces consistent results across rebuilds because
+  the mesh phases are identical every time.
+
+Thread safety: the cache is populated lazily without a lock. Concurrent
+writes for the same key both produce valid (equivalent) results, so the
+only observable consequence is a redundant optimizer call during a race —
+not incorrect output.
+"""
+
+_DEFAULT_OPTIMIZE_RECTANGLE = CircuitOptimizer.optimize_rectangle
+"""Optimizer implementation used to create entries in the decomposition cache."""
+
+_FIT_TOLERANCE = 1e-3
+"""Tolerance for unitary decomposition fit quality.
+
+After fitting a unitary to an MZI mesh, the overlap magnitude
+    abs(trace(target^H @ fitted) / dimension)
+should be close to 1.0. If the overlap falls below (1 - tolerance),
+the fit is considered to have failed and a RuntimeError is raised.
+With default CircuitOptimizer settings (fidelity error ~1e-6),
+the overlap should be > 0.999 in all normal cases.
 """
 
 
@@ -84,6 +127,246 @@ def _circuit_has_local_phase_error(circuit: Circuit) -> bool:
         True when at least one phase shifter has ``max_error > 0``.
     """
     return any(_phase_shifter_max_error(component) > 0.0 for _, component in circuit)
+
+
+def _decompose_unitaries(
+    circuit: Circuit,
+    phase_imprecision: float = 0.0,
+    phase_error: float = 0.0,
+) -> Circuit:
+    """Replace black-box ``Unitary`` blocks with Clements MZI meshes.
+
+    Called when circuit phase noise is configured (``phase_imprecision > 0``
+    or ``phase_error > 0``). Each non-``PERM`` ``Unitary`` component is fitted
+    to a rectangular (Clements) mesh of MZIs with all parameters fixed as
+    constants. This makes the unitary's structure explicit. The mesh phases
+    are represented by ``PS`` components and receive phase noise; the fixed
+    ``BS`` parameters do not.
+    ``PERM`` components (waveguide crossings with no programmable phases) are
+    left untouched.
+    A 1-mode ``Unitary`` (a bare global phase) is replaced by a single ``PS``
+    without running the optimizer.
+
+    The fit reproduces each target unitary within the optimizer threshold
+    (fidelity error ~1e-6, matrix entries within ~1e-3). Its arbitrary global
+    phase is folded into the mesh's output phase layer so that blocks acting
+    on a subset of modes keep their relative phase with the rest of the
+    circuit.
+
+    Decomposition results are memoized in ``_DECOMPOSITION_CACHE`` keyed on
+    the matrix bytes. After the first construction for a given matrix, every
+    subsequent ``CircuitConverter`` build reuses the cached mesh (deep-copied
+    for independence), so: (a) the global NumPy RNG is perturbed at most once
+    per unique matrix; (b) rebuilding or reloading a model always produces the
+    same mesh phases; and (c) ``phase_imprecision`` quantization, which is a
+    discontinuous function of the individual mesh phases, gives consistent
+    results across builds.
+
+    .. note::
+        Decomposition complexity is ``O(m^3)`` in the optimizer iterations and
+        typically takes ~0.2 s for 10 modes. For ``m >= 16`` the first build
+        may take several seconds; consider building the converter once and
+        reusing it.
+
+    When phase noise is configured, a warning is emitted if the decomposition
+    fit error is comparable to or exceeds the configured noise scale. In this
+    case, the fit error becomes an uncontrolled artifact that can dominate
+    over the modeled physical noise.
+
+    Parameters
+    ----------
+    circuit : Circuit
+        Perceval circuit to transform.
+    phase_imprecision : float
+        Deterministic phase quantization step in radians. Used to estimate
+        the physical noise scale for warning purposes.
+    phase_error : float
+        Stochastic phase perturbation half-width in radians. Used to estimate
+        the physical noise scale for warning purposes.
+
+    Returns
+    -------
+    Circuit
+        The original circuit object when it contains no non-``PERM``
+        ``Unitary`` component, otherwise a new circuit with each such
+        component replaced by an equivalent MZI mesh.
+
+    Raises
+    ------
+    ValueError
+        If a ``Unitary`` component uses polarization.
+    RuntimeError
+        If the Clements fit does not converge for a component.
+    """
+    if not any(
+        isinstance(component, Unitary) and not isinstance(component, PERM)
+        for _, component in circuit
+    ):
+        return circuit
+
+    new_circuit = Circuit(circuit.m)
+    for r, component in circuit:
+        if not isinstance(component, Unitary) or isinstance(component, PERM):
+            new_circuit.add(r, component)
+            continue
+        if component.requires_polarization:
+            raise ValueError(
+                f"Circuit phase noise cannot be applied to polarized unitary "
+                f"'{component.name}' on modes {tuple(r)}: decomposition into "
+                f"an MZI mesh is not supported for polarized components."
+            )
+
+        target = np.asarray(component.compute_unitary(), dtype=complex)
+
+        # A 1-mode Unitary is a bare global phase exp(i*phi) with no beam
+        # splitters to place. The MZI optimizer has no defined behaviour for
+        # a 1x1 matrix, so handle it directly by emitting a single PS.
+        if component.m == 1:
+            ps_phase = float(np.angle(target[0, 0]))
+            new_circuit.add(r[0], PS(ps_phase))
+            continue
+
+        # Warn for large mode counts where the optimizer cost is superlinear
+        # and can take several seconds on the first build.
+        if component.m >= 16:
+            warnings.warn(
+                f"Decomposing a {component.m}-mode unitary '{component.name}' "
+                f"into a Clements mesh. The optimizer cost is O(m^3) in "
+                f"iteration count; for m >= 16 this may take several seconds. "
+                f"The result is cached after the first build for each unique matrix.",
+                UserWarning,
+                stacklevel=3,
+            )
+
+        # Check cache before running the optimizer. The cache key is the
+        # bytes representation of the complex128 target matrix, which
+        # uniquely identifies the unitary up to floating-point equality.
+        cache_key = target.tobytes()
+        # Do not use entries created by the default optimizer when the method
+        # has been replaced. Besides keeping cache contents tied to the
+        # optimizer that created them, this ensures validation is performed
+        # against the active implementation.
+        optimizer_is_default = (
+            CircuitOptimizer.optimize_rectangle is _DEFAULT_OPTIMIZE_RECTANGLE
+        )
+        if cache_key in _DECOMPOSITION_CACHE and optimizer_is_default:
+            # Reuse a deep copy of the cached mesh so each CircuitConverter
+            # gets an independent set of components.
+            cached_mesh = copy.deepcopy(_DECOMPOSITION_CACHE[cache_key])
+            cached_fitted = np.asarray(cached_mesh.compute_unitary(), dtype=complex)
+            if not np.allclose(
+                cached_fitted.conj().T @ cached_fitted,
+                np.eye(component.m),
+                atol=1e-10,
+            ):
+                raise RuntimeError(
+                    f"Cached Clements decomposition is not unitary for "
+                    f"unitary '{component.name}' on modes {tuple(r)}."
+                )
+            cached_overlap = np.trace(target.conj().T @ cached_fitted) / component.m
+            if abs(cached_overlap) < 1.0 - _FIT_TOLERANCE:
+                raise RuntimeError(
+                    f"Cached Clements decomposition failed the fit quality check "
+                    f"for unitary '{component.name}' on modes {tuple(r)}: "
+                    f"overlap magnitude = {abs(cached_overlap):.6e}."
+                )
+            cached_parameters = cached_mesh.get_parameters(all_params=True)
+            cached_output_phases = [
+                parameter
+                for parameter in cached_parameters
+                if parameter.name.startswith("phL")
+            ]
+            if len(cached_output_phases) == component.m:
+                new_circuit.add(r[0], cached_mesh, merge=True)
+                continue
+
+            # Entries created by an older optimizer/template are not valid
+            # for the current output-phase contract. Treat them as misses.
+            del _DECOMPOSITION_CACHE[cache_key]
+
+        try:
+            mesh = CircuitOptimizer().optimize_rectangle(Matrix(target))
+        except RuntimeError as exc:
+            raise RuntimeError(
+                f"Clements decomposition did not converge for unitary "
+                f"'{component.name}' on modes {tuple(r)}: {exc}"
+            ) from exc
+
+        # The fit reproduces the target only up to a global phase e^{i*alpha}.
+        # On a block covering a subset of modes that phase is physical (it is
+        # relative to the untouched modes), so fold -alpha into the mesh's
+        # output phase layer, which has exactly one PS per mode.
+        fitted = np.asarray(mesh.compute_unitary(), dtype=complex)
+        overlap = np.trace(target.conj().T @ fitted) / component.m
+
+        # Verify fit quality: if overlap magnitude is too small, the fit failed
+        # and alpha becomes meaningless (trace near zero makes phase arbitrary).
+        # So failures are raised explicitly and not hidden.
+        if abs(overlap) < 1.0 - _FIT_TOLERANCE:
+            raise RuntimeError(
+                f"Clements decomposition fit quality check failed for unitary "
+                f"'{component.name}' on modes {tuple(r)}: overlap magnitude "
+                f"|trace(target^H @ fitted) / m| = {abs(overlap):.6e} < "
+                f"{1.0 - _FIT_TOLERANCE:.6e}. The fitted mesh does not adequately "
+                f"reproduce the target unitary. This may indicate a bug in "
+                f"CircuitOptimizer or insufficient optimization iterations."
+            )
+
+        alpha = float(np.angle(overlap))
+
+        # Warn if decomposition fit error is comparable to configured phase noise.
+        # For unitary matrices, the fit quality is measured by the overlap magnitude:
+        # overlap = trace(target^H @ fitted) / m, which is bounded in [0, 1].
+        # The fit error is 1 - |overlap|. With default CircuitOptimizer settings
+        # (fidelity error ~1e-6), we expect |overlap| > 0.999, i.e., fit_error < 0.001.
+        #
+        # For comparison, a phase error of delta_phi rad induces a unitary entry
+        # change ~delta_phi, so the noise scale is approximately
+        # max(phase_imprecision, phase_error). If fit_error > 0.1 * noise_scale,
+        # the fit error likely dominates the physical noise being modeled.
+        if phase_imprecision > 0.0 or phase_error > 0.0:
+            noise_scale = max(phase_imprecision, phase_error)
+            # Remove the arbitrary global phase before measuring the matrix
+            # residual. This detects entry-wise fit errors even when the
+            # trace overlap happens to cancel them for a particular target.
+            phase_aligned_fitted = fitted * np.exp(-1j * np.angle(overlap))
+            fit_error = float(
+                np.linalg.norm(target - phase_aligned_fitted, ord="fro")
+                / np.sqrt(component.m)
+            )
+            if fit_error > 0.1 * noise_scale:
+                warnings.warn(
+                    f"Unitary decomposition phase-aligned fit residual "
+                    f"({fit_error:.3e}) is "
+                    f"comparable to or exceeds the configured phase noise scale "
+                    f"(max(phase_imprecision, phase_error)={noise_scale:.3e}). "
+                    f"For component '{component.name}' on modes {tuple(r)}, the "
+                    f"decomposition artifact may dominate over the modeled physical noise. "
+                    f"Consider using smaller phase noise values or an exact decomposition method.",
+                    UserWarning,
+                    stacklevel=3,
+                )
+
+        mesh_parameters = mesh.get_parameters(all_params=False)
+        output_phases = [p for p in mesh_parameters if p.name.startswith("phL")]
+        if len(output_phases) != component.m:
+            raise RuntimeError(
+                f"Unexpected mesh structure from CircuitOptimizer for unitary "
+                f"'{component.name}': expected {component.m} output phases "
+                f"('phL*'), found {len(output_phases)}."
+            )
+        for parameter in mesh_parameters:
+            value = float(parameter)
+            if parameter.name.startswith("phL"):
+                value -= alpha
+            parameter.fix_value(value)
+
+        # Store the completed mesh in the cache before adding to the circuit,
+        # so that future builds for the same matrix skip the optimizer entirely.
+        new_circuit.add(r[0], mesh, merge=True)
+        if optimizer_is_default:
+            _DECOMPOSITION_CACHE[cache_key] = copy.deepcopy(mesh)
+    return new_circuit
 
 
 class CircuitConverter:
@@ -174,6 +457,17 @@ class CircuitConverter:
 
            The quantization uses nearest-grid rounding through
            :func:`torch.round`; it is not floor or truncation.
+
+    Black-Box Unitaries Under Circuit Noise:
+        When ``phase_imprecision > 0`` or ``phase_error > 0``, every
+        non-``PERM`` ``Unitary`` component is automatically decomposed at
+        construction into a rectangular (Clements) mesh of MZIs with fixed
+        numeric phases plus an output PS layer. Phase noise is then applied
+        to the PS components of the mesh (fidelity error ~1e-6, global phase
+        compensated), matching Perceval's convention that ``phase_imprecision``
+        targets phase shifters only. Without circuit noise the fast path is
+        kept: ``Unitary`` components stay precomputed constant tensors.
+        ``PERM`` components (waveguide crossings) are never decomposed.
 
     Example:
         Basic usage with a single phase shifter:
@@ -311,6 +605,16 @@ class CircuitConverter:
         assert isinstance(circuit, Circuit), (
             f"Expected a Perceval LO circuit, but got {type(circuit).__name__}"
         )
+        # Circuit phase noise must reach the phases inside black-box Unitary
+        # blocks, so decompose them into MZI meshes before building the
+        # parameter mapping. Without noise the fast path (precomputed constant
+        # tensor per Unitary) is kept.
+        if self._phase_imprecision > 0.0 or self._phase_error > 0.0:
+            circuit = _decompose_unitaries(
+                circuit,
+                phase_imprecision=self._phase_imprecision,
+                phase_error=self._phase_error,
+            )
         self.circuit = circuit
         if self._phase_error > 0.0 and _circuit_has_local_phase_error(self.circuit):
             warnings.warn(
@@ -447,11 +751,15 @@ class CircuitConverter:
                 )
             if isinstance(c, Barrier):
                 continue
-            # Check if this PS component requires dynamic handling due to phase_error.
-            # Phase shifters with active phase_error must remain dynamic (not precomputed)
-            # because fresh perturbations must be drawn on each call to to_tensor().
-            # In contrast, phase_imprecision-only PS can still be precomputed since
-            # quantization is deterministic.
+            # A component must remain dynamic (not precomputed as a tensor) when
+            # it carries phases that receive stochastic perturbations, because
+            # fresh samples must be drawn on every call to to_tensor().
+            # Deterministic phase_imprecision-only components can still be
+            # precomputed: _compute_tensor applies quantization at that point,
+            # and the result is the same on every call.
+            #
+            # PS: also sensitive when the component carries a per-component
+            #     max_error (local phase error override).
             is_phase_error_sensitive = isinstance(c, PS) and (
                 self._phase_error > 0.0 or _phase_shifter_max_error(c) > 0.0
             )
@@ -654,6 +962,55 @@ class CircuitConverter:
 
         return converted_tensor
 
+    def _apply_phase_noise(
+        self,
+        phase: torch.Tensor,
+        phase_error_half_width: float,
+    ) -> torch.Tensor:
+        """Apply configured phase noise to a phase tensor in-place (returns new tensor).
+
+        Applies, in order:
+
+        1. Deterministic nearest-grid quantization (STE) when
+           ``self._phase_imprecision > 0``.
+        2. Stochastic uniform perturbation when ``self._apply_phase_error`` is
+           ``True`` and ``phase_error_half_width > 0``.
+
+        This helper is used by the :meth:`_compute_tensor` overload for ``PS``.
+        Phase noise is not applied to ``BS`` parameters, matching Perceval's
+        ``phase_imprecision`` noise model which targets only phase shifters.
+
+        Parameters
+        ----------
+        phase : torch.Tensor
+            Phase value(s) as a real-valued tensor. The tensor may be scalar,
+            1-D ``(batch_size,)``, or any shape that is compatible with the
+            calling code.
+        phase_error_half_width : float
+            Half-width of the ``Uniform(-w, w)`` perturbation to apply when
+            ``self._apply_phase_error`` is ``True``. The caller selects the
+            per-component ``max_error`` or falls back to ``self._phase_error``.
+
+        Returns
+        -------
+        torch.Tensor
+            Phase tensor with quantization and/or perturbation applied. The
+            returned tensor shares the device and dtype of the input.
+        """
+        if self._phase_imprecision > 0.0:
+            step = phase.new_tensor(self._phase_imprecision)
+            phase_quantized = torch.round(phase / step) * step
+            # Straight-through estimator: autograd sees d phase / d commanded = 1.
+            phase = phase + (phase_quantized - phase).detach()
+
+        if self._apply_phase_error and phase_error_half_width > 0.0:
+            noise = torch.empty_like(phase).uniform_(
+                -phase_error_half_width, phase_error_half_width
+            )
+            phase = phase + noise
+
+        return phase
+
     @dispatch((Unitary, PERM))
     def _compute_tensor(self, comp: AComponent) -> torch.Tensor:
         """Compute tensor for Unitary and Permutation components.
@@ -678,29 +1035,38 @@ class CircuitConverter:
         """Compute tensor for Beam Splitter component.
 
         Handles different BS conventions (Rx, Ry, H) and processes 5 parameters:
-        theta, phi_tl, phi_bl, phi_tr, phi_br
+        theta, phi_tl, phi_bl, phi_tr, phi_br.
 
-        Args:
-            comp: BS component with parameters
+        Phase noise (``phase_imprecision`` and ``phase_error``) is not applied to
+        BS parameters. Noise is applied exclusively to PS (phase shifter)
+        components, matching Perceval's ``phase_imprecision`` noise model.
 
-        Returns:
-            Batched 2x2 unitary tensor of shape (batch_size, 2, 2)
+        Parameters
+        ----------
+        comp : AComponent
+            ``BS`` component with parameters.
 
-        Raises:
-            NotImplementedError: If BS convention is not supported
+        Returns
+        -------
+        torch.Tensor
+            Batched 2×2 unitary tensor of shape ``(batch_size, 2, 2)``.
+
+        Raises
+        ------
+        NotImplementedError
+            If the BS convention is not ``Rx``, ``Ry``, or ``H``.
         """
         param_values = []
 
         for _index, param in enumerate(comp.get_parameters(all_params=True)):
             if param.is_variable:
                 tensor_id, idx_in_tensor = self.param_mapping[param.name]
-                param_values.append(self.torch_params[tensor_id][..., idx_in_tensor])
+                raw = self.torch_params[tensor_id][..., idx_in_tensor]
             else:
-                param_values.append(
-                    torch.tensor(
-                        float(param), dtype=self.tensor_fdtype, device=self.device
-                    )
+                raw = torch.tensor(
+                    float(param), dtype=self.tensor_fdtype, device=self.device
                 )
+            param_values.append(raw)
 
         cos_theta = torch.cos(param_values[0] / 2)
         sin_theta = torch.sin(param_values[0] / 2)
@@ -822,35 +1188,15 @@ class CircuitConverter:
         if phase.ndim == 0 and self.batch_size > 1:
             phase = phase.expand(self.batch_size)
 
-        # Apply finite phase resolution with nearest-grid quantization. This is
-        # not truncation: a phase is mapped to
-        # round(phase / phase_imprecision) * phase_imprecision. torch.round
-        # decides exact half-step ties, so pi/8 with a pi/4 step maps to 0.
-        # The STE keeps gradients attached to the commanded phase.
-        if self._phase_imprecision > 0.0:
-            phase_imprecision = phase.new_tensor(self._phase_imprecision)
-            phase_quantized = torch.round(phase / phase_imprecision) * phase_imprecision
-            # Straight-through estimator: adding a detached delta makes the
-            # forward value equal to phase_quantized, while autograd sees
-            # d phase / d commanded_phase = 1 because the delta is constant.
-            phase = phase + (phase_quantized - phase).detach()
-
-        # Apply stochastic phase perturbation after quantization. Each call
-        # draws fresh Uniform(-phase_error, phase_error) samples. The samples
-        # are noise, not trainable parameters; gradients flow only through the
-        # commanded phase value.
+        # Compute phase error half-width: prefer component-specific max error,
+        # then fall back to the global phase_error
         component_phase_error = _phase_shifter_max_error(comp)
         phase_error_half_width = (
             component_phase_error if component_phase_error > 0.0 else self._phase_error
         )
-        if self._apply_phase_error and phase_error_half_width > 0.0:
-            # Use torch.empty_like() to ensure perturbations follow the same
-            # device, dtype, and batch structure as the phase tensor.
-            phase_error = torch.empty_like(phase).uniform_(
-                -phase_error_half_width,
-                phase_error_half_width,
-            )
-            phase = phase + phase_error
+
+        # Apply quantization and perturbation via the common helper
+        phase = self._apply_phase_noise(phase, phase_error_half_width)
 
         unitary_tensor = torch.exp(1j * phase.to(self.tensor_cdtype)).reshape(
             -1, 1
