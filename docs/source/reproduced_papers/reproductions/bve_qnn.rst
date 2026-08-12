@@ -17,7 +17,7 @@ Potential of Quantum Scientific Machine Learning Applied to Weather Modelling
 
    **Paper URL**: `arXiv:2404.08737 <https://arxiv.org/abs/2404.08737>`_
 
-   **Reproduction Status**: Partial (Experiment 1 photonic MerLin complete; Experiment 2 not targeted)
+   **Reproduction Status**: ⚠️ Partial (Experiment 1 photonic MerLin complete; Experiment 2 not targeted)
 
    **Reproducer**: Cyril Deloince (cyrilde9@gmail.com)
 
@@ -63,9 +63,9 @@ platform result.
 MerLin Implementation
 =====================
 
-The reproduction lives in the shared
-`reproduced_papers <https://github.com/merlinquantum/reproduced_papers>`_
-repository under ``papers/bve_qnn`` and is launched with the common runtime:
+The reproduction lives in the
+`reproduced_papers repository <https://github.com/merlinquantum/reproduced_papers>`_
+under ``papers/bve_qnn`` and is launched with the common runtime:
 
 .. code-block:: bash
 
@@ -130,7 +130,7 @@ Experimental Results
      - Params
      - Median MRE
      - Median PPMCC
-   * - Paper (neutral-atom HEA)
+   * - Paper (neutral-atom HEA) [1]_
      - 654
      - 7.1–10.9%
      - 0.870
@@ -142,6 +142,9 @@ Experimental Results
      - 1006
      - 14.85%
      - 0.754
+
+.. [1] The paper reports MRE per time snapshot; the 7.1–10.9% range spans the
+   eight training hours. Our single 14.85% is the median over the same snapshots.
 
 The photonic model learns real stream-function structure (PPMCC 0.754) but does
 not match the neutral-atom baseline. We interpret this as a physical limitation
@@ -170,6 +173,12 @@ Interactive Exploration
 
 **Jupyter Notebook**: :doc:`../../notebooks/reproduced_papers/bve_qnn`
 
+.. toctree::
+   :maxdepth: 1
+   :hidden:
+
+   ../../notebooks/reproduced_papers/bve_qnn
+
 The notebook provides:
 
 * Dataset loading from ``data/bve_qnn/``
@@ -177,8 +186,8 @@ The notebook provides:
 * Checkpoint loading and evaluation (MRE / PPMCC)
 * Mollweide SEM vs Quantum comparison at :math:`t=22\mathrm{h}`
 
-The runnable package notebook is also available in
-`reproduced_papers <https://github.com/merlinquantum/reproduced_papers/blob/main/papers/bve_qnn/notebook.ipynb>`_.
+The runnable package notebook is also available in the
+`reproduced_papers repository <https://github.com/merlinquantum/reproduced_papers/blob/main/papers/bve_qnn/notebook.ipynb>`_.
 
 Extensions and Future Work
 ==========================
@@ -200,7 +209,7 @@ Code Access and Documentation
 
 The package includes:
 
-* ``lib/runner.py`` shared-runtime entrypoint
+* ``lib/runner.py`` paper-side runner module invoked by the repo-root ``implementation.py``
 * ``lib/model.py`` dual-rail MerLin QNN
 * ``configs/example.json`` paper-faithful evaluation config
 * committed checkpoint and SEM dataset
@@ -228,8 +237,7 @@ Citation
 Related Reproductions
 =====================
 
-* **HQPINN**: another MerLin SciML / physics-informed benchmark.
-* **QRNN / QLSTM**: sequential / temporal modelling reproductions in MerLin.
+* :doc:`hqpinn` — another MerLin SciML / physics-informed benchmark.
 
 Impact and Applications
 =======================

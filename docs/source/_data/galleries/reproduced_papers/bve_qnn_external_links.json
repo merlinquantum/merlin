@@ -2,6 +2,7 @@
   {
     "title": "Run the BVE QNN Experiment 1 package",
     "summary": "Photonic dual-rail MerLin reproduction of supervised stream-function regression (Exp.1) with CLI, checkpoint, tests, and Mollweide figure utilities.",
+    "image": "_static/reproduced_papers/bve_qnn.png",
     "url": "https://github.com/merlinquantum/reproduced_papers/tree/main/papers/bve_qnn",
     "tags": ["Reproduced papers", "BVE", "QSciML", "Weather", "MerLin", "Dual-rail"]
   }
