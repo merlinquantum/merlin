@@ -187,7 +187,7 @@ The notebook provides:
 * Mollweide SEM vs Quantum comparison at :math:`t=22\mathrm{h}`
 
 The runnable package notebook is also available in the
-`reproduced_papers repository <https://github.com/merlinquantum/reproduced_papers/blob/main/papers/bve_qnn/notebook.ipynb>`_.
+`reproduced_papers repository (notebook) <https://github.com/merlinquantum/reproduced_papers/blob/main/papers/bve_qnn/notebook.ipynb>`_.
 
 Extensions and Future Work
 ==========================
