@@ -1574,3 +1574,81 @@ def test_g2_output_keys_match_tensor_order_with_forward():
     assert perceval_states_pl.issubset(set(keys_g2_pl)), (
         f"Some Perceval states not in Merlin keys. Perceval: {perceval_states_pl}, Merlin: {set(keys_g2_pl)}"
     )
+
+
+# Black-box Unitary blocks under circuit phase noise (reservoir-style circuits)
+def _reservoir_unitary_circuit(m: int = 4, n_features: int = 2) -> pcvl.Circuit:
+    """Create a reservoir circuit: random Unitary / px encoder / random Unitary."""
+    circuit = pcvl.Circuit(m)
+    circuit.add(0, pcvl.Unitary(pcvl.Matrix.random_unitary(m)))
+    for i in range(n_features):
+        circuit.add(i, pcvl.PS(pcvl.P(f"px{i + 1}")))
+    circuit.add(0, pcvl.Unitary(pcvl.Matrix.random_unitary(m)))
+    return circuit
+
+
+def _reservoir_layer(
+    circuit: pcvl.Circuit, noise: pcvl.NoiseModel | None = None, **kwargs
+) -> ml.QuantumLayer:
+    return ml.QuantumLayer(
+        input_size=2,
+        circuit=circuit,
+        input_parameters=["px"],
+        input_state=[1, 0, 1, 0],
+        n_photons=2,
+        noise=noise,
+        measurement_strategy=ml.MeasurementStrategy.probs(
+            computation_space=ml.ComputationSpace.FOCK
+        ),
+        dtype=torch.float64,
+        **kwargs,
+    )
+
+
+def test_reservoir_unitary_layer_with_phase_error_forwards_and_backwards():
+    np.random.seed(42)
+    circuit = _reservoir_unitary_circuit()
+    noisy_layer = _reservoir_layer(
+        deepcopy(circuit),
+        noise=pcvl.NoiseModel(phase_error=0.1),
+        n_phase_error_samples=3,
+    )
+    noiseless_layer = _reservoir_layer(deepcopy(circuit))
+
+    x = torch.tensor([[0.3, 0.7]], dtype=torch.float64, requires_grad=True)
+    noisy_output = noisy_layer(x)
+
+    # 10 = C(4 + 2 - 1, 2) Fock states for 2 photons in 4 modes
+    _assert_normalized_distribution(noisy_output, 10)
+    noisy_output.pow(2).sum().backward()
+    assert x.grad is not None
+    assert torch.isfinite(x.grad).all()
+    assert not torch.allclose(noisy_output, noiseless_layer(x.detach()))
+
+
+def test_reservoir_unitary_layer_with_imprecision_only_shifts_output():
+    np.random.seed(43)
+    circuit = _reservoir_unitary_circuit()
+    quantized_layer = _reservoir_layer(
+        deepcopy(circuit), noise=pcvl.NoiseModel(phase_imprecision=0.8)
+    )
+    noiseless_layer = _reservoir_layer(deepcopy(circuit))
+
+    x = torch.tensor([[0.3, 0.7]], dtype=torch.float64)
+    quantized_output = quantized_layer(x)
+
+    _assert_normalized_distribution(quantized_output, 10)
+    assert not torch.allclose(quantized_output, noiseless_layer(x))
+
+
+def test_reservoir_unitary_layer_neutral_noise_matches_no_noise():
+    # Fast-path regression guard: a neutral NoiseModel must not trigger the
+    # Clements decomposition of Unitary blocks.
+    np.random.seed(44)
+    circuit = _reservoir_unitary_circuit()
+    neutral_layer = _reservoir_layer(deepcopy(circuit), noise=pcvl.NoiseModel())
+    plain_layer = _reservoir_layer(deepcopy(circuit))
+
+    x = torch.tensor([[0.3, 0.7]], dtype=torch.float64)
+
+    assert torch.allclose(neutral_layer(x), plain_layer(x))
