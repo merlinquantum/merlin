@@ -282,12 +282,12 @@ class MeasurementStrategy(metaclass=_MeasurementStrategyMeta):
         Optional grouping applied to probability outputs. If
         ``occupancy_readout`` is ``True``, grouping is applied after the
         occupancy readout.
-    occupancy_readout : bool
+        occupancy_readout : bool
         Whether probability outputs are collapsed to binary occupied/unoccupied
-        output keys. The collapse preserves the input probability mass for raw
-        tensor outputs without renormalizing. When ``return_object=True``, the
-        resulting ``ProbabilityDistribution`` normalizes on construction by
-        design. Default value is ``False``.
+        output keys. If the distribution reaches the readout with sub-unit
+        mass, raw tensor outputs preserve that mass without renormalizing. When
+        ``return_object=True``, the resulting ``ProbabilityDistribution``
+        normalizes on construction by design. Default value is ``False``.
     """
 
     type: MeasurementKind
@@ -322,13 +322,11 @@ class MeasurementStrategy(metaclass=_MeasurementStrategyMeta):
             occupied/unoccupied keys before returning probabilities. Only
             supported with ``ComputationSpace.FOCK``. Default value is
             ``False``. The collapse sums grouped probabilities without
-            renormalizing, so it preserves whatever total probability mass
-            the distribution has (e.g. after photon loss or lossy
-            detectors) instead of rescaling it back to 1 — consistent with
-            the rest of this probability-output path, which never
-            renormalizes either. This applies to raw tensor outputs; when
-            ``return_object=True``, the resulting ``ProbabilityDistribution``
-            normalizes on construction by design.
+            renormalizing, so any sub-unit mass present at the readout is
+            preserved instead of rescaled to 1, consistent with the rest of
+            this probability-output path. This applies to raw tensor outputs;
+            when ``return_object=True``, the resulting
+            ``ProbabilityDistribution`` normalizes on construction by design.
 
         Returns
         -------

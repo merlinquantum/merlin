@@ -482,11 +482,11 @@ class TestQuantumLayerMeasurementStrategy:
         assert torch.allclose(output, reference, atol=1e-6)
 
     def test_occupancy_readout_preserves_lossy_layer_probability_mass(self):
-        """Occupancy readout must preserve sub-unit mass from lossy detectors."""
+        """Occupancy readout preserves mass from a sub-normalized detector response."""
 
-        class LossyThresholdDetector(pcvl.Detector):
+        class LossyPnrDetector(pcvl.Detector):
             def __init__(self) -> None:
-                super().__init__(n_wires=1)
+                super().__init__(n_wires=2, max_detections=2)
 
             def detect(self, theoretical_photons: int):
                 if theoretical_photons == 0:
@@ -498,8 +498,8 @@ class TestQuantumLayerMeasurementStrategy:
 
         def build_experiment() -> pcvl.Experiment:
             experiment = pcvl.Experiment(circuit)
-            experiment.detectors[0] = LossyThresholdDetector()
-            experiment.detectors[1] = LossyThresholdDetector()
+            experiment.detectors[0] = LossyPnrDetector()
+            experiment.detectors[1] = LossyPnrDetector()
             return experiment
 
         ungrouped_layer = ML.QuantumLayer(
@@ -524,15 +524,23 @@ class TestQuantumLayerMeasurementStrategy:
         ungrouped_output = ungrouped_layer()
         grouped_output = grouped_layer()
 
+        assert grouped_layer.output_size < ungrouped_layer.output_size
         ungrouped_mass = ungrouped_output.sum(dim=-1)
         grouped_mass = grouped_output.sum(dim=-1)
         assert torch.all(ungrouped_mass < 1)
+        assert torch.all(grouped_mass < 1)
         assert torch.allclose(grouped_mass, ungrouped_mass, atol=1e-6)
 
         ungrouped_layer.return_object = True
         grouped_layer.return_object = True
         ungrouped_distribution = ungrouped_layer()
         grouped_distribution = grouped_layer()
+        normalized_grouped_output = grouped_output / grouped_mass.unsqueeze(-1)
+        assert torch.allclose(
+            grouped_distribution.tensor,
+            normalized_grouped_output,
+            atol=1e-6,
+        )
         assert torch.allclose(
             ungrouped_distribution.tensor.sum(dim=-1),
             torch.ones_like(ungrouped_distribution.tensor[:, 0]),

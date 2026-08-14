@@ -39,7 +39,8 @@ class _OccupancyReadout(nn.Module):
     The reduction sums grouped probabilities without renormalizing, so total
     probability mass is preserved rather than rescaled back to 1. This keeps
     occupancy grouping consistent with the non-occupancy ``probs()`` path,
-    which also never renormalizes after photon loss or lossy detectors.
+    which also never renormalizes. If a distribution reaches either path with
+    sub-unit mass, that mass is preserved.
     This mass-preservation guarantee applies to raw tensor outputs; a layer
     configured with ``return_object=True`` wraps the result in
     ``ProbabilityDistribution``, which normalizes on construction by design.
@@ -91,10 +92,10 @@ class _OccupancyReadout(nn.Module):
         mass of ``probabilities`` is left unchanged. This intentionally
         matches the non-occupancy ``probs()`` path (see
         ``DistributionStrategy.process``), which never renormalizes either.
-        Callers that apply photon loss or lossy detectors upstream will see
-        that same sub-1 total mass carried through occupancy grouping rather
-        than silently rescaled back to 1. The later ``ProbabilityDistribution``
-        wrapper is an intentional normalization boundary for typed outputs.
+        If the input reaches the readout with sub-unit mass, callers will see
+        that mass carried through occupancy grouping rather than silently
+        rescaled back to 1. The later ``ProbabilityDistribution`` wrapper is
+        an intentional normalization boundary for typed outputs.
 
         Parameters
         ----------
