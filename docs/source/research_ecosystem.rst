@@ -17,7 +17,7 @@ Community Highlights
 
 .. merlin-gallery::
    :data: _data/galleries/research_ecosystem_around_world.json
-   :columns: 2
+   :columns: 3
    :contour-color: #A8DDB5
 
 Get Listed
