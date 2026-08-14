@@ -7,10 +7,14 @@ an installed package, so we add that directory to ``sys.path`` before importing.
 import sys
 from pathlib import Path
 
-_EXT = Path(__file__).resolve().parents[2] / "docs" / "source" / "_ext"
-if str(_EXT) not in sys.path:
-    sys.path.insert(0, str(_EXT))
+import pytest
 
+_REPO = Path(__file__).resolve().parents[2]
+for _path in (_REPO / "docs" / "source" / "_ext", _REPO / "docs"):
+    if str(_path) not in sys.path:
+        sys.path.insert(0, str(_path))
+
+import fetch_citations as fc  # noqa: E402
 import merlin_citations as mc  # noqa: E402
 
 
@@ -54,3 +58,15 @@ def test_duplicate_keys_reported_once_and_sorted():
 def test_duplicate_keys_empty_when_unique():
     """Unique keys yield no duplicates."""
     assert mc._duplicate_keys([{"key": "a"}, {"key": "b"}]) == []
+
+
+def test_extract_counts_reads_valid_record():
+    """A well-formed OpenAlex record yields the stored fields."""
+    work = {"cited_by_count": 12, "id": "https://openalex.org/W123"}
+    assert fc.extract_counts(work) == {"cited_by_count": 12, "openalex_id": "W123"}
+
+
+def test_extract_counts_rejects_malformed_record():
+    """A record missing required fields raises ValueError instead of crashing."""
+    with pytest.raises(ValueError, match="unexpected OpenAlex payload"):
+        fc.extract_counts({"id": "https://openalex.org/W1"})
