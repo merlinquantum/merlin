@@ -36,12 +36,12 @@ class BackendCapabilities:
     ----------
     name : str
         Backend platform name (e.g., "sim:slos", "perceval-qpu:scaleway").
-    available_commands : tuple[str]
+    available_commands : tuple[str, ...]
         Immutable snapshot of supported commands (e.g., ["probs", "sample_count"]).
     """
 
     name: str
-    available_commands: tuple[str]
+    available_commands: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -891,7 +891,7 @@ class MerlinProcessor:
         return self.backend_capabilities.name
 
     @property
-    def available_commands(self) -> tuple[str]:
+    def available_commands(self) -> tuple[str, ...]:
         """Snapshot of supported remote commands (e.g., ("probs", "sample_count")).
 
         This is a backward-compatibility property. Use `backend_capabilities.available_commands` directly.
