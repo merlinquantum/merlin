@@ -25,6 +25,7 @@ loudly instead of rendering stale or partial numbers.
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from html import escape
 from pathlib import Path
 from typing import Any
@@ -36,6 +37,20 @@ from sphinx.errors import NoUri
 _DATA_DIR = "_data/citations"
 _REGISTRY_FILE = "papers.json"
 _CITATIONS_FILE = "citations.json"
+_REPRODUCTIONS_PREFIX = "reproduced_papers/reproductions/"
+
+
+def _unregistered_reproduction_pages(
+    registry: list[dict[str, Any]], found_docs: Iterable[str]
+) -> list[str]:
+    """Return reproduction pages that exist but are absent from the registry."""
+    registered = {entry["doc"] for entry in registry}
+    expected = {
+        doc
+        for doc in found_docs
+        if doc.startswith(_REPRODUCTIONS_PREFIX) and not doc.endswith("/template")
+    }
+    return sorted(expected - registered)
 
 
 class MerlinCitationsSummaryNode(nodes.General, nodes.Element):
@@ -163,6 +178,12 @@ class MerlinCitationsTableDirective(Directive):
     def run(self) -> list[nodes.Node]:
         env = self.state.document.settings.env
         registry, citations = _load_citation_data(self)
+
+        unregistered = _unregistered_reproduction_pages(registry, env.found_docs)
+        if unregistered:
+            raise self.error(
+                f"Reproduction pages missing from '{_REGISTRY_FILE}': {unregistered}."
+            )
 
         rows: list[dict[str, Any]] = []
         for entry in registry:
