@@ -12,5 +12,12 @@
     "image": "_static/ecosystem/Radiomics.png",
     "url": "https://www.medrxiv.org/content/10.64898/2026.03.09.26347939v1",
     "tags": ["External link", "medRxiv", "Community", "Olgiati et al. 2026"]
+  },
+  {
+    "title": "PN-QNN: Harnessing Physical Noise as a Native Regularizer in Photonic Hybrid Quantum Neural Networks",
+    "summary": "Physical photonic noise can act as a hardware-native regularizer for Hybrid NN to boost accuracy on simpler datasets",
+    "image": "_static/ecosystem/PN-QNN.png",
+    "url": "https://arxiv.org/abs/2607.20045",
+    "tags": ["External link", "QNN", "Noise", "Community", "Elnakhal et al. 2026"]
   }
 ]
