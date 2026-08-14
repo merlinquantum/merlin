@@ -1359,6 +1359,12 @@ def test_create_fresh_local_processor_does_not_share_experiment_state():
     assert execution_processor.circuit_size == 4
 
 
+def test_constructor_rejects_nonpositive_microbatch_size():
+    """A non-positive microbatch_size fails at construction, not first forward()."""
+    with pytest.raises(ValueError, match="microbatch_size must be strictly positive"):
+        MerlinProcessor(processor=Processor("SLOS"), microbatch_size=0)
+
+
 def test_run_chunk_local_preserves_processor_experiment_metadata():
     """Local execution keeps caller-provided experiment detector metadata."""
     original_processor = Processor("SLOS")

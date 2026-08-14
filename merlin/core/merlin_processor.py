@@ -860,6 +860,10 @@ class MerlinProcessor:
                     "RemoteProcessor."
                 )
 
+        if microbatch_size <= 0:
+            raise ValueError(
+                f"microbatch_size must be strictly positive, got {microbatch_size}."
+            )
         self.microbatch_size = microbatch_size
         self.default_timeout = float(timeout)
         self.max_shots_per_call = (
