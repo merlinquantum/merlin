@@ -246,6 +246,19 @@ a {
     color: #8a8d94;
 }
 
+/* Screen-reader-only text: conveys meaning that is otherwise visual/tooltip. */
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
 /* Show the destination page title above previous/next footer buttons */
 .rst-footer-buttons a.btn::before {
     content: attr(title);

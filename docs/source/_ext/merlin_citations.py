@@ -256,6 +256,8 @@ def _doc_href(translator: Any, docname: str) -> str:
             translator.builder.current_docname, docname
         )
     except NoUri:
+        # Mirror merlin_gallery: pages without a resolvable URI (e.g. non-HTML
+        # builders) fall back to "#" rather than failing the build.
         return "#"
 
 
@@ -306,17 +308,19 @@ def visit_citations_table_html(translator: Any, node: MerlinCitationsTableNode) 
             f'<span class="mq-citations-count">{count:,}</span>'
             if count is not None
             else '<span class="mq-citations-count mq-citations-count-na" '
-            'title="Not yet indexed by OpenAlex">&mdash;</span>'
+            'title="Not yet indexed by OpenAlex">&mdash;'
+            '<span class="visually-hidden">Not yet indexed by OpenAlex</span></span>'
         )
         translator.body.append(
             "<tr>"
             f'<td><a href="{escape(doc_href, quote=True)}">{escape(row["title"])}</a>'
             f' <a class="mq-citations-doi" href="{escape(doi_href, quote=True)}"'
             ' target="_blank" rel="noopener noreferrer"'
+            f' aria-label="Open {escape(row["title"], quote=True)} (DOI)"'
             ' title="Open the paper (DOI)">&#8599;</a></td>'
             f"<td>{escape(row['authors_short'])}</td>"
             f"<td>{escape(row['venue'])}</td>"
-            f"<td>{row['year']}</td>"
+            f"<td>{escape(str(row['year']))}</td>"
             f'<td class="mq-citations-count-col">{count_html}</td>'
             "</tr>"
         )
