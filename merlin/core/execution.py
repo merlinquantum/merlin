@@ -26,6 +26,7 @@ import threading
 import time
 import zlib
 from collections.abc import Callable
+from concurrent.futures import CancelledError
 from typing import TYPE_CHECKING
 
 import torch
@@ -119,7 +120,39 @@ class BatchChunker:
         state: CallState,
         deadline: float | None,
     ) -> torch.Tensor:
-        """Submit chunk jobs with limited concurrency and stitch results."""
+        """Submit chunk jobs with limited concurrency and stitch results.
+
+        Parameters
+        ----------
+        layer : MerlinModule
+            Quantum leaf whose backend execution produces each chunk output.
+        config : ValidatedLayerConfig
+            Validated layer configuration (circuit, input state, param order).
+        input_tensor : torch.Tensor
+            Full input batch to split across ``chunks``.
+        chunks : list[tuple[int, int]]
+            ``[start, end)`` row ranges produced by :meth:`split_batch`.
+        nsample : int | None
+            Requested sample count, or ``None``/``<= 0`` for exact probabilities.
+        state : CallState
+            Per-call state used for chunk counters and cooperative cancellation.
+        deadline : float | None
+            Absolute ``time.time()`` deadline, or ``None`` for no timeout.
+
+        Returns
+        -------
+        torch.Tensor
+            The per-chunk outputs concatenated along the batch dimension.
+
+        Raises
+        ------
+        TimeoutError
+            If ``deadline`` elapses before all chunks finish; in-flight remote
+            jobs are cancelled best-effort first.
+        BaseException
+            The first error raised by any chunk, re-raised once the remaining
+            in-flight chunks have settled.
+        """
         state.add_planned_chunks(len(chunks))
         outputs: list[torch.Tensor | None] = [None] * len(chunks)
         errors: list[BaseException] = []
@@ -251,9 +284,46 @@ class RemoteJobRunner:
         deadline: float | None,
         job_base_label: str | None = None,
     ) -> torch.Tensor:
-        """Submit a single chunk job with retries and return the mapped tensor."""
-        from concurrent.futures import CancelledError
+        """Submit a single chunk job with retries and return the mapped tensor.
 
+        Builds a fresh remote processor and sampler on each attempt (so a
+        corrupted processor cannot poison retries), submits the job, polls it to
+        completion, and maps the raw results into a tensor. Cancellation and
+        deadline are checked cooperatively before every attempt.
+
+        Parameters
+        ----------
+        layer : MerlinModule
+            Quantum leaf whose backend execution produces the chunk output.
+        config : ValidatedLayerConfig
+            Validated layer configuration (circuit, input state, param order).
+        input_chunk : torch.Tensor
+            Rows of the batch assigned to this chunk.
+        nsample : int | None
+            Requested sample count, or ``None``/``<= 0`` for exact probabilities.
+        state : CallState
+            Per-call state observed for cooperative cancellation and job ids.
+        deadline : float | None
+            Absolute ``time.time()`` deadline, or ``None`` for no timeout.
+        job_base_label : str | None
+            Base label for the remote job name, or ``None`` to leave it unset.
+
+        Returns
+        -------
+        torch.Tensor
+            The mapped ``[chunk_size, ...]`` output tensor for this chunk.
+
+        Raises
+        ------
+        ValueError
+            If the chunk exceeds the microbatch guard (an internal invariant).
+        CancelledError
+            If cancellation is requested during the attempt loop.
+        TimeoutError
+            If ``deadline`` elapses during the attempt loop.
+        RuntimeError
+            If every submission attempt fails; chained to the last error.
+        """
         batch_size = input_chunk.shape[0]
         microbatch_limit = self._get_microbatch_limit()
         if microbatch_limit is not None and batch_size > microbatch_limit:
@@ -410,9 +480,43 @@ class RemoteJobRunner:
         Continuously polls the job status, updating call state and handling
         timeouts, cancellation, and failures. Upon completion, maps results to
         a tensor through the injected ``map_results`` dependency.
-        """
-        from concurrent.futures import CancelledError
 
+        Parameters
+        ----------
+        job : perceval.runtime.RemoteJob
+            Submitted job to poll.
+        state : CallState
+            Per-call state updated with status and job ids, and observed for
+            cooperative cancellation.
+        deadline : float | None
+            Absolute ``time.time()`` deadline, or ``None`` for no timeout.
+        batch_size : int
+            Number of input rows in this chunk, forwarded to ``map_results``.
+        layer : MerlinModule
+            Quantum leaf forwarded to ``map_results`` for output extraction.
+        nsample : int | None
+            Original sample-count request, forwarded to ``map_results``.
+        is_probability : bool
+            Whether the job runs in exact-probability mode. Default value is
+            False.
+
+        Returns
+        -------
+        torch.Tensor
+            The mapped ``[batch_size, ...]`` output tensor.
+
+        Raises
+        ------
+        CancelledError
+            If cancellation is requested or the backend reports a cancel.
+        TimeoutError
+            If ``deadline`` elapses while polling.
+        RemoteJobFailedError
+            If the backend reports the job as failed.
+        RuntimeError
+            If a completed job never yields a dict payload within the bounded
+            re-poll window.
+        """
         _MAX_NON_DICT_RETRIES = 60  # 60 * 0.1s = 6s
         non_dict_retries = 0
         sleep_ms = 50
