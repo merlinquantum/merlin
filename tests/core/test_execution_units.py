@@ -341,9 +341,7 @@ class TestSubmitJob:
         runner = make_runner()
         sampler = FakeSampler()
 
-        job, is_probability = runner.submit_job(
-            sampler, None, "label", lambda base, cmd: f"{base}:{cmd}"
-        )
+        job, is_probability = runner.submit_job(sampler, None, "label")
 
         assert is_probability is True
         assert job is sampler.probs
@@ -355,9 +353,7 @@ class TestSubmitJob:
         runner = make_runner()
         sampler = FakeSampler()
 
-        job, is_probability = runner.submit_job(
-            sampler, 500, "label", lambda base, cmd: f"{base}:{cmd}"
-        )
+        job, is_probability = runner.submit_job(sampler, 500, "label")
 
         assert is_probability is False
         assert job is sampler.sample_count
@@ -368,9 +364,7 @@ class TestSubmitJob:
         runner = make_runner(get_available_commands=lambda: ("samples",))
         sampler = FakeSampler()
 
-        job, is_probability = runner.submit_job(
-            sampler, 100, None, lambda base, cmd: f"{base}:{cmd}"
-        )
+        job, is_probability = runner.submit_job(sampler, 100, None)
 
         assert job is sampler.samples
         assert is_probability is False
@@ -380,9 +374,7 @@ class TestSubmitJob:
         runner = make_runner(get_available_commands=lambda: ())
         sampler = FakeSampler()
 
-        job, _ = runner.submit_job(
-            sampler, None, None, lambda base, cmd: f"{base}:{cmd}"
-        )
+        job, _ = runner.submit_job(sampler, None, None)
 
         assert job is sampler.sample_count
 
@@ -391,7 +383,7 @@ class TestSubmitJob:
         runner = make_runner(effective_sample_count=lambda nsample: 42)
         sampler = FakeSampler()
 
-        runner.submit_job(sampler, 999, None, lambda base, cmd: f"{base}:{cmd}")
+        runner.submit_job(sampler, 999, None)
 
         assert sampler.sample_count.execute_kwargs == {"max_samples": 42}
 
@@ -404,7 +396,7 @@ class TestSubmitJob:
         sampler._iterator = iterator
         sampler.probs._request_data = {"payload": {"iterator": iterator}}
 
-        runner.submit_job(sampler, None, None, lambda base, cmd: f"{base}:{cmd}")
+        runner.submit_job(sampler, None, None)
 
         assert sampler.probs._request_data["payload"]["iterator"] == iterations
 

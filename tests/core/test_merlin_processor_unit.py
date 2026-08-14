@@ -54,7 +54,7 @@ class FakeCommand:
 
 
 class FakeSampler:
-    """Minimal sampler exposing the command attributes used by _submit_job."""
+    """Minimal sampler exposing the command attributes used by RemoteJobRunner.submit_job."""
 
     def __init__(self) -> None:
         self.probs = FakeCommand()
@@ -135,7 +135,7 @@ class FakePerceval12Sampler:
 
 @dataclass
 class FakeStatus:
-    """Small job status object with the fields read by _poll_job."""
+    """Small job status object with the fields read by RemoteJobRunner.poll_job."""
 
     state: str = "SUCCESS"
     progress: float = 1.0
@@ -240,7 +240,7 @@ def make_poll_processor(output: torch.Tensor | None = None) -> MerlinProcessor:
 
 
 def make_state() -> CallState:
-    """Return the typed per-call state expected by _poll_job."""
+    """Return the typed per-call state expected by RemoteJobRunner.poll_job."""
     return CallState.new()
 
 
@@ -703,11 +703,10 @@ def test_session_path_with_empty_commands_and_sampling_only():
 
     assert proc.available_commands == ()
 
-    _, is_probability = proc._submit_job(
+    _, is_probability = proc._make_job_runner().submit_job(
         sampler,
         nsample=None,
         job_base_label="job",
-        _capped_name=lambda base, command: f"{base}:{command}",
     )
     assert proc.session is session
     # Session path does not store remote_processor; only uses it per chunk
@@ -733,11 +732,10 @@ def test_session_path_prefers_probs_when_available():
         proc = MerlinProcessor(session=session)
     sampler = FakeSampler()
 
-    returned_job, is_probability = proc._submit_job(
+    returned_job, is_probability = proc._make_job_runner().submit_job(
         sampler,
         nsample=None,
         job_base_label="job",
-        _capped_name=lambda base, command: f"{base}:{command}",
     )
 
     assert returned_job is sampler.probs
@@ -760,11 +758,10 @@ def test_session_path_uses_sample_count_when_probs_unavailable():
         proc = MerlinProcessor(session=session)
     sampler = FakeSampler()
 
-    returned_job, is_probability = proc._submit_job(
+    returned_job, is_probability = proc._make_job_runner().submit_job(
         sampler,
         nsample=None,
         job_base_label="job",
-        _capped_name=lambda base, command: f"{base}:{command}",
     )
 
     assert returned_job is sampler.sample_count
@@ -790,22 +787,20 @@ def test_session_path_with_probs_and_samples_no_sample_count():
     sampler = FakeSampler()
 
     # Probability request should use probs
-    returned_job, is_probability = proc._submit_job(
+    returned_job, is_probability = proc._make_job_runner().submit_job(
         sampler,
         nsample=None,
         job_base_label="job",
-        _capped_name=lambda base, command: f"{base}:{command}",
     )
     assert returned_job is sampler.probs
     assert is_probability is True
 
     # Reset sampler for sampling request
     sampler = FakeSampler()
-    returned_job, is_probability = proc._submit_job(
+    returned_job, is_probability = proc._make_job_runner().submit_job(
         sampler,
         nsample=10,
         job_base_label="job",
-        _capped_name=lambda base, command: f"{base}:{command}",
     )
     # Should use samples (not sample_count since unavailable)
     assert returned_job is sampler.samples
@@ -825,11 +820,10 @@ def test_session_path_with_sample_count_and_samples_no_probs():
     sampler = FakeSampler()
 
     # Probability request (nsample=None) should use sample_count as fallback
-    returned_job, is_probability = proc._submit_job(
+    returned_job, is_probability = proc._make_job_runner().submit_job(
         sampler,
         nsample=None,
         job_base_label="job",
-        _capped_name=lambda base, command: f"{base}:{command}",
     )
     assert returned_job is sampler.sample_count
     assert is_probability is False  # No probs available
@@ -848,22 +842,20 @@ def test_session_path_with_only_probs():
     sampler = FakeSampler()
 
     # Probability request should use probs
-    returned_job, is_probability = proc._submit_job(
+    returned_job, is_probability = proc._make_job_runner().submit_job(
         sampler,
         nsample=None,
         job_base_label="job",
-        _capped_name=lambda base, command: f"{base}:{command}",
     )
     assert returned_job is sampler.probs
     assert is_probability is True
 
     # Sampling request with only probs defaults to sample_count (unavailable)
     sampler = FakeSampler()
-    returned_job, is_probability = proc._submit_job(
+    returned_job, is_probability = proc._make_job_runner().submit_job(
         sampler,
         nsample=10,
         job_base_label="job",
-        _capped_name=lambda base, command: f"{base}:{command}",
     )
     # Defaults to sample_count since no sampling commands available
     assert returned_job is sampler.sample_count
@@ -883,11 +875,10 @@ def test_session_path_with_only_samples():
     sampler = FakeSampler()
 
     # Sampling request should use samples
-    returned_job, is_probability = proc._submit_job(
+    returned_job, is_probability = proc._make_job_runner().submit_job(
         sampler,
         nsample=10,
         job_base_label="job",
-        _capped_name=lambda base, command: f"{base}:{command}",
     )
     assert returned_job is sampler.samples
     assert is_probability is False
@@ -906,11 +897,10 @@ def test_session_path_with_all_three_commands():
     sampler = FakeSampler()
 
     # Probability request should prefer probs
-    returned_job, is_probability = proc._submit_job(
+    returned_job, is_probability = proc._make_job_runner().submit_job(
         sampler,
         nsample=None,
         job_base_label="job",
-        _capped_name=lambda base, command: f"{base}:{command}",
     )
     assert returned_job is sampler.probs
     assert is_probability is True
@@ -919,11 +909,10 @@ def test_session_path_with_all_three_commands():
 
     # Reset sampler and test sampling request
     sampler = FakeSampler()
-    returned_job, is_probability = proc._submit_job(
+    returned_job, is_probability = proc._make_job_runner().submit_job(
         sampler,
         nsample=25,
         job_base_label="job",
-        _capped_name=lambda base, command: f"{base}:{command}",
     )
     # Should prefer sample_count over samples
     assert returned_job is sampler.sample_count
@@ -943,11 +932,10 @@ def test_session_path_zero_samples_treated_as_probability_request():
         proc = MerlinProcessor(session=session)
     sampler = FakeSampler()
 
-    returned_job, is_probability = proc._submit_job(
+    returned_job, is_probability = proc._make_job_runner().submit_job(
         sampler,
         nsample=0,
         job_base_label="job",
-        _capped_name=lambda base, command: f"{base}:{command}",
     )
 
     assert returned_job is sampler.probs
@@ -1688,11 +1676,10 @@ def test_submit_job_prefers_probs_when_available_without_samples():
     proc = make_processor(["probs", "sample_count"])
     sampler = FakeSampler()
 
-    returned_job, is_probability = proc._submit_job(
+    returned_job, is_probability = proc._make_job_runner().submit_job(
         sampler,
         nsample=None,
         job_base_label="job",
-        _capped_name=lambda base, command: f"{base}:{command}",
     )
 
     assert returned_job is sampler.probs
@@ -1709,11 +1696,10 @@ def test_submit_job_treats_zero_samples_as_exact_probabilities():
     proc = make_processor(["probs", "sample_count"])
     sampler = FakeSampler()
 
-    returned_job, is_probability = proc._submit_job(
+    returned_job, is_probability = proc._make_job_runner().submit_job(
         sampler,
         nsample=0,
         job_base_label="job",
-        _capped_name=lambda base, command: f"{base}:{command}",
     )
 
     assert returned_job is sampler.probs
@@ -1729,11 +1715,10 @@ def test_submit_job_uses_sample_count_when_sampling_requested():
     proc = make_processor(["probs", "sample_count"])
     sampler = FakeSampler()
 
-    returned_job, is_probability = proc._submit_job(
+    returned_job, is_probability = proc._make_job_runner().submit_job(
         sampler,
         nsample=37,
         job_base_label="job",
-        _capped_name=lambda base, command: f"{base}:{command}",
     )
 
     assert returned_job is sampler.sample_count
@@ -1749,11 +1734,10 @@ def test_submit_job_serializes_perceval_12_parameter_iterator_payload():
     proc = make_processor(["sample_count"])
     sampler = FakePerceval12Sampler()
 
-    returned_job, is_probability = proc._submit_job(
+    returned_job, is_probability = proc._make_job_runner().submit_job(
         sampler,
         nsample=37,
         job_base_label="job",
-        _capped_name=lambda base, command: f"{base}:{command}",
     )
 
     assert returned_job is sampler.sample_count
@@ -1770,11 +1754,10 @@ def test_submit_job_falls_back_to_samples_when_sample_count_is_unavailable():
     proc = make_processor(["samples"])
     sampler = FakeSampler()
 
-    returned_job, is_probability = proc._submit_job(
+    returned_job, is_probability = proc._make_job_runner().submit_job(
         sampler,
         nsample=11,
         job_base_label="job",
-        _capped_name=lambda base, command: f"{base}:{command}",
     )
 
     assert returned_job is sampler.samples
@@ -1790,11 +1773,10 @@ def test_submit_job_defaults_to_sample_count_when_commands_are_empty():
     proc = make_processor([])
     sampler = FakeSampler()
 
-    returned_job, is_probability = proc._submit_job(
+    returned_job, is_probability = proc._make_job_runner().submit_job(
         sampler,
         nsample=None,
         job_base_label=None,
-        _capped_name=lambda base, command: f"{base}:{command}",
     )
 
     assert returned_job is sampler.sample_count
@@ -1813,11 +1795,10 @@ def test_submit_job_caps_default_sample_count_to_max_shots_per_call():
     proc.max_shots_per_call = 123
     sampler = FakeSampler()
 
-    returned_job, is_probability = proc._submit_job(
+    returned_job, is_probability = proc._make_job_runner().submit_job(
         sampler,
         nsample=None,
         job_base_label=None,
-        _capped_name=lambda base, command: f"{base}:{command}",
     )
 
     assert returned_job is sampler.sample_count
@@ -1836,7 +1817,7 @@ def test_poll_job_success_processes_dict_payload_and_records_job_id():
     state = make_state()
     layer = object()
 
-    result = proc._poll_job(
+    result = proc._make_job_runner().poll_job(
         job,
         state,
         deadline=None,
@@ -1863,7 +1844,7 @@ def test_poll_job_failed_status_raises_with_stop_message_and_job_id():
     proc._active_jobs.add(job)
 
     with pytest.raises(RuntimeError, match=r"hardware rejected job.*job-failed"):
-        proc._poll_job(job, make_state(), None, 1, object(), None)
+        proc._make_job_runner().poll_job(job, make_state(), None, 1, object(), None)
 
     assert job not in proc._active_jobs
 
@@ -1876,7 +1857,7 @@ def test_poll_job_cancel_request_cancels_remote_job():
     state.request_cancel()
 
     with pytest.raises(CancelledError, match=r"Remote call was cancelled"):
-        proc._poll_job(job, state, None, 1, object(), None)
+        proc._make_job_runner().poll_job(job, state, None, 1, object(), None)
 
     assert job.cancelled is True
 
@@ -1887,7 +1868,9 @@ def test_poll_job_timeout_cancels_remote_job():
     job = FakeJob(is_complete=False)
 
     with pytest.raises(TimeoutError, match=r"remote cancel issued"):
-        proc._poll_job(job, make_state(), time.time() - 1.0, 1, object(), None)
+        proc._make_job_runner().poll_job(
+            job, make_state(), time.time() - 1.0, 1, object(), None
+        )
 
     assert job.cancelled is True
 
@@ -1903,7 +1886,7 @@ def test_poll_job_cancel_requested_stop_message_raises_cancelled_error():
     proc._active_jobs.add(job)
 
     with pytest.raises(CancelledError, match=r"Remote call was cancelled"):
-        proc._poll_job(job, make_state(), None, 1, object(), None)
+        proc._make_job_runner().poll_job(job, make_state(), None, 1, object(), None)
 
     assert job not in proc._active_jobs
 
@@ -1915,7 +1898,7 @@ def test_poll_job_cancel_requested_get_results_exception_raises_cancelled_error(
     proc._active_jobs.add(job)
 
     with pytest.raises(CancelledError, match=r"Remote call was cancelled"):
-        proc._poll_job(job, make_state(), None, 1, object(), None)
+        proc._make_job_runner().poll_job(job, make_state(), None, 1, object(), None)
 
     assert job not in proc._active_jobs
 
@@ -1933,7 +1916,9 @@ def test_poll_job_retries_when_results_are_not_available(monkeypatch):
         ]
     )
 
-    result = proc._poll_job(job, make_state(), None, 1, object(), None)
+    result = proc._make_job_runner().poll_job(
+        job, make_state(), None, 1, object(), None
+    )
 
     assert torch.equal(result, output)
     assert job.get_results_calls == 2
@@ -1947,7 +1932,7 @@ def test_poll_job_retries_complete_non_dict_payloads_then_fails(monkeypatch):
     proc._active_jobs.add(job)
 
     with pytest.raises(RuntimeError, match=r"not a dict after 60 re-polls"):
-        proc._poll_job(job, make_state(), None, 1, object(), None)
+        proc._make_job_runner().poll_job(job, make_state(), None, 1, object(), None)
 
     assert job.get_results_calls == 60
     assert job not in proc._active_jobs

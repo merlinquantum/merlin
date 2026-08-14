@@ -1443,102 +1443,14 @@ class MerlinProcessor:
             raw_results, batch_size, layer, nsample, is_probability
         )
 
-    def _submit_job(self, sampler, nsample, job_base_label, _capped_name):
-        """Submit a job to the sampler, selecting command based on backend capabilities.
-
-        **Command Selection Strategy**
-
-        The processor selects which Perceval sampler command to use based on:
-
-        1. **Exact Probabilities** (``"probs"`` command):
-           - Used if backend exposes ``"probs"`` AND (``nsample`` is None or ``nsample <= 0``).
-           - Returns normalized probability distribution.
-           - ``nsample`` parameter is ignored.
-
-        2. **Sampling** (``"sample_count"`` or ``"samples"`` commands):
-           - Used if exact probabilities are not available or ``nsample > 0``.
-           - Tries ``"sample_count"`` first, falls back to ``"samples"``.
-           - Number of samples = ``nsample`` if provided, else
-             ``min(DEFAULT_SHOTS_PER_CALL, max_shots_per_call)``.
-
-        Parameters
-        ----------
-        sampler : Sampler
-            Perceval Sampler instance configured with circuit and iterations.
-        nsample : int | None
-            Number of samples requested. If ``None`` or ``<= 0``, triggers
-            exact probability computation (if available).
-        job_base_label : str | None
-            Base label for the remote job name.
-        _capped_name : callable
-            Function to cap and format job names.
-
-        Returns
-        -------
-        tuple[RemoteJob, bool]
-            - **RemoteJob**: The submitted job handle.
-            - **bool**: ``is_probability`` flag indicating execution mode:
-              ``True`` if using exact probabilities, ``False`` if sampling.
-        """
-        return self._make_job_runner().submit_job(
-            sampler, nsample, job_base_label, _capped_name
-        )
-
-    def _poll_job(
-        self,
-        job: RemoteJob,
-        state: CallState,
-        deadline: float | None,
-        batch_size: int,
-        layer: MerlinModule,
-        nsample: int | None,
-        is_probability: bool = False,
-    ) -> torch.Tensor:
-        """Poll a submitted job until complete/failed/timeout and return results.
-
-        Continuously polls the job status, updating state and handling timeouts,
-        cancellation, and failures. Upon completion, processes results according
-        to the execution mode (probabilities vs. samples) and normalizes to a
-        ``torch.Tensor``.
-
-        Parameters
-        ----------
-        job : RemoteJob
-            Submitted Perceval job to poll.
-        state : CallState
-            Typed per-call state tracking cancellation, chunks, job IDs, etc.
-        deadline : float | None
-            Absolute time (seconds) when execution should timeout.
-        batch_size : int
-            Number of inputs in the current chunk.
-        layer : MerlinModule
-            Reference to the quantum layer (used for output extraction).
-        nsample : int | None
-            Original sample count request (for logging/context only).
-        is_probability : bool
-            If ``True``, job is in exact probability mode; results are normalized.
-            If ``False``, job is in sampling mode; results are normalized from counts.
-            Default: False.
-
-        Returns
-        -------
-        torch.Tensor
-            Normalized output tensor ``[batch_size, ...]`` extracted and formatted
-            from the remote job results. Probability vs. sample interpretation is
-            determined by ``is_probability``.
-        """
-        return self._make_job_runner().poll_job(
-            job, state, deadline, batch_size, layer, nsample, is_probability
-        )
-
     # ---------------- Per-call RP pool helpers ----------------
 
     def _create_fresh_rp(self) -> RemoteProcessor:
         """Build a fresh RemoteProcessor for each chunk/attempt.
 
         Creates a new, independent RemoteProcessor to ensure thread-safe execution
-        per chunk. Used in conjunction with :meth:`_submit_job` and :meth:`_poll_job`
-        to determine whether to use exact probabilities or sampling.
+        per chunk. Consumed by :class:`~merlin.core.execution.RemoteJobRunner`,
+        which submits and polls the job for exact probabilities or sampling.
 
         **Dual-Path Strategy**
 
@@ -1551,7 +1463,8 @@ class MerlinProcessor:
         The fresh RP is then passed to ``Sampler`` to submit jobs with backend
         capabilities already extracted in ``backend_capabilities``. Backend commands
         (``"probs"`` vs. ``"sample_count"``/``"samples"``) are selected during
-        :meth:`_submit_job` based on ``nsample`` and available capabilities.
+        :meth:`~merlin.core.execution.RemoteJobRunner.submit_job` based on
+        ``nsample`` and available capabilities.
 
         Returns
         -------
@@ -1630,7 +1543,9 @@ class MerlinProcessor:
         ----------
         is_probability : bool
             Whether results are probabilities (True) or sample counts (False).
-            This is determined at submit time in _submit_job to avoid recalculation.
+            Determined at submit time by
+            :meth:`~merlin.core.execution.RemoteJobRunner.submit_job` to avoid
+            recalculation.
         """
         if raw_results is None:
             raise RuntimeError(

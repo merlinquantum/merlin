@@ -34,6 +34,8 @@ from perceval.runtime import RemoteJob, RemoteProcessor
 from .perceval_adapter import PercevalAdapter, RemoteJobFailedError
 
 if TYPE_CHECKING:
+    from perceval.algorithm import Sampler
+
     from ..algorithms.module import MerlinModule
     from .merlin_processor import CallState, ValidatedLayerConfig
 
@@ -263,9 +265,7 @@ class RemoteJobRunner:
 
             job = None
             try:
-                job, is_probability = self.submit_job(
-                    sampler, nsample, job_base_label, self._capped_name
-                )
+                job, is_probability = self.submit_job(sampler, nsample, job_base_label)
                 self._register_job(job)
 
                 return self.poll_job(
@@ -302,7 +302,12 @@ class RemoteJobRunner:
             return h[: self._job_name_max]
         return name[:keep] + "~" + h
 
-    def submit_job(self, sampler, nsample, job_base_label, capped_name):
+    def submit_job(
+        self,
+        sampler: Sampler,
+        nsample: int | None,
+        job_base_label: str | None,
+    ) -> tuple[RemoteJob, bool]:
         """Submit a job to the sampler, selecting command based on backend capabilities.
 
         **Command Selection Strategy**
@@ -316,17 +321,17 @@ class RemoteJobRunner:
            - Tries ``"sample_count"`` first, falls back to ``"samples"``.
            - Number of samples = ``effective_sample_count(nsample)``.
 
+        Job names are sanitized and capped through :meth:`_capped_name`.
+
         Parameters
         ----------
-        sampler : Sampler
+        sampler : perceval.algorithm.Sampler
             Perceval Sampler instance configured with circuit and iterations.
         nsample : int | None
             Number of samples requested. If ``None`` or ``<= 0``, triggers
             exact probability computation (if available).
         job_base_label : str | None
-            Base label for the remote job name.
-        capped_name : callable
-            Function to cap and format job names.
+            Base label for the remote job name, or ``None`` to leave it unset.
 
         Returns
         -------
@@ -350,7 +355,7 @@ class RemoteJobRunner:
                 cmd = "sample_count"
             max_samples = self._effective_sample_count(nsample)
 
-        name = capped_name(job_base_label, cmd) if job_base_label else None
+        name = self._capped_name(job_base_label, cmd) if job_base_label else None
         job = PercevalAdapter.submit_async(
             sampler, cmd, name=name, max_samples=max_samples
         )
