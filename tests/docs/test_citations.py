@@ -37,3 +37,20 @@ def test_unregistered_reproduction_pages_ignores_template_and_other_docs():
         "user_guide/index",
     }
     assert mc._unregistered_reproduction_pages(registry, found) == []
+
+
+def test_duplicate_keys_reported_once_and_sorted():
+    """Repeated registry keys are reported once each, sorted."""
+    registry = [
+        {"key": "a"},
+        {"key": "b"},
+        {"key": "a"},
+        {"key": "b"},
+        {"key": "c"},
+    ]
+    assert mc._duplicate_keys(registry) == ["a", "b"]
+
+
+def test_duplicate_keys_empty_when_unique():
+    """Unique keys yield no duplicates."""
+    assert mc._duplicate_keys([{"key": "a"}, {"key": "b"}]) == []

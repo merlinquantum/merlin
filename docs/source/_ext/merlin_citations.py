@@ -40,6 +40,12 @@ _CITATIONS_FILE = "citations.json"
 _REPRODUCTIONS_PREFIX = "reproduced_papers/reproductions/"
 
 
+def _duplicate_keys(registry: list[dict[str, Any]]) -> list[str]:
+    """Return registry keys that appear more than once, sorted."""
+    keys = [entry["key"] for entry in registry]
+    return sorted({key for key in keys if keys.count(key) > 1})
+
+
 def _unregistered_reproduction_pages(
     registry: list[dict[str, Any]], found_docs: Iterable[str]
 ) -> list[str]:
@@ -140,6 +146,9 @@ def _load_citation_data(
                 f"'{_CITATIONS_FILE}'. Run docs/fetch_citations.py, or mark "
                 'the registry entry with "not_indexed": true.'
             )
+
+    if duplicates := _duplicate_keys(registry):
+        raise directive.error(f"'{_REGISTRY_FILE}' has duplicate keys: {duplicates}.")
     return registry, citations
 
 

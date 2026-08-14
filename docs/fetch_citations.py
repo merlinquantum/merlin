@@ -72,6 +72,11 @@ def load_registry() -> list[dict[str, Any]]:
                 f"Registry entry #{index} must be an object with "
                 f"non-empty 'key' and 'doi' fields (got: {entry!r})."
             )
+
+    keys = [entry["key"] for entry in entries]
+    duplicates = sorted({key for key in keys if keys.count(key) > 1})
+    if duplicates:
+        sys.exit(f"Registry {REGISTRY_PATH} has duplicate keys: {duplicates}.")
     return entries
 
 
