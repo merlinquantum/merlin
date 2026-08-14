@@ -284,7 +284,10 @@ class MeasurementStrategy(metaclass=_MeasurementStrategyMeta):
         occupancy readout.
     occupancy_readout : bool
         Whether probability outputs are collapsed to binary occupied/unoccupied
-        output keys. Default value is ``False``.
+        output keys. The collapse preserves the input probability mass for raw
+        tensor outputs without renormalizing. When ``return_object=True``, the
+        resulting ``ProbabilityDistribution`` normalizes on construction by
+        design. Default value is ``False``.
     """
 
     type: MeasurementKind
@@ -323,7 +326,9 @@ class MeasurementStrategy(metaclass=_MeasurementStrategyMeta):
             the distribution has (e.g. after photon loss or lossy
             detectors) instead of rescaling it back to 1 — consistent with
             the rest of this probability-output path, which never
-            renormalizes either.
+            renormalizes either. This applies to raw tensor outputs; when
+            ``return_object=True``, the resulting ``ProbabilityDistribution``
+            normalizes on construction by design.
 
         Returns
         -------

@@ -37,29 +37,6 @@ import torch
 from merlin.measurement.readouts import _OccupancyReadout
 
 
-def _column_sum_reference(
-    output_keys: list[tuple[int, ...]],
-    probabilities: torch.Tensor,
-) -> torch.Tensor:
-    """Mass-preserving reference: group by occupancy key, no renormalization."""
-    occupancy_keys = [
-        tuple(1 if count > 0 else 0 for count in key) for key in output_keys
-    ]
-    grouped_keys = tuple(sorted(set(occupancy_keys)))
-    key_to_group = {key: index for index, key in enumerate(grouped_keys)}
-    group_indices = torch.tensor(
-        [key_to_group[key] for key in occupancy_keys],
-        dtype=torch.long,
-    )
-    grouped = torch.zeros(
-        probabilities.shape[0],
-        len(grouped_keys),
-        dtype=probabilities.dtype,
-    )
-    grouped.index_add_(1, group_indices, probabilities)
-    return grouped
-
-
 class TestOccupancyReadoutMassPreservation:
     def test_lossy_input_mass_is_preserved_not_renormalized(self):
         """Grouped probabilities should keep whatever total mass was present.
@@ -93,9 +70,12 @@ class TestOccupancyReadoutMassPreservation:
         ])
 
         grouped = readout(probabilities)
-        reference = _column_sum_reference(output_keys, probabilities)
+        expected = torch.tensor([
+            [0.10, 0.05, 0.35],
+            [0.02, 0.04, 0.04],
+        ])
 
-        assert torch.allclose(grouped, reference, atol=1e-6)
+        assert torch.allclose(grouped, expected, atol=1e-6)
 
     def test_fully_normalized_input_still_sums_to_one(self):
         """Sanity check: mass-preserving grouping of a normalized input stays normalized."""
