@@ -318,7 +318,12 @@ class MeasurementStrategy(metaclass=_MeasurementStrategyMeta):
             Whether to collapse count-resolved Fock output keys into binary
             occupied/unoccupied keys before returning probabilities. Only
             supported with ``ComputationSpace.FOCK``. Default value is
-            ``False``.
+            ``False``. The collapse sums grouped probabilities without
+            renormalizing, so it preserves whatever total probability mass
+            the distribution has (e.g. after photon loss or lossy
+            detectors) instead of rescaling it back to 1 — consistent with
+            the rest of this probability-output path, which never
+            renormalizes either.
 
         Returns
         -------
