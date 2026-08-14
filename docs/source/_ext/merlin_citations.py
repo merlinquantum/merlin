@@ -25,11 +25,11 @@ loudly instead of rendering stale or partial numbers.
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable
 from html import escape
 from pathlib import Path
 from typing import Any
 
+from citation_registry import duplicate_keys, unregistered_reproduction_pages
 from docutils import nodes
 from docutils.parsers.rst import Directive
 from sphinx.errors import NoUri
@@ -37,26 +37,6 @@ from sphinx.errors import NoUri
 _DATA_DIR = "_data/citations"
 _REGISTRY_FILE = "papers.json"
 _CITATIONS_FILE = "citations.json"
-_REPRODUCTIONS_PREFIX = "reproduced_papers/reproductions/"
-
-
-def _duplicate_keys(registry: list[dict[str, Any]]) -> list[str]:
-    """Return registry keys that appear more than once, sorted."""
-    keys = [entry["key"] for entry in registry]
-    return sorted({key for key in keys if keys.count(key) > 1})
-
-
-def _unregistered_reproduction_pages(
-    registry: list[dict[str, Any]], found_docs: Iterable[str]
-) -> list[str]:
-    """Return reproduction pages that exist but are absent from the registry."""
-    registered = {entry["doc"] for entry in registry}
-    expected = {
-        doc
-        for doc in found_docs
-        if doc.startswith(_REPRODUCTIONS_PREFIX) and not doc.endswith("/template")
-    }
-    return sorted(expected - registered)
 
 
 class MerlinCitationsSummaryNode(nodes.General, nodes.Element):
@@ -147,7 +127,7 @@ def _load_citation_data(
                 'the registry entry with "not_indexed": true.'
             )
 
-    if duplicates := _duplicate_keys(registry):
+    if duplicates := duplicate_keys(registry):
         raise directive.error(f"'{_REGISTRY_FILE}' has duplicate keys: {duplicates}.")
     return registry, citations
 
@@ -188,7 +168,7 @@ class MerlinCitationsTableDirective(Directive):
         env = self.state.document.settings.env
         registry, citations = _load_citation_data(self)
 
-        unregistered = _unregistered_reproduction_pages(registry, env.found_docs)
+        unregistered = unregistered_reproduction_pages(registry, env.found_docs)
         if unregistered:
             raise self.error(
                 f"Reproduction pages missing from '{_REGISTRY_FILE}': {unregistered}."

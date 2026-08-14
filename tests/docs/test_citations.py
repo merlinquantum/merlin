@@ -1,7 +1,9 @@
 """Unit tests for the citation-docs validation helpers.
 
-The helpers live in the Sphinx extension at ``docs/source/_ext``, which is not
-an installed package, so we add that directory to ``sys.path`` before importing.
+The helpers live under ``docs/`` (the Sphinx ``_ext`` dir and the fetch
+script), which is not an installed package, so we add those directories to
+``sys.path`` before importing. Both modules are import-light (no docutils/sphinx
+dependency), so these tests run without the docs toolchain installed.
 """
 
 import sys
@@ -14,8 +16,8 @@ for _path in (_REPO / "docs" / "source" / "_ext", _REPO / "docs"):
     if str(_path) not in sys.path:
         sys.path.insert(0, str(_path))
 
+import citation_registry as cr  # noqa: E402
 import fetch_citations as fc  # noqa: E402
-import merlin_citations as mc  # noqa: E402
 
 
 def test_unregistered_reproduction_pages_flags_unlisted_page():
@@ -27,7 +29,7 @@ def test_unregistered_reproduction_pages_flags_unlisted_page():
         "reproduced_papers/reproductions/template",
         "index",
     }
-    assert mc._unregistered_reproduction_pages(registry, found) == [
+    assert cr.unregistered_reproduction_pages(registry, found) == [
         "reproduced_papers/reproductions/bar"
     ]
 
@@ -40,7 +42,7 @@ def test_unregistered_reproduction_pages_ignores_template_and_other_docs():
         "reproduced_papers/reproductions/template",
         "user_guide/index",
     }
-    assert mc._unregistered_reproduction_pages(registry, found) == []
+    assert cr.unregistered_reproduction_pages(registry, found) == []
 
 
 def test_duplicate_keys_reported_once_and_sorted():
@@ -52,12 +54,12 @@ def test_duplicate_keys_reported_once_and_sorted():
         {"key": "b"},
         {"key": "c"},
     ]
-    assert mc._duplicate_keys(registry) == ["a", "b"]
+    assert cr.duplicate_keys(registry) == ["a", "b"]
 
 
 def test_duplicate_keys_empty_when_unique():
     """Unique keys yield no duplicates."""
-    assert mc._duplicate_keys([{"key": "a"}, {"key": "b"}]) == []
+    assert cr.duplicate_keys([{"key": "a"}, {"key": "b"}]) == []
 
 
 def test_extract_counts_reads_valid_record():
