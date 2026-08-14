@@ -53,8 +53,11 @@ class BatchChunker:
         and returning a ``torch.Tensor``. Injected so chunk orchestration is
         testable with fakes and so monkeypatched processor methods stay
         observable.
-    chunk_concurrency : int
-        Maximum number of chunk jobs in flight at once.
+    get_chunk_concurrency : Callable[[], int]
+        Returns the maximum number of chunk jobs allowed in flight at once. Read
+        once per scheduling pass (rather than captured at construction) so a
+        mid-call change to the processor's ``chunk_concurrency`` takes effect,
+        matching the pre-extraction loop.
     cancel_all : Callable[[], None]
         Invoked when the deadline elapses so in-flight remote jobs are
         cancelled best-effort before raising ``TimeoutError``.
@@ -64,16 +67,40 @@ class BatchChunker:
         self,
         *,
         run_chunk: Callable[..., torch.Tensor],
-        chunk_concurrency: int,
+        get_chunk_concurrency: Callable[[], int],
         cancel_all: Callable[[], None],
     ) -> None:
         self._run_chunk = run_chunk
-        self._chunk_concurrency = max(1, int(chunk_concurrency))
+        self._get_chunk_concurrency = get_chunk_concurrency
         self._cancel_all = cancel_all
 
     @staticmethod
     def split_batch(batch_size: int, microbatch_size: int) -> list[tuple[int, int]]:
-        """Split ``batch_size`` rows into ``[start, end)`` microbatch chunks."""
+        """Split ``batch_size`` rows into ``[start, end)`` microbatch chunks.
+
+        Parameters
+        ----------
+        batch_size : int
+            Total number of rows to split.
+        microbatch_size : int
+            Maximum number of rows per chunk. Must be strictly positive.
+
+        Returns
+        -------
+        list[tuple[int, int]]
+            ``[start, end)`` half-open index ranges covering all ``batch_size``
+            rows in order.
+
+        Raises
+        ------
+        ValueError
+            If ``microbatch_size`` is not strictly positive. A non-positive size
+            would never advance the split and loop forever.
+        """
+        if microbatch_size <= 0:
+            raise ValueError(
+                f"microbatch_size must be strictly positive, got {microbatch_size}."
+            )
         chunks: list[tuple[int, int]] = []
         start = 0
         while start < batch_size:
@@ -122,7 +149,8 @@ class BatchChunker:
         idx = 0
         futures: list[threading.Thread] = []
         while idx < len(chunks) or in_flight > 0:
-            while idx < len(chunks) and in_flight < self._chunk_concurrency:
+            concurrency = max(1, int(self._get_chunk_concurrency()))
+            while idx < len(chunks) and in_flight < concurrency:
                 s, e = chunks[idx]
                 state.mark_chunk_started()
                 th = threading.Thread(target=_call, args=(s, e, idx), daemon=True)
@@ -158,6 +186,10 @@ class RemoteJobRunner:
         Factory returning a fresh, independent RemoteProcessor per attempt.
     get_available_commands : Callable[[], tuple[str, ...]]
         Returns the backend command snapshot driving probs-vs-sampling.
+    extract_input_params : Callable[[ValidatedLayerConfig], list[str]]
+        Returns the ordered circuit-parameter names that receive model inputs.
+        Injected (rather than reading ``config.input_param_order`` directly) so
+        the remote and local paths share the single param-routing seam.
     effective_sample_count : Callable[[int | None], int]
         Maps a requested ``nsample`` to the capped shot count to submit.
     get_max_shots_per_call : Callable[[], int | None]
@@ -185,6 +217,7 @@ class RemoteJobRunner:
         *,
         create_processor: Callable[[], RemoteProcessor],
         get_available_commands: Callable[[], tuple[str, ...]],
+        extract_input_params: Callable[[ValidatedLayerConfig], list[str]],
         effective_sample_count: Callable[[int | None], int],
         get_max_shots_per_call: Callable[[], int | None],
         default_shots_per_call: int,
@@ -197,6 +230,7 @@ class RemoteJobRunner:
     ) -> None:
         self._create_processor = create_processor
         self._get_available_commands = get_available_commands
+        self._extract_input_params = extract_input_params
         self._effective_sample_count = effective_sample_count
         self._get_max_shots_per_call = get_max_shots_per_call
         self._default_shots_per_call = default_shots_per_call
@@ -228,7 +262,7 @@ class RemoteJobRunner:
                 "Please report this bug."
             )
 
-        input_param_names = list(config.input_param_order)
+        input_param_names = self._extract_input_params(config)
         input_np = input_chunk.detach().cpu().numpy()
 
         # Pre-compute iteration params (cheap, only done once).

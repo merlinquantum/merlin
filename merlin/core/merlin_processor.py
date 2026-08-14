@@ -1235,7 +1235,7 @@ class MerlinProcessor:
         """
         return BatchChunker(
             run_chunk=self._run_chunk,
-            chunk_concurrency=self.chunk_concurrency,
+            get_chunk_concurrency=lambda: self.chunk_concurrency,
             cancel_all=self.cancel_all,
         )
 
@@ -1250,6 +1250,7 @@ class MerlinProcessor:
         return RemoteJobRunner(
             create_processor=self._create_fresh_rp,
             get_available_commands=lambda: self.available_commands,
+            extract_input_params=self._extract_input_params,
             effective_sample_count=self._effective_sample_count,
             get_max_shots_per_call=lambda: self.max_shots_per_call,
             default_shots_per_call=self.DEFAULT_SHOTS_PER_CALL,

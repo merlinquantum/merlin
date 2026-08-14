@@ -100,6 +100,7 @@ def make_runner(**overrides) -> RemoteJobRunner:
     deps = {
         "create_processor": MagicMock(name="create_processor"),
         "get_available_commands": lambda: ("probs", "sample_count", "samples"),
+        "extract_input_params": lambda config: list(config.input_param_order),
         "effective_sample_count": lambda nsample: (
             10_000 if nsample is None else int(nsample)
         ),
@@ -145,6 +146,11 @@ class TestSplitBatch:
         """An empty batch produces no chunks."""
         assert BatchChunker.split_batch(0, 32) == []
 
+    def test_nonpositive_microbatch_size_is_rejected(self):
+        """A non-positive microbatch size raises instead of looping forever."""
+        with pytest.raises(ValueError, match="strictly positive"):
+            BatchChunker.split_batch(4, 0)
+
 
 class TestBatchChunkerRunChunks:
     def test_outputs_are_stitched_in_chunk_order(self):
@@ -156,7 +162,7 @@ class TestBatchChunkerRunChunks:
             return chunk.clone()
 
         chunker = BatchChunker(
-            run_chunk=run_chunk, chunk_concurrency=4, cancel_all=MagicMock()
+            run_chunk=run_chunk, get_chunk_concurrency=lambda: 4, cancel_all=MagicMock()
         )
         input_tensor = torch.arange(8, dtype=torch.float32).reshape(4, 2)
 
@@ -189,7 +195,7 @@ class TestBatchChunkerRunChunks:
             return torch.ones(chunk.shape[0], 1)
 
         chunker = BatchChunker(
-            run_chunk=run_chunk, chunk_concurrency=2, cancel_all=MagicMock()
+            run_chunk=run_chunk, get_chunk_concurrency=lambda: 2, cancel_all=MagicMock()
         )
 
         chunker.run_chunks(
@@ -213,7 +219,7 @@ class TestBatchChunkerRunChunks:
             return torch.ones(chunk.shape[0], 1)
 
         chunker = BatchChunker(
-            run_chunk=run_chunk, chunk_concurrency=1, cancel_all=MagicMock()
+            run_chunk=run_chunk, get_chunk_concurrency=lambda: 1, cancel_all=MagicMock()
         )
         state = CallState.new()
         layer = SimpleNamespace(name="qlayer")
@@ -239,7 +245,7 @@ class TestBatchChunkerRunChunks:
 
         chunker = BatchChunker(
             run_chunk=lambda *a, **k: torch.ones(1, 1),
-            chunk_concurrency=2,
+            get_chunk_concurrency=lambda: 2,
             cancel_all=MagicMock(),
         )
 
@@ -266,7 +272,7 @@ class TestBatchChunkerRunChunks:
             return torch.ones(chunk.shape[0], 1)
 
         chunker = BatchChunker(
-            run_chunk=run_chunk, chunk_concurrency=1, cancel_all=MagicMock()
+            run_chunk=run_chunk, get_chunk_concurrency=lambda: 1, cancel_all=MagicMock()
         )
 
         with pytest.raises(RuntimeError, match="chunk exploded"):
@@ -290,7 +296,7 @@ class TestBatchChunkerRunChunks:
             return torch.ones(chunk.shape[0], 1)
 
         chunker = BatchChunker(
-            run_chunk=run_chunk, chunk_concurrency=1, cancel_all=cancel_all
+            run_chunk=run_chunk, get_chunk_concurrency=lambda: 1, cancel_all=cancel_all
         )
 
         try:
@@ -313,7 +319,7 @@ class TestBatchChunkerRunChunks:
         """A non-positive concurrency setting still runs chunks serially."""
         chunker = BatchChunker(
             run_chunk=lambda *a, **k: torch.ones(1, 1),
-            chunk_concurrency=0,
+            get_chunk_concurrency=lambda: 0,
             cancel_all=MagicMock(),
         )
 
@@ -466,6 +472,30 @@ class TestRunChunk:
         rp.set_circuit.assert_called_once()
         rp.with_input.assert_called_once()
         rp.min_detected_photons_filter.assert_called_once_with(1)
+
+    def test_iteration_params_come_from_injected_extractor(self):
+        """run_chunk routes param ordering through the injected seam, not config."""
+        raw_results = {"results_list": [{"results": {"|1,0>": 1.0}}]}
+        job = FakeJob(result_events=[raw_results])
+        sampler = FakeSampler()
+        sampler.probs = FakeCommand(job=job)
+        extractor = MagicMock(return_value=["theta_0", "theta_1"])
+        runner = make_runner(extract_input_params=extractor)
+        config = make_chunk_config()
+
+        with patch.object(perceval_adapter_module, "Sampler", return_value=sampler):
+            runner.run_chunk(
+                object(),
+                config,
+                torch.tensor([[1.0, 2.0]]),
+                None,
+                CallState.new(),
+                None,
+                job_base_label="label",
+            )
+
+        extractor.assert_called_once_with(config)
+        assert sampler.iterations == [{"theta_0": 1.0, "theta_1": 2.0}]
 
     def test_fresh_processor_and_retry_on_failure(self, monkeypatch):
         """Each retry builds a fresh processor; success on a later attempt wins."""
