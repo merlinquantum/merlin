@@ -20,7 +20,6 @@ from ..algorithms.module import MerlinModule
 from ..utils.combinadics import Combinadics
 from .execution import BatchChunker, RemoteJobRunner
 from .perceval_adapter import (
-    LOCAL_EXPERIMENT_SNAPSHOT_ATTR,
     LocalExperimentSnapshot,
     PercevalAdapter,
     TokenExtractionError,
@@ -1305,7 +1304,9 @@ class MerlinProcessor:
             job_base_label=job_base_label,
         )
 
-    def _create_fresh_local_processor(self) -> AProcessor:
+    def _create_fresh_local_processor(
+        self,
+    ) -> tuple[AProcessor, LocalExperimentSnapshot]:
         """Create an isolated local Perceval processor for one execution.
 
         Delegates to :meth:`PercevalAdapter.rebuild_local_processor`, which
@@ -1314,9 +1315,10 @@ class MerlinProcessor:
 
         Returns
         -------
-        AProcessor
-            Fresh local processor with copied non-circuit experiment state and
-            a fresh backend instance.
+        tuple[AProcessor, LocalExperimentSnapshot]
+            Fresh local processor (copied non-circuit experiment state and a
+            fresh backend instance) and the experiment snapshot to restore after
+            the execution circuit is installed.
 
         Raises
         ------
@@ -1403,15 +1405,11 @@ class MerlinProcessor:
                 )
             iteration_params.append(circuit_params)
 
-        processor = self._create_fresh_local_processor()
-        PercevalAdapter.configure_processor(
-            processor, PercevalAdapter.copy_circuit(config.circuit), None
+        processor, experiment_snapshot = self._create_fresh_local_processor()
+        PercevalAdapter.set_circuit(
+            processor, PercevalAdapter.copy_circuit(config.circuit)
         )
-        experiment_snapshot = getattr(processor, LOCAL_EXPERIMENT_SNAPSHOT_ATTR, None)
-        if isinstance(experiment_snapshot, LocalExperimentSnapshot):
-            PercevalAdapter.restore_experiment(
-                processor.experiment, experiment_snapshot
-            )
+        PercevalAdapter.restore_experiment(processor.experiment, experiment_snapshot)
         PercevalAdapter.set_input(processor, config.input_state)
 
         sampler = PercevalAdapter.create_sampler(

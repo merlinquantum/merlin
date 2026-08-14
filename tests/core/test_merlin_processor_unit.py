@@ -253,6 +253,21 @@ def make_local_chunk_config() -> SimpleNamespace:
     )
 
 
+def make_empty_local_snapshot() -> perceval_adapter_module.LocalExperimentSnapshot:
+    """Return a metadata-free snapshot whose restore is a safe no-op on mocks."""
+    return perceval_adapter_module.LocalExperimentSnapshot(
+        circuit_size=0,
+        in_ports=(),
+        out_ports=(),
+        detectors=(),
+        detectors_injected=(),
+        in_mode_type=(),
+        out_mode_type=(),
+        anon_herald_num=0,
+        postselection=pcvl.PostSelect(),
+    )
+
+
 def make_local_chunk_processor(available_commands: list[str]) -> MerlinProcessor:
     """Build a processor configured for local chunk execution tests."""
     proc = make_processor(available_commands)
@@ -260,7 +275,7 @@ def make_local_chunk_processor(available_commands: list[str]) -> MerlinProcessor
     proc.processor = MagicMock(name="original_processor")
     proc.local_execution_processor = MagicMock(name="local_execution_processor")
     proc._create_fresh_local_processor = MagicMock(
-        return_value=proc.local_execution_processor
+        return_value=(proc.local_execution_processor, make_empty_local_snapshot())
     )
     proc._process_batch_results = MagicMock(return_value=torch.tensor([[1.0]]))
     return proc
@@ -1344,7 +1359,7 @@ def test_create_fresh_local_processor_does_not_share_experiment_state():
     original_processor.with_input(pcvl.BasicState([1, 0]))
     proc = MerlinProcessor(processor=original_processor)
 
-    execution_processor = proc._create_fresh_local_processor()
+    execution_processor, _ = proc._create_fresh_local_processor()
     execution_processor.set_circuit(pcvl.Circuit(4))
     execution_processor.with_input(pcvl.BasicState([0, 1, 0, 0]))
 

@@ -29,14 +29,15 @@ from perceval.runtime.session import ISession
 
 logger = logging.getLogger(__name__)
 
-#: Attribute name used to carry a local experiment snapshot on a rebuilt
-#: processor between :meth:`PercevalAdapter.rebuild_local_processor` and
-#: :meth:`PercevalAdapter.restore_experiment`.
-LOCAL_EXPERIMENT_SNAPSHOT_ATTR = "_merlin_local_experiment_metadata"
-
 
 class TokenExtractionError(ValueError):
-    """Raised when no auth token can be resolved for a RemoteProcessor.
+    """Signals that no auth token could be resolved for a RemoteProcessor.
+
+    Raised by *callers* of :meth:`PercevalAdapter.extract_token` when it returns
+    ``None`` (see ``MerlinProcessor.__init__``). ``extract_token`` itself returns
+    ``None`` rather than raising, so its multi-strategy fallback (handler token,
+    Bearer header, global ``RemoteConfig``) can run to completion before the
+    caller decides the token is genuinely unresolvable.
 
     Subclasses ``ValueError`` so existing callers catching the historical
     exception type keep working.
@@ -125,6 +126,16 @@ class PercevalAdapter:
         -------
         str | None
             The resolved token, or ``None`` if every strategy fails.
+
+        Notes
+        -----
+        ``get_rpc_handler()`` is wrapped defensively here — unlike in
+        :meth:`get_url` — precisely because this method has a downstream
+        fallback: if the handler is unavailable it can still resolve a token from
+        the global ``RemoteConfig``. Swallowing the handler error is therefore
+        part of the control flow, not error hiding; a genuinely unresolvable
+        token surfaces as ``None`` (which the caller turns into a
+        :class:`TokenExtractionError`).
         """
         try:
             handler = rp.get_rpc_handler()
@@ -171,7 +182,16 @@ class PercevalAdapter:
         str | None
             The handler URL, or ``None`` when the handler has no ``url``
             attribute.
+
+        Notes
+        -----
+        ``get_rpc_handler()`` is intentionally left unguarded here — unlike in
+        :meth:`extract_token` — because this method has no fallback. A broken
+        handler should fail fast at the real fault rather than yield ``url=None``
+        and a silently misconfigured clone downstream in
+        :meth:`clone_remote_processor`.
         """
+        # Intentionally unguarded (see Notes): no fallback, so fail fast.
         handler = rp.get_rpc_handler()
         return handler.url if hasattr(handler, "url") else None
 
@@ -258,8 +278,25 @@ class PercevalAdapter:
             When set, ``min_detected_photons_filter`` is set to the total
             photon count.
         """
-        processor.set_circuit(circuit)
+        PercevalAdapter.set_circuit(processor, circuit)
         PercevalAdapter.set_input(processor, input_state)
+
+    @staticmethod
+    def set_circuit(processor: AProcessor, circuit: pcvl.ACircuit) -> None:
+        """Install a circuit on a processor without touching its input state.
+
+        Split out from :meth:`configure_processor` so the local execution path
+        can install the circuit, restore experiment metadata, and only then set
+        the input — instead of passing a ``None`` input-state sentinel.
+
+        Parameters
+        ----------
+        processor : perceval.runtime.AProcessor
+            Processor (local or remote) to configure.
+        circuit : pcvl.ACircuit
+            Circuit to install.
+        """
+        processor.set_circuit(circuit)
 
     @staticmethod
     def set_input(processor: AProcessor, input_state: Any) -> None:
@@ -519,12 +556,16 @@ class PercevalAdapter:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def rebuild_local_processor(processor: AProcessor) -> AProcessor:
+    def rebuild_local_processor(
+        processor: AProcessor,
+    ) -> tuple[AProcessor, LocalExperimentSnapshot]:
         """Create an isolated local Perceval processor for one execution.
 
-        The returned processor carries a :class:`LocalExperimentSnapshot`
-        under :data:`LOCAL_EXPERIMENT_SNAPSHOT_ATTR` so the caller can restore
-        experiment metadata after installing the execution circuit.
+        Returns the fresh processor together with the
+        :class:`LocalExperimentSnapshot` the caller must apply (via
+        :meth:`restore_experiment`) after installing the execution circuit. The
+        snapshot is an explicit return value rather than hidden state on the
+        processor, so a caller cannot silently forget to restore it.
 
         Parameters
         ----------
@@ -533,9 +574,10 @@ class PercevalAdapter:
 
         Returns
         -------
-        perceval.runtime.AProcessor
-            Fresh local processor with copied non-circuit experiment state
-            and a fresh backend instance.
+        tuple[perceval.runtime.AProcessor, LocalExperimentSnapshot]
+            A fresh local processor (copied non-circuit experiment state and a
+            fresh backend instance) and the experiment snapshot to restore once
+            the execution circuit is installed.
 
         Raises
         ------
@@ -572,8 +614,7 @@ class PercevalAdapter:
         copied_experiment.clear_input_and_circuit()
 
         fresh_processor = Processor(backend, copied_experiment)
-        setattr(fresh_processor, LOCAL_EXPERIMENT_SNAPSHOT_ATTR, experiment_snapshot)
-        return fresh_processor
+        return fresh_processor, experiment_snapshot
 
     @staticmethod
     def snapshot_experiment(experiment: Any) -> LocalExperimentSnapshot:

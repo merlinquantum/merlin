@@ -14,7 +14,6 @@ import pytest
 
 import merlin.core.perceval_adapter as adapter_module
 from merlin.core.perceval_adapter import (
-    LOCAL_EXPERIMENT_SNAPSHOT_ATTR,
     JobStatusSnapshot,
     LocalExperimentSnapshot,
     PercevalAdapter,
@@ -421,14 +420,13 @@ def make_local_processor() -> pcvl.Processor:
 
 class TestLocalProcessorRebuild:
     def test_rebuild_returns_isolated_processor_with_snapshot(self):
-        """Rebuilding yields a distinct processor carrying a metadata snapshot."""
+        """Rebuilding returns a distinct processor and its metadata snapshot."""
         original = make_local_processor()
 
-        fresh = PercevalAdapter.rebuild_local_processor(original)
+        fresh, snapshot = PercevalAdapter.rebuild_local_processor(original)
 
         assert fresh is not original
         assert fresh.experiment is not original.experiment
-        snapshot = getattr(fresh, LOCAL_EXPERIMENT_SNAPSHOT_ATTR)
         assert isinstance(snapshot, LocalExperimentSnapshot)
 
     def test_rebuild_rejects_processor_without_experiment(self):
@@ -443,7 +441,7 @@ class TestLocalProcessorRebuild:
         original = make_local_processor()
         snapshot = PercevalAdapter.snapshot_experiment(original.experiment)
 
-        fresh = PercevalAdapter.rebuild_local_processor(original)
+        fresh, _ = PercevalAdapter.rebuild_local_processor(original)
         fresh.set_circuit(pcvl.Circuit(2))
         PercevalAdapter.restore_experiment(fresh.experiment, snapshot)
 
@@ -454,7 +452,7 @@ class TestLocalProcessorRebuild:
         original = make_local_processor()
         snapshot = PercevalAdapter.snapshot_experiment(original.experiment)
 
-        fresh = PercevalAdapter.rebuild_local_processor(original)
+        fresh, _ = PercevalAdapter.rebuild_local_processor(original)
         fresh.set_circuit(pcvl.Circuit(3))
 
         with pytest.raises(ValueError, match="circuit size"):
