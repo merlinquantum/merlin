@@ -147,7 +147,7 @@ def extract_counts(work: dict[str, Any]) -> dict[str, Any]:
             "cited_by_count": int(work["cited_by_count"]),
             "openalex_id": work["id"].rsplit("/", 1)[-1],
         }
-    except (KeyError, TypeError, ValueError) as exc:
+    except (AttributeError, KeyError, TypeError, ValueError) as exc:
         raise ValueError(
             f"unexpected OpenAlex payload ({exc}); keys={sorted(work)}"
         ) from exc

@@ -195,7 +195,7 @@ a {
 .mq-citations-freshness {
     margin: 6px 0 20px 0;
     font-size: 11px;
-    color: #8a8d94;
+    color: #5d6068;
 }
 
 .mq-citations-table {
@@ -243,7 +243,7 @@ a {
 .mq-citations-badge .mq-citations-badge-source {
     margin-left: 8px;
     font-size: 11px;
-    color: #8a8d94;
+    color: #5d6068;
 }
 
 /* Screen-reader-only text: conveys meaning that is otherwise visual/tooltip. */
