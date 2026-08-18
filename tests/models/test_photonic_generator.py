@@ -186,6 +186,8 @@ def _reference_occupancy_outputs(
             device=result.device,
         )
         grouped.index_add_(1, idx, result)
+        # Reproduce upstream photonic_QGAN dist_to_image, which renormalizes;
+        # the library occupancy readout intentionally preserves total mass.
         total_count = grouped.sum(dim=1, keepdim=True)
         grouped = torch.where(
             total_count > 0,
