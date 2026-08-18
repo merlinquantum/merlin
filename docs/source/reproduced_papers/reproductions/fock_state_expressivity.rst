@@ -15,6 +15,8 @@ Fock State-enhanced Expressivity of Quantum Machine Learning Models
 
    **DOI**: `10.1140/epjqt/s40507-022-00135-0 <10.1140/epjqt/s40507-022-00135-0>`_
 
+   .. merlin-citations-badge:: fock_state_expressivity
+
    **Reproduction Status**: ✅ Complete
 
    **Reproducer**: Philippe Schoeb (philippe.schoeb@quandela.com)

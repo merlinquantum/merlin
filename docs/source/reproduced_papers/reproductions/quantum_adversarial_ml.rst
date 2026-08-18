@@ -11,6 +11,8 @@ Quantum Adversarial Machine Learning
 
    **DOI:** `10.1103/PhysRevResearch.2.033212 <https://doi.org/10.1103/PhysRevResearch.2.033212>`_
 
+   .. merlin-citations-badge:: quantum_adversarial_ml
+
    **Reproduction Status:** Complete
 
    **Reproducer:** Benjamin Stott (benjamin.stott@quandela.com)

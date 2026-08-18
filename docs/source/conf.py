@@ -94,6 +94,7 @@ extensions = [
     "nbsphinx",
     "sphinx_multiversion",
     "merlin_gallery",
+    "merlin_citations",
     "sphinx.ext.intersphinx",
 ]
 

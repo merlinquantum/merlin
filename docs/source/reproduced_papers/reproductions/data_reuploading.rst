@@ -15,6 +15,8 @@ Experimental data re-uploading with provable enhanced learning capabilities
 
    **DOI**: `https://doi.org/10.48550/arXiv.2507.05120 <https://doi.org/10.48550/arXiv.2507.05120>`_
 
+   .. merlin-citations-badge:: data_reuploading
+
    **Reproduction Status**: ✅ Complete
 
    **Reproducer**: Hugo Izadi (hugoizadi@gmail.com) and Philippe Schoeb (philippe.schoeb@quandela.com)

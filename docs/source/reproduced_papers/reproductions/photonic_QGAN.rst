@@ -13,6 +13,9 @@ Photonic Quantum Generative Adversarial Networks for Classical Data
    **Published**: Optica Quantum, vol. 2, no. 6, pp. 458-467 (2025)
 
    **DOI**: `10.1364/OPTICAQ.530346 <https://doi.org/10.1364/OPTICAQ.530346>`_
+
+   .. merlin-citations-badge:: photonic_QGAN
+
    **Paper URL**: `arXiv:2405.06023 <https://arxiv.org/abs/2405.06023>`_
 
    **Reproduction Status**: 🚧 In Progress (MerLin QuantumLayer generator implemented; extended benchmarking and write-up ongoing)

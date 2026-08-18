@@ -15,6 +15,8 @@ Experimental Neuromorphic Computing Based on Quantum Memristor
 
    **DOI**: `10.48550/arXiv.2504.18694 <https://doi.org/10.48550/arXiv.2504.18694>`_
 
+   .. merlin-citations-badge:: photonic_memristor
+
    **Reproduction Status**: Partial
 
    **Reproducer**: Vassilis Apostolou (vassilis.apostolou@quandela.com)
