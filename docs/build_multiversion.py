@@ -203,13 +203,16 @@ def discover_docnames(source_path: Path) -> list[str]:
         -------
         list[str]
             Document names without source suffixes, relative to
-            ``source_path``.
+            ``source_path``, using POSIX separators. Files with a hidden
+            path component are excluded.
     """
     docnames: set[str] = set()
     for suffix in SOURCE_SUFFIXES:
         for source_file in source_path.rglob(f"*{suffix}"):
             relative_path = source_file.relative_to(source_path)
-            docnames.add(str(relative_path.with_suffix("")))
+            if any(part.startswith(".") for part in relative_path.parts):
+                continue
+            docnames.add(relative_path.with_suffix("").as_posix())
     return sorted(docnames)
 
 
