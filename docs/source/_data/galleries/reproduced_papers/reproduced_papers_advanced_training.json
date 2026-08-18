@@ -28,6 +28,13 @@
     "tags": ["Sedrakyan and Salavrakos", "2025", "In Progress"]
   },
   {
+    "title": "LatentQGAN",
+    "summary": "Hybrid quantum-classical MNIST generation in a learned latent space with a MerLin photonic variant.",
+    "image": "_static/reproduced_papers/LatentQGAN.png",
+    "doc": "reproduced_papers/reproductions/LatentQGAN",
+    "tags": ["Vieloszynski et al.", "2024", "Partial"]
+  },
+  {
     "title": "Hybrid Quantum PINN",
     "summary": "Physics-informed high-speed-flow benchmarks with classical, PennyLane, and MerLin photonic branches.",
     "image": "_static/reproduced_papers/HQPINN.png",

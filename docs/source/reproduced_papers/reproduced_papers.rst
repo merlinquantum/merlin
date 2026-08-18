@@ -48,6 +48,7 @@ For a Better Understanding of Photonic QML Theory
    reproductions/data_reuploading
    reproductions/amplitude_limitations
    reproductions/nqe
+   reproductions/BP_QNN
 
 .. merlin-gallery::
    :data: _data/galleries/reproduced_papers/reproduced_papers_variational_methods.json
@@ -90,6 +91,7 @@ Advanced Training Paradigms
    reproductions/qssl
    reproductions/quantum_adversarial_ml
    reproductions/photonic_QGAN
+   reproductions/LatentQGAN
    reproductions/hqpinn
    reproductions/quantum_transfer_learning
 
