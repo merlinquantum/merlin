@@ -1109,3 +1109,94 @@ def test_g2_layer_to_moves_per_sector_transforms() -> None:
     layer = _g2_layer_with_loss()
 
     layer.to("cpu")
+
+class TestG2AugmentedObbRegression:
+    """Pin the indistinguishable extra-photon sector probabilities.
+
+    Regression guard for ``NoisyG2SLOSComputeGraph._augmented_obb_probs``:
+    with partial indistinguishability, each extra-photon sector must reuse the
+    OBB partitions already built for the base ``n_photons`` input state and
+    fold every g2-emitted sibling into its partition cell's coherent group.
+    An earlier implementation instead grew a whole new noisy SLOS graph on the
+    augmented input state, re-drawing an independent
+    coherent-vs-distinguishable outcome for the g2 sibling; on this fixture
+    that skews sector 1 by up to 6.8e-3 per entry (e.g. the (1, 1, 1) entry
+    comes out ~0.031014 instead of the correct 0.024246), far beyond the pin
+    tolerance below.
+
+    Golden values were produced by the fixed implementation on a
+    deterministic 3-mode Fourier interferometer in float64 and match Perceval
+    1.2.4 ``Simulator.probs_svd`` with ``NoiseModel(g2=0.3,
+    g2_distinguishable=False, indistinguishability=0.6)`` to below 1e-15.
+    """
+
+    # Fock basis order is Combinadics("fock", n, m).enumerate_states().
+    EXPECTED_SECTOR_1 = [
+        0.030686209636,  # (3, 0, 0)
+        0.038768111696,  # (2, 1, 0)
+        0.038768111696,  # (2, 0, 1)
+        0.038768111696,  # (1, 2, 0)
+        0.024245706182,  # (1, 1, 1)
+        0.038768111696,  # (1, 0, 2)
+        0.030686209636,  # (0, 3, 0)
+        0.038768111696,  # (0, 2, 1)
+        0.038768111696,  # (0, 1, 2)
+        0.030686209636,  # (0, 0, 3)
+    ]
+    EXPECTED_SECTOR_2 = [
+        0.002972157995,  # (4, 0, 0)
+        0.003723146497,  # (3, 1, 0)
+        0.003723146497,  # (3, 0, 1)
+        0.004881425266,  # (2, 2, 0)
+        0.001597365052,  # (2, 1, 1)
+        0.004881425266,  # (2, 0, 2)
+        0.003723146497,  # (1, 3, 0)
+        0.001597365052,  # (1, 2, 1)
+        0.001597365052,  # (1, 1, 2)
+        0.003723146497,  # (1, 0, 3)
+        0.002972157995,  # (0, 4, 0)
+        0.003723146497,  # (0, 3, 1)
+        0.004881425266,  # (0, 2, 2)
+        0.003723146497,  # (0, 1, 3)
+        0.002972157995,  # (0, 0, 4)
+    ]
+
+    def test_extra_photon_sectors_match_golden_values(self):
+        """Extra-photon sectors equal the Perceval-verified golden values."""
+        m = 3
+        n_photons = 2
+        modes = np.arange(m)
+        fourier = np.exp(2j * np.pi * np.outer(modes, modes) / m) / np.sqrt(m)
+        unitary = torch.tensor(fourier, dtype=torch.complex128)
+
+        groups = NoiseGroups(
+            source={
+                "g2": 0.3,
+                "g2_distinguishable": False,
+                "indistinguishability": 0.6,
+            },
+            circuit=None,
+            post_measurement=None,
+        )
+        noisy_slos = NoisyG2SLOSComputeGraph(
+            groups,
+            m=m,
+            n_photons=n_photons,
+            computation_space=ComputationSpace.FOCK,
+            dtype=torch.float64,
+        )
+        result = noisy_slos.compute_probs(unitary, [1, 1, 0])
+
+        assert isinstance(result, SectoredDistribution)
+        assert len(result.sectors) == n_photons + 1
+
+        for sector_idx, expected in (
+            (1, self.EXPECTED_SECTOR_1),
+            (2, self.EXPECTED_SECTOR_2),
+        ):
+            actual = result.sectors[sector_idx].tensor.squeeze()
+            expected_tensor = torch.tensor(expected, dtype=torch.float64)
+            assert torch.allclose(actual, expected_tensor, atol=1e-8), (
+                f"Sector {sector_idx} deviates from golden values by "
+                f"{(actual - expected_tensor).abs().max().item():.3e}"
+            )

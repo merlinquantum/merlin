@@ -26,6 +26,7 @@ from merlin.algorithms import QuantumLayer
 from merlin.algorithms.module import MerlinModule
 from merlin.builder.circuit_builder import CircuitBuilder
 from merlin.core.circuit import Circuit
+from merlin.core.components import GenericInterferometer
 from merlin.core.computation_space import ComputationSpace
 from merlin.core.merlin_processor import (
     BackendCapabilities,
@@ -1536,7 +1537,9 @@ def test_local_processor_two_quantum_layers_matches_direct_perceval_probabilitie
         def forward(self, input_tensor: torch.Tensor) -> torch.Tensor:
             return torch.cat((input_tensor, input_tensor), dim=-1)
 
-    def make_builder_layer(prefixes: Sequence[str]) -> QuantumLayer:
+    def make_builder_layer(
+        prefixes: Sequence[str],
+    ) -> tuple[QuantumLayer, list[GenericInterferometer]]:
         builder = CircuitBuilder(n_modes=n_modes)
         builder.add_entangling_layer(trainable=False, name=f"{prefixes[0]}_pre")
         for index, prefix in enumerate(prefixes):
@@ -1548,7 +1551,12 @@ def test_local_processor_two_quantum_layers_matches_direct_perceval_probabilitie
                 trainable=False,
                 name=entangler_name,
             )
-        return QuantumLayer(
+        entanglers = [
+            component
+            for component in builder.circuit.components
+            if isinstance(component, GenericInterferometer)
+        ]
+        layer = QuantumLayer(
             input_size=n_modes * len(prefixes),
             builder=builder,
             input_state=[1, 0, 0],
@@ -1557,14 +1565,27 @@ def test_local_processor_two_quantum_layers_matches_direct_perceval_probabilitie
             ),
             dtype=torch.float64,
         ).eval()
+        return layer, entanglers
 
     def make_builder_equivalent_perceval_circuit(
-        prefixes: Sequence[str],
+        prefixes: Sequence[str], entanglers: Sequence[GenericInterferometer]
     ) -> pcvl.Circuit:
-        def fixed_mzi(_index: int) -> pcvl.Circuit:
-            return pcvl.BS() // pcvl.PS(0.0) // pcvl.BS() // pcvl.PS(0.0)
+        # Non-trainable entangling layers get random (not zero) fixed phases;
+        # reuse each layer's actual drawn values so this reference circuit
+        # matches the builder-produced one exactly instead of assuming 0.0.
+        entangler_iter = iter(entanglers)
 
         def add_fixed_entangler(circuit: pcvl.Circuit) -> None:
+            entangler = next(entangler_iter)
+
+            def fixed_mzi(index: int) -> pcvl.Circuit:
+                return (
+                    pcvl.BS()
+                    // pcvl.PS(entangler.fixed_inner_values[index])
+                    // pcvl.BS()
+                    // pcvl.PS(entangler.fixed_outer_values[index])
+                )
+
             circuit.add(
                 0,
                 pcvl.GenericInterferometer(
@@ -1612,10 +1633,12 @@ def test_local_processor_two_quantum_layers_matches_direct_perceval_probabilitie
                 output[row_index, state_to_index[str(state)]] = float(probability)
         return output
 
-    first_circuit = make_builder_equivalent_perceval_circuit(["a"])
-    second_circuit = make_builder_equivalent_perceval_circuit(["b", "c"])
-    first_layer = make_builder_layer(["a"])
-    second_layer = make_builder_layer(["b", "c"])
+    first_layer, first_entanglers = make_builder_layer(["a"])
+    second_layer, second_entanglers = make_builder_layer(["b", "c"])
+    first_circuit = make_builder_equivalent_perceval_circuit(["a"], first_entanglers)
+    second_circuit = make_builder_equivalent_perceval_circuit(
+        ["b", "c"], second_entanglers
+    )
     model = torch.nn.Sequential(first_layer, ReuploadInput(), second_layer).eval()
     input_tensor = torch.tensor(
         [[0.1, 0.7, 1.4], [1.2, 0.3, 0.6], [2.4, 1.1, 0.2]],
