@@ -80,8 +80,8 @@ Added:
 tests/core/test_merlin_processor_unit.py::test_submit_job_serializes_perceval_12_parameter_iterator_payload
 ```
 
-It uses a fake Perceval 1.2-style sampler payload and confirms `_submit_job()`
-converts the iterator before `execute_async()`.
+It uses a fake Perceval 1.2-style sampler payload and confirms
+`RemoteJobRunner.submit_job()` converts the iterator before `execute_async()`.
 
 ## PML-302 Fix: Session Path Should Not Require Token Extraction
 
