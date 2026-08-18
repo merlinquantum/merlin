@@ -49,7 +49,7 @@ from .builder.circuit_builder import CircuitBuilder
 # Advanced components (for power users)
 from .core.computation_space import ComputationSpace
 from .core.encoding_space import EncodingSpace
-from .core.merlin_processor import MerlinProcessor
+from .core.merlin_processor import MerlinFuture, MerlinProcessor
 from .core.process import ComputationProcess
 from .core.state import StatePattern, generate_state
 from .measurement import (
@@ -106,6 +106,7 @@ __all__ = [
     "resolve_detectors",
     "ModeExpectations",
     "MerlinProcessor",
+    "MerlinFuture",
     "Amplitudes",
     "LexGrouping",
     "ModGrouping",
