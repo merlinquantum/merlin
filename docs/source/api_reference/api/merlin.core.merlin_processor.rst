@@ -79,7 +79,7 @@ BackendCapabilities
 
    .. attribute:: available_commands
 
-      ``list[str]`` — Commands supported by the backend (e.g., ``"probs"``,
+      ``tuple[str, ...]`` — Commands supported by the backend (e.g., ``"probs"``,
       ``"sample_count"``, ``"samples"``).
 
    **Example**
@@ -199,7 +199,7 @@ MerlinProcessor
 
    .. attribute:: available_commands
 
-      ``list[str]`` — Backward-compatibility property. Equivalent to
+      ``tuple[str, ...]`` — Backward-compatibility property. Equivalent to
       ``backend_capabilities.available_commands``. Commands exposed by the
       backend (e.g., ``"probs"``, ``"sample_count"``, ``"samples"``).
 

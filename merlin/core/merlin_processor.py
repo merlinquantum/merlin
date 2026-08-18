@@ -37,7 +37,7 @@ class BackendCapabilities:
     name : str
         Backend platform name (e.g., "sim:slos", "perceval-qpu:scaleway").
     available_commands : tuple[str, ...]
-        Immutable snapshot of supported commands (e.g., ["probs", "sample_count"]).
+        Immutable snapshot of supported commands (e.g., ("probs", "sample_count")).
     """
 
     name: str
