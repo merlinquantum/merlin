@@ -62,11 +62,7 @@ Block of code
 - [ ] Tests pass on GPU (pytest)
 - [ ] Test coverage not decreased significantly
 - [ ] Docs build locally if affected (sphinx)
-- [ ] With this command: 
-
-        > SPHINXOPTS="-W --keep-going -n" make -C docs clean html 
-
-    the docs are built without any warning or errors.
+- [ ] With this command: `SPHINXOPTS="-W --keep-going -n" make -C docs clean html` the docs are built without any warning or errors.
 - [ ] New public classes/methods/packages are added in the API following the methodology presented in other files.
 - [ ] Dependencies updated (if needed) and pinned appropriately
 - [ ] PR description explains what changed and how to validate it
