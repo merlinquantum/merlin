@@ -4,96 +4,189 @@
 Performance
 ===========
 
-MerLin is a quantum machine learning framework designed specifically for photonic quantum computing, leveraging the unique properties of single-photon quantum systems.
+MerLin quantum layers can run as PyTorch modules on either CPU or GPU. The
+following results measure ``QuantumLayer`` execution on an NVIDIA H100 PCIe
+GPU with 80 GB of memory.
 
-MerLin Quantum Layers can be executed on either CPU or GPU, like any other PyTorch module:
+GPU benchmark
+-------------
 
-.. code-block:: python
+The benchmark constructs an MZI entangling circuit with angle encoding and two
+trainable variational layers. It measures graph-building time, forward time,
+backward time, and PyTorch CUDA allocated-memory deltas. Results use
+``float32``, two warmup steps, and five measured repetitions. The main sweep
+uses batch sizes 1, 8, 32, and 64, mode counts 8, 12, 16, 20, and 24, and both
+``FOCK`` and ``UNBUNCHED`` computation spaces. Cases above 3,000,000 basis
+states are skipped.
 
-   import merlin as ML # Package: merlinquantum, import: merlin
-   import torch
+The benchmark was run with Python 3.12.3 and PyTorch 2.11.0+cu128. The plots
+below were generated from
+``benchmarks/gpu_benchmark/gpu_memory.json`` using
+``benchmarks/gpu_benchmark/plot_gpu_memory_results.py``. Photon-count plots
+use batch size 8. Memory is the larger forward/backward peak allocated delta.
 
-   device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+How to read these results
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
-   # Create a simple quantum layer
-   quantum_layer = ML.QuantumLayer.simple(
-       input_size=3,
-       device = device
-   )
+The computation space determines how many quantum amplitudes the layer must
+store and update. ``FOCK`` uses photon-number occupation states, whose count
+for ``n_modes`` modes and ``n_photons`` photons is
+``comb(n_modes + n_photons - 1, n_photons)``. ``UNBUNCHED`` uses states with at
+most one photon per mode, whose count is ``comb(n_modes, n_photons)``.
+Consequently, basis-state
+counts—not mode count alone—are the most useful first indicator of memory and
+execution cost. The count is the size of one quantum state; a batch requires
+the corresponding work and storage for every item in the batch.
 
-Therefore, these Quantum Layers must be optimized for efficient GPU execution across varying batch sizes, mode counts, and photon numbers.
+The timings describe different phases of using a layer:
 
-Here, we analyze the memory and computation time requirements for running a GenericInterferometer with :math:`m` modes and :math:`2m(m-1)` trainable parameters (:math:`m(m-1)` beam splitters and :math:`m(m-1)` phase shifters).
-The analysis was performed on an NVIDIA H100 GPU with 80GB of VRAM. We run a simple code that you can find `here <https://github.com/merlinquantum/merlin/tree/main/tests/memory_benchmark.py>`_, in which we want to learn a target distribution by training the beam splitters and phase shifters of our interferometer.
-We have used the ``pyNVML`` library for memory monitoring (`documentation <https://developer.nvidia.com/management-library-nvml>`_)
+* *Graph-building time* is the one-time cost of constructing the computational
+  graph. It is not included in the forward or backward timings.
+* *Forward time* is one evaluation of the layer for a batch.
+* *Backward time* is the gradient evaluation for that same batch.
 
--------------------
- Memory Performance
--------------------
-First, we analyze the performance needed to train an interferometer with ``m`` modes using ``m//2`` photons for ``m`` from 2 to 24 and varying the batch size from 1 to 2048.
+The reported memory value is the largest increase in memory allocated by the
+PyTorch CUDA allocator during either measured pass. It is an incremental
+pressure estimate, not the total GPU memory used by the process, and it does
+not include memory held by other processes or necessarily all allocator
+reservations. The measurements use the configured batch size and are therefore
+not directly comparable across rows with different batches.
 
-.. image:: ../_static/img/SW-BS.png
-   :alt: Memory usage with respect to different batch sizes for m-mode interferometers with m/2 photons
-   :width: 600px
+These are single-GPU reference measurements, not hardware-independent limits.
+They include framework, driver, circuit-construction, and measurement
+overheads, and should be used to compare scaling trends or reproduce the
+benchmark rather than to predict an exact runtime on another system. The
+representative rows below intentionally cover different spaces and system
+sizes; they are examples, not a ranking of the two computation spaces.
+
+At batch size 8, representative results are:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 22 16 16 16 16 16
+
+   * - Space
+     - Modes
+     - Photons
+     - Basis states
+     - Forward
+     - Backward
+   * - ``FOCK``
+     - 16
+     - 8
+     - 490,314
+     - 63.6 ms
+     - 133.8 ms
+   * - ``FOCK``
+     - 24
+     - 6
+     - 475,020
+     - 143.1 ms
+     - 253.1 ms
+   * - ``UNBUNCHED``
+     - 20
+     - 10
+     - 184,756
+     - 99.8 ms
+     - 202.5 ms
+   * - ``UNBUNCHED``
+     - 24
+     - 12
+     - 2,704,156
+     - 193.7 ms
+     - 1,135.5 ms
+
+The largest measured memory delta is 20,739.1 MiB for 24 modes and 12 photons
+in ``UNBUNCHED`` space at batch size 8. In ``FOCK`` space, 16 modes and 8
+photons reaches 927.5 MiB at the same batch size; larger Fock-space cases were
+outside the configured basis-size limit.
+
+Memory scaling
+~~~~~~~~~~~~~~
+
+.. image:: ../_static/performance/h100-perf-2607/memory_vs_batch_fock.png
+   :alt: FOCK peak allocated memory versus batch size
+   :width: 760px
    :align: center
 
-Then, we analyze the performance needed to train m-mode interferometers with 1 to ``m//2`` photons for ``batch_size=1``:
-
-.. image:: ../_static/img/SW-photons.png
-   :alt: Memory usage with respect to different number of photons, for different sizes of interferometers
-   :width: 600px
+.. image:: ../_static/performance/h100-perf-2607/memory_vs_batch_unbunched.png
+   :alt: UNBUNCHED peak allocated memory versus batch size
+   :width: 760px
    :align: center
 
-**Conclusion**: we can run up to 24 modes with 12 photons with a Batch size of 16 on the H100 !
-
-----------------
-Time Performance
-----------------
-
-Here, we compare the average time required for different operations on the H100 GPU. First, we display the computation time needed for the ``QuantumLayer`` with varying numbers of photons:
-
-.. image:: ../_static/img/SW-layer-photons.png
-   :alt: Compilation time for the ``QuantumLayer`` with different numbers of photons
-   :width: 600px
+.. image:: ../_static/performance/h100-perf-2607/memory_vs_photons_fock.png
+   :alt: FOCK peak allocated memory versus photon count
+   :width: 760px
    :align: center
 
-Next, we compare forward and backward pass times for different numbers of photons:
-
-.. image:: ../_static/img/SW-times-photons.png
-   :alt: Forward and Backward times for the ``QuantumLayer`` with different numbers of photons
-   :width: 600px
+.. image:: ../_static/performance/h100-perf-2607/memory_vs_photons_unbunched.png
+   :alt: UNBUNCHED peak allocated memory versus photon count
+   :width: 760px
    :align: center
 
-And then, we compare forward and backward pass times for different batch sizes:
+Timing scaling
+~~~~~~~~~~~~~~
 
-.. image:: ../_static/img/SW-times.png
-   :alt: Forward and Backward times for the ``QuantumLayer`` for different ``batch_sizes``
-   :width: 600px
+Graph-building time grows substantially with basis size. For example, at
+batch size 8, building the 24-mode, 12-photon ``UNBUNCHED`` layer takes
+193.6 seconds, while its forward and backward passes take 193.7 ms and
+1,135.5 ms respectively.
+
+.. image:: ../_static/performance/h100-perf-2607/build_time_vs_photons_fock.png
+   :alt: FOCK graph-building time versus photon count
+   :width: 760px
    :align: center
 
-**Conclusion**: The ``QuantumLayer`` demonstrates reasonable computation times, making it suitable for integration within PyTorch-based workflows.
-
-------------------------------
-Pushing the H100 to its limits
-------------------------------
-
-We increase the number of modes from 50 to 350 and we vary the number of photons from 1 to 3 with a batch size of 1 to observe GPU performance with a high number of modes:
-
-.. image:: ../_static/img/SW-few-photons.png
-   :alt: Memory usage for the m-mode interferometer with respect to the number of photons
-   :width: 600px
+.. image:: ../_static/performance/h100-perf-2607/build_time_vs_photons_unbunched.png
+   :alt: UNBUNCHED graph-building time versus photon count
+   :width: 760px
    :align: center
 
-**Conclusion**: We can increase the number of modes above 350 with a H100 GPU
+.. image:: ../_static/performance/h100-perf-2607/fwd_bwd_time_vs_photons_fock.png
+   :alt: FOCK forward and backward time versus photon count
+   :width: 760px
+   :align: center
 
----------------------
-Now it is your turn !
----------------------
+.. image:: ../_static/performance/h100-perf-2607/fwd_bwd_time_vs_photons_unbunched.png
+   :alt: UNBUNCHED forward and backward time versus photon count
+   :width: 760px
+   :align: center
 
-Let's push your GPU to its limits ! Follow our code here: `memory_benchmark <https://github.com/merlinquantum/merlin/tree/main/tests/memory_benchmark.py>`_
+NoiseModel overhead
+~~~~~~~~~~~~~~~~~~~
 
-To benchmark on your GPU, simply run:
+A smaller FOCK sweep compares a noiseless layer with a ``NoiseModel`` using
+source indistinguishability 0.9 and transmittance 0.95. At batch size 8, the
+noise model increases the 12-mode, 6-photon case from 36.3 ms to 912.0 ms in
+the forward pass and from 59.7 ms to 1,090.0 ms in the backward pass. The
+corresponding peak allocated delta increases from 18.2 MiB to 1,108.1 MiB.
+
+.. image:: ../_static/performance/h100-perf-2607/noise_overhead_ratio.png
+   :alt: NoiseModel overhead relative to the noiseless FOCK baseline
+   :width: 760px
+   :align: center
+
+.. image:: ../_static/performance/h100-perf-2607/noise_absolute_b8.png
+   :alt: Absolute noisy and noiseless FOCK performance at batch size 8
+   :width: 760px
+   :align: center
+
+Reproducing the benchmark
+--------------------------
+
+From the repository root, run the benchmark and generate its plots with:
 
 .. code-block:: bash
 
-   python3 ./docs/source/reference/memory_benchmark.py --modes 16 --photons 8 --bs 64 --type torch.float64
+   PYTHONPATH=$PWD PCVL_PERSISTENT_PATH=.pcvl_home \
+   python benchmarks/gpu_benchmark/benchmark_gpu_memory.py \
+       --json-out benchmarks/gpu_benchmark/gpu_memory.json
+
+   PYTHONPATH=$PWD python benchmarks/gpu_benchmark/plot_gpu_memory_results.py \
+       --json benchmarks/gpu_benchmark/gpu_memory.json \
+       --output-dir docs/source/_static/performance/h100-perf-2607 \
+       --noise
+
+The benchmark requires CUDA, PyTorch, and Perceval. See
+``benchmarks/gpu_benchmark/benchmark_gpu_memory.py`` for the complete set of
+options and the configured sweep limits.

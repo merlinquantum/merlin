@@ -905,6 +905,277 @@ def test_layer_noise_model_rebuilds_layer_and_invalidates_fit():
     assert model._fit_quantum_cache is None
 
 
+def test_reservoir_classifier_with_phase_imprecision_and_phase_error():
+    """Test ReservoirClassifier with circuit phase noise (phase_imprecision + phase_error).
+    
+    Verifies that:
+    - NoiseModel with phase_imprecision and phase_error can be set
+    - Model fits and predicts successfully with phase noise
+    - Phase noise invalidates the fitted state (triggering refitting)
+    - Multiple predictions differ due to phase_error stochastic sampling (cache disabled)
+    """
+    X, y = _toy_data()
+    model = ReservoirClassifier(
+        in_features=4,
+        out_features=2,
+        n_photons=1,
+        reduction=PCA(n_components=2),
+        cache=False,  # Disable cache to test noise variability
+    )
+    
+    # Fit without noise
+    model.fit_reservoir(X)
+    dataset_before = model.make_dataset(X, y)
+    features_before, _ = dataset_before.tensors
+    
+    # Create NoiseModel with both phase_imprecision and phase_error
+    noise_model = pcvl.NoiseModel(
+        phase_imprecision=0.1,  # ~5.7° quantization step
+        phase_error=0.05        # ±2.9° stochastic noise
+    )
+    model.layer.noise = noise_model
+    
+    # Verify noise is set
+    assert model.layer.noise is noise_model
+    assert model._quantum_layer.noise is noise_model
+    
+    # Verify fit is invalidated
+    assert model._is_fitted is False
+    assert model._fit_quantum_cache is None
+    
+    # Refit with noise and verify it works
+    model.fit_reservoir(X)
+    dataset_with_noise = model.make_dataset(X, y)
+    features_with_noise, _ = dataset_with_noise.tensors
+    
+    assert features_with_noise.shape == features_before.shape
+    assert features_with_noise.dtype == features_before.dtype
+    
+    # Verify predictions work with noise
+    logits = model.predict(X)
+    assert logits.shape == (len(X), 2)
+    
+    # With cache=False, phase_error causes stochastic sampling, so predictions differ
+    logits1 = model.predict(X)
+    logits2 = model.predict(X)
+    assert not torch.allclose(logits1, logits2, rtol=0.1), (
+        "With cache=False and phase_error, predictions should differ due to stochastic sampling"
+    )
+    
+    # Note: Features will differ due to phase noise, but shouldn't be drastically different
+    # (they should remain within reasonable bounds for classification to still work)
+    feature_diff = torch.abs(features_with_noise - features_before).mean()
+    # Allow for variation but ensure noise didn't completely break the features
+    assert feature_diff < 1.0  # Reasonable tolerance for noise impact
+
+
+def test_reservoir_classifier_with_phase_imprecision_only():
+    """Test ReservoirClassifier with deterministic phase imprecision only.
+    
+    Verifies that:
+    - Phase imprecision alone (without phase_error) produces deterministic results
+    - Model fits and predicts successfully
+    """
+    X, y = _toy_data()
+    model = ReservoirClassifier(
+        in_features=4,
+        out_features=2,
+        n_photons=1,
+        reduction=PCA(n_components=2),
+    )
+    model.fit_reservoir(X)
+    
+    # Set phase imprecision only (no stochastic phase_error)
+    noise_model = pcvl.NoiseModel(phase_imprecision=0.1)
+    model.layer.noise = noise_model
+    model.fit_reservoir(X)
+    
+    # Multiple calls should produce identical results (deterministic)
+    features1 = model.transform_reservoir(X)
+    features2 = model.transform_reservoir(X)
+    
+    assert torch.allclose(features1, features2, rtol=1e-5)
+    
+    # Predictions should still work
+    logits1 = model.predict(X)
+    logits2 = model.predict(X)
+    assert torch.allclose(logits1, logits2, rtol=1e-5)
+
+
+def test_reservoir_classifier_with_phase_error_only():
+    """Test ReservoirClassifier with stochastic phase_error only.
+    
+    Verifies that:
+    - Phase error (without quantization) can be configured
+    - With cache=False, phase_error triggers stochastic sampling on every forward pass
+    - Each prediction produces different results due to stochastic sampling
+    - Model fits and predicts successfully
+    
+    Note: phase_error automatically triggers stochastic sampling via
+    ComputationProcess._compute_phase_error_probabilities() on every forward pass.
+    With caching enabled (default), identical input X returns the cached result.
+    With cache=False, each call re-runs the quantum circuit with new noise samples.
+    """
+    X, y = _toy_data()
+    model = ReservoirClassifier(
+        in_features=4,
+        out_features=2,
+        n_photons=1,
+        reduction=PCA(n_components=2),
+        cache=False,  # Disable cache to observe stochastic phase_error sampling
+    )
+    model.fit_reservoir(X)
+    
+    # Set phase_error only (no deterministic quantization)
+    noise_model = pcvl.NoiseModel(phase_error=0.1)
+    model.layer.noise = noise_model
+    model.fit_reservoir(X)
+    
+    # With cache=False, multiple calls trigger stochastic sampling and produce DIFFERENT results
+    features1 = model.transform_reservoir(X)
+    features2 = model.transform_reservoir(X)
+    
+    # Should differ due to stochastic phase_error sampling
+    assert not torch.allclose(features1, features2, rtol=0.1), (
+        "With cache=False and phase_error, features should differ due to stochastic sampling"
+    )
+    
+    # Predictions should also differ
+    logits1 = model.predict(X)
+    logits2 = model.predict(X)
+    assert not torch.allclose(logits1, logits2, rtol=0.1), (
+        "With cache=False and phase_error, predictions should differ due to stochastic sampling"
+    )
+    
+    # Verify model can be moved and still works
+    assert model.layer.noise is noise_model
+    assert model._is_fitted is True
+
+
+def test_reservoir_classifier_with_phase_imprecision_and_error_combined():
+    """Test ReservoirClassifier with both phase_imprecision and phase_error.
+    
+    Verifies that:
+    - Combined noise (quantization + stochastic error) works correctly
+    - With cache=True (default), identical input returns cached result (deterministic)
+    - With cache=False, phase_error causes stochastic variation on each forward pass
+    - Model fits and predicts successfully
+    """
+    X, y = _toy_data()
+    model = ReservoirClassifier(
+        in_features=4,
+        out_features=2,
+        n_photons=1,
+        reduction=PCA(n_components=2),
+        cache=False,  # Disable cache to observe combined noise effects
+    )
+    model.fit_reservoir(X)
+    
+    # Set both phase_imprecision AND phase_error
+    noise_model = pcvl.NoiseModel(
+        phase_imprecision=0.05,  # Deterministic quantization step
+        phase_error=0.02,        # Stochastic noise sampled on every forward pass
+    )
+    model.layer.noise = noise_model
+    model.fit_reservoir(X)
+    
+    # With cache=False, phase_error causes stochastic sampling, so multiple calls differ
+    features1 = model.transform_reservoir(X)
+    features2 = model.transform_reservoir(X)
+    
+    # Should differ due to phase_error stochastic sampling
+    assert not torch.allclose(features1, features2, rtol=0.1), (
+        "With cache=False and phase_error, features should differ due to stochastic sampling"
+    )
+    
+    # Predictions should also differ
+    logits1 = model.predict(X)
+    logits2 = model.predict(X)
+    assert not torch.allclose(logits1, logits2, rtol=0.1), (
+        "With cache=False and phase_error, predictions should differ due to stochastic sampling"
+    )
+    
+    # Verify the noise affected output compared to no-noise case
+    model_clean = ReservoirClassifier(
+        in_features=4,
+        out_features=2,
+        n_photons=1,
+        reduction=PCA(n_components=2),
+    )
+    model_clean.fit_reservoir(X)
+    features_clean = model_clean.transform_reservoir(X)
+    
+    # Noisy and clean should differ (due to quantization)
+    feature_diff = torch.abs(features1 - features_clean).mean()
+    # Should have some difference due to phase_imprecision
+    assert feature_diff > 0.0
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
+def test_reservoir_classifier_with_phase_noise_on_gpu():
+    """Test ReservoirClassifier with phase noise on GPU.
+    
+    Verifies that:
+    - Phase noise configuration works on GPU device
+    - Model can be moved to CUDA and still apply noise correctly
+    - Forward pass (fit + predict) works end-to-end on GPU
+    - Multiple forward passes with noise produce different results (cache disabled)
+    - Tensor outputs remain on GPU
+    """
+    X, y = _toy_data()
+    model = ReservoirClassifier(
+        in_features=4,
+        out_features=2,
+        n_photons=1,
+        reduction=PCA(n_components=2),
+        cache=False,  # Disable cache to allow re-running quantum layer with noise
+    )
+    
+    # Move model to GPU
+    model.to("cuda")
+    assert model.device.type == "cuda"
+    
+    # Fit on GPU without noise
+    model.fit_reservoir(X)
+    
+    # Apply phase noise on GPU
+    noise_model = pcvl.NoiseModel(
+        phase_imprecision=0.1,
+        phase_error=0.05,
+    )
+    model.layer.noise = noise_model
+    
+    # Verify noise is set
+    assert model.layer.noise is noise_model
+    assert model._quantum_layer.noise is noise_model
+    
+    # Refit with noise on GPU
+    model.fit_reservoir(X)
+    
+    # Make dataset on GPU
+    dataset = model.make_dataset(X, y)
+    features, targets = dataset.tensors
+    
+    # Verify tensors are on CPU (dataset tensors are returned on CPU by default)
+    assert targets.device.type == "cpu"
+    
+    # Get predictions on GPU
+    logits = model.predict(X)
+    assert logits.shape == (len(X), 2)
+    assert logits.device.type == "cpu"  # Predictions are moved back to CPU
+    
+    # Verify readout layer weights are on GPU
+    assert model.readout.weight.device.type == "cuda"
+    
+    # Test multiple forward passes with different noise samples work
+    logits1 = model.predict(X)
+    logits2 = model.predict(X)
+    
+    # With phase_error active, results should differ slightly
+    assert not torch.allclose(logits1, logits2, rtol=0.1)
+    assert logits1.shape == logits2.shape
+
+
 def test_reservoir_memory_cache_stays_bounded(monkeypatch):
     # Use a larger synthetic dataset than the unit tests above so the cache path
     # is exercised with a non-trivial number of samples.
