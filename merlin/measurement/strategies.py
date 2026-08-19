@@ -282,7 +282,7 @@ class MeasurementStrategy(metaclass=_MeasurementStrategyMeta):
         Optional grouping applied to probability outputs. If
         ``occupancy_readout`` is ``True``, grouping is applied after the
         occupancy readout.
-        occupancy_readout : bool
+    occupancy_readout : bool
         Whether probability outputs are collapsed to binary occupied/unoccupied
         output keys. If the distribution reaches the readout with sub-unit
         mass, raw tensor outputs preserve that mass without renormalizing. When

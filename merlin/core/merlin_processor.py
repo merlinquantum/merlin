@@ -1618,9 +1618,6 @@ class MerlinProcessor:
                                 else (value / total if total > 0 else 0)
                             )
 
-                    prob_sum = probs.sum()
-                    if prob_sum > 0 and abs(float(prob_sum) - 1.0) > 1e-6:
-                        probs = probs / prob_sum
                     output_tensors.append(probs)
                 else:
                     output_tensors.append(torch.zeros(dist_size))

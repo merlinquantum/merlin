@@ -2087,8 +2087,8 @@ def test_process_batch_results_preserves_alignment_for_empty_rows():
     )
 
 
-def test_process_batch_results_probability_heuristic_renormalizes_float_rows():
-    """The current heuristic treats first float <= 1 as probability payloads."""
+def test_process_batch_results_preserves_probability_row_mass():
+    """Probability payloads preserve their reported total mass."""
     proc = make_processor(["probs"])
     layer = FakeLayer()
     raw_results = {
@@ -2097,7 +2097,7 @@ def test_process_batch_results_probability_heuristic_renormalizes_float_rows():
 
     result = proc._process_batch_results(raw_results, 1, layer)
 
-    assert torch.allclose(result, torch.tensor([[0.5, 0.5]]))
+    assert torch.allclose(result, torch.tensor([[1.0, 1.0]]))
 
 
 # ────── Tests for _create_fresh_rp() ──────
