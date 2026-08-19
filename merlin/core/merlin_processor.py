@@ -1583,42 +1583,45 @@ class MerlinProcessor:
                         result_item["results"], is_probability
                     )
                     probs = torch.zeros(dist_size)
-                    if state_counts:
-                        if valid_states is not None:
-                            filtered_counts = {}
-                            for state_str, count in state_counts.items():
-                                state_tuple = self._parse_perceval_state(state_str)
-                                if state_tuple in valid_states:
-                                    filtered_counts[state_str] = count
-                            state_counts = filtered_counts
-
-                        if not state_counts:
-                            output_tensors.append(torch.zeros(dist_size))
-                            continue
-
-                        total = 1.0 if is_probability else sum(state_counts.values())
-
-                        for state_str, value in state_counts.items():
-                            state_tuple = self._parse_perceval_state(state_str)
-                            if not state_tuple:
-                                continue
-                            if state_to_index is not None:
-                                if state_tuple not in state_to_index:
-                                    continue
-                                idx = state_to_index[state_tuple]
-                            else:
-                                continue
-                            if idx < dist_size:
-                                probs[idx] = (
-                                    value
-                                    if is_probability
-                                    else (value / total if total > 0 else 0)
-                                )
-
-                        prob_sum = probs.sum()
-                        if prob_sum > 0 and abs(float(prob_sum) - 1.0) > 1e-6:
-                            probs = probs / prob_sum
+                    if not state_counts:
                         output_tensors.append(probs)
+                        continue
+
+                    if valid_states is not None:
+                        filtered_counts = {}
+                        for state_str, count in state_counts.items():
+                            state_tuple = self._parse_perceval_state(state_str)
+                            if state_tuple in valid_states:
+                                filtered_counts[state_str] = count
+                        state_counts = filtered_counts
+
+                    if not state_counts:
+                        output_tensors.append(probs)
+                        continue
+
+                    total = 1.0 if is_probability else sum(state_counts.values())
+
+                    for state_str, value in state_counts.items():
+                        state_tuple = self._parse_perceval_state(state_str)
+                        if not state_tuple:
+                            continue
+                        if state_to_index is not None:
+                            if state_tuple not in state_to_index:
+                                continue
+                            idx = state_to_index[state_tuple]
+                        else:
+                            continue
+                        if idx < dist_size:
+                            probs[idx] = (
+                                value
+                                if is_probability
+                                else (value / total if total > 0 else 0)
+                            )
+
+                    prob_sum = probs.sum()
+                    if prob_sum > 0 and abs(float(prob_sum) - 1.0) > 1e-6:
+                        probs = probs / prob_sum
+                    output_tensors.append(probs)
                 else:
                     output_tensors.append(torch.zeros(dist_size))
 

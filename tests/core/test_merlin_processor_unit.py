@@ -2065,6 +2065,28 @@ def test_process_batch_results_zero_fills_missing_rows():
     )
 
 
+def test_process_batch_results_preserves_alignment_for_empty_rows():
+    """Rows with empty counts do not shift subsequent result rows."""
+    proc = make_processor(["probs"])
+    layer = FakeLayer()
+    raw_results = {
+        "results_list": [
+            {"results": {}},
+            {"results": {"|0,1>": 1.0}},
+        ],
+    }
+
+    result = proc._process_batch_results(raw_results, 2, layer)
+
+    assert torch.allclose(
+        result,
+        torch.tensor([
+            [0.0, 0.0],
+            [0.0, 1.0],
+        ]),
+    )
+
+
 def test_process_batch_results_probability_heuristic_renormalizes_float_rows():
     """The current heuristic treats first float <= 1 as probability payloads."""
     proc = make_processor(["probs"])
