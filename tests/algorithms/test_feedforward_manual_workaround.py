@@ -266,14 +266,13 @@ def test_manual_feedforward_workaround_trainable():
     for _ in range(5):
         optimizer.zero_grad()
         probs = model(x)
-        # Simple loss: try to maximize the first probability we encounter
-        first_probability_by_branch = {
-            key[0]: probability
+        # Use an observable that depends on the branch-local circuits. Summing
+        # all probabilities for a branch would only recover its prefix branch
+        # probability and therefore cannot produce a gradient for A or B.
+        loss = -sum(
+            key[1] * probability.mean()
             for key, probability in probs.items()
             if key[0] in (0, 1)
-        }
-        loss = -sum(
-            probability.mean() for probability in first_probability_by_branch.values()
         )
         loss.backward()
         optimizer.step()
