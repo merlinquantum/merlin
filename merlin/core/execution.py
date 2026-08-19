@@ -25,7 +25,7 @@ import logging
 import threading
 import time
 import zlib
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from concurrent.futures import CancelledError
 from typing import TYPE_CHECKING
 
@@ -41,6 +41,87 @@ if TYPE_CHECKING:
     from .merlin_processor import CallState, ValidatedLayerConfig
 
 logger = logging.getLogger(__name__)
+
+
+def build_iteration_parameters(
+    input_chunk: torch.Tensor, input_parameter_names: Sequence[str]
+) -> list[dict[str, float]]:
+    """Map input rows to circuit parameters after validating their shape.
+
+    Parameters
+    ----------
+    input_chunk : torch.Tensor
+        Two-dimensional input tensor with one column per circuit parameter.
+    input_parameter_names : Sequence[str]
+        Circuit parameter names in the expected column order.
+
+    Returns
+    -------
+    list[dict[str, float]]
+        Parameter mappings for each input row.
+
+    Raises
+    ------
+    ValueError
+        If the input tensor column count does not match the parameter count.
+    """
+    if input_chunk.ndim != 2:
+        raise ValueError(
+            f"Input chunk must be 2-dimensional, got {input_chunk.ndim} dimensions."
+        )
+
+    expected_columns = len(input_parameter_names)
+    actual_columns = input_chunk.shape[1]
+    if actual_columns != expected_columns:
+        raise ValueError(
+            "Input column count does not match the circuit parameter count: "
+            f"received {actual_columns} column(s), expected {expected_columns}."
+        )
+
+    input_np = input_chunk.detach().cpu().numpy()
+    return [
+        {
+            parameter_name: float(input_np[row_index, column_index])
+            for column_index, parameter_name in enumerate(input_parameter_names)
+        }
+        for row_index in range(input_chunk.shape[0])
+    ]
+
+
+def select_sampling_command(
+    available_commands: Sequence[str], *, default_command: str | None = None
+) -> str:
+    """Select the supported sampling command for a backend.
+
+    Parameters
+    ----------
+    available_commands : Sequence[str]
+        Commands advertised by the backend.
+    default_command : str | None
+        Explicit command to use when capability metadata is unavailable.
+        Defaults to ``None``.
+
+    Returns
+    -------
+    str
+        ``"sample_count"`` when available, otherwise ``"samples"``.
+
+    Raises
+    ------
+    RuntimeError
+        If the backend advertises neither sampling command and no default was
+        provided.
+    """
+    if "sample_count" in available_commands:
+        return "sample_count"
+    if "samples" in available_commands:
+        return "samples"
+    if default_command is not None:
+        return default_command
+    raise RuntimeError(
+        "Backend does not support a sampling command; expected "
+        "'sample_count' or 'samples'."
+    )
 
 
 class BatchChunker:
@@ -260,6 +341,7 @@ class RemoteJobRunner:
         get_microbatch_limit: Callable[[], int | None],
         max_retries: int = 3,
         job_name_max: int = 50,
+        default_sampling_command: str | None = None,
     ) -> None:
         self._create_processor = create_processor
         self._get_available_commands = get_available_commands
@@ -273,6 +355,7 @@ class RemoteJobRunner:
         self._get_microbatch_limit = get_microbatch_limit
         self._max_retries = max_retries
         self._job_name_max = job_name_max
+        self._default_sampling_command = default_sampling_command
 
     def run_chunk(
         self,
@@ -333,17 +416,9 @@ class RemoteJobRunner:
             )
 
         input_param_names = self._extract_input_params(config)
-        input_np = input_chunk.detach().cpu().numpy()
 
         # Pre-compute iteration params (cheap, only done once).
-        iteration_params: list[dict[str, float]] = []
-        for i in range(batch_size):
-            circuit_params = {}
-            for j, param_name in enumerate(input_param_names):
-                circuit_params[param_name] = (
-                    float(input_np[i, j]) if j < input_chunk.shape[1] else 0.0
-                )
-            iteration_params.append(circuit_params)
+        iteration_params = build_iteration_parameters(input_chunk, input_param_names)
 
         last_error: BaseException | None = None
         for attempt in range(self._max_retries):
@@ -422,7 +497,7 @@ class RemoteJobRunner:
 
         2. **Sampling** (``"sample_count"`` or ``"samples"`` commands):
            - Used if exact probabilities are not available or ``nsample > 0``.
-           - Tries ``"sample_count"`` first, falls back to ``"samples"``.
+           - Uses ``"sample_count"`` first, otherwise ``"samples"``.
            - Number of samples = ``effective_sample_count(nsample)``.
 
         Job names are sanitized and capped through :meth:`_capped_name`.
@@ -451,12 +526,10 @@ class RemoteJobRunner:
             cmd = "probs"
             max_samples = None
         else:
-            if "sample_count" in available_commands:
-                cmd = "sample_count"
-            elif "samples" in available_commands:
-                cmd = "samples"
-            else:
-                cmd = "sample_count"
+            cmd = select_sampling_command(
+                available_commands,
+                default_command=self._default_sampling_command,
+            )
             max_samples = self._effective_sample_count(nsample)
 
         name = self._capped_name(job_base_label, cmd) if job_base_label else None

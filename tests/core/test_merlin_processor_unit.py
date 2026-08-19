@@ -1797,23 +1797,19 @@ def test_submit_job_falls_back_to_samples_when_sample_count_is_unavailable():
     assert sampler.sample_count.executed is False
 
 
-def test_submit_job_defaults_to_sample_count_when_commands_are_empty():
-    """An empty command list currently means sampling through sample_count."""
+def test_submit_job_raises_when_commands_are_empty():
+    """An empty command list clearly rejects unsupported sampling."""
     proc = make_processor([])
     sampler = FakeSampler()
 
-    returned_job, is_probability = proc._make_job_runner().submit_job(
-        sampler,
-        nsample=None,
-        job_base_label=None,
-    )
-
-    assert returned_job is sampler.sample_count
-    assert is_probability is False
-    assert sampler.sample_count.executed is True
-    assert sampler.sample_count.execute_kwargs == {
-        "max_samples": MerlinProcessor.DEFAULT_SHOTS_PER_CALL
-    }
+    with pytest.raises(RuntimeError, match="does not support a sampling command"):
+        proc._make_job_runner().submit_job(
+            sampler,
+            nsample=None,
+            job_base_label=None,
+        )
+    assert sampler.sample_count.executed is False
+    assert sampler.sample_count.execute_kwargs is None
     assert sampler.probs.executed is False
     assert sampler.samples.executed is False
 

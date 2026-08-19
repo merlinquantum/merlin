@@ -18,7 +18,12 @@ from torch.futures import Future
 
 from ..algorithms.module import MerlinModule
 from ..utils.combinadics import Combinadics
-from .execution import BatchChunker, RemoteJobRunner
+from .execution import (
+    BatchChunker,
+    RemoteJobRunner,
+    build_iteration_parameters,
+    select_sampling_command,
+)
 from .perceval_adapter import (
     LocalExperimentSnapshot,
     PercevalAdapter,
@@ -1274,6 +1279,11 @@ class MerlinProcessor:
             ),
             max_retries=self._MAX_CHUNK_RETRIES,
             job_name_max=self._JOB_NAME_MAX,
+            default_sampling_command=(
+                "sample_count"
+                if getattr(self, "session", None) is not None
+                else None
+            ),
         )
 
     def _register_job(self, job: RemoteJob) -> None:
@@ -1407,16 +1417,7 @@ class MerlinProcessor:
 
         batch_size = input_chunk.shape[0]
         input_param_names = self._extract_input_params(config)
-        input_np = input_chunk.detach().cpu().numpy()
-
-        iteration_params: list[dict[str, float]] = []
-        for i in range(batch_size):
-            circuit_params = {}
-            for j, param_name in enumerate(input_param_names):
-                circuit_params[param_name] = (
-                    float(input_np[i, j]) if j < input_chunk.shape[1] else 0.0
-                )
-            iteration_params.append(circuit_params)
+        iteration_params = build_iteration_parameters(input_chunk, input_param_names)
 
         processor, experiment_snapshot = self._create_fresh_local_processor()
         PercevalAdapter.set_circuit(
@@ -1437,12 +1438,10 @@ class MerlinProcessor:
             raw_results = PercevalAdapter.execute_sync(sampler, "probs")
         else:
             use_shots = self._effective_sample_count(nsample)
-            if "sample_count" in self.available_commands:
-                cmd = "sample_count"
-            elif "samples" in self.available_commands:
-                cmd = "samples"
-            else:
-                cmd = "sample_count"
+            cmd = select_sampling_command(
+                self.available_commands,
+                default_command="sample_count",
+            )
             raw_results = PercevalAdapter.execute_sync(
                 sampler, cmd, max_samples=use_shots
             )
