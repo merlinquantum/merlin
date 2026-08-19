@@ -1280,9 +1280,7 @@ class MerlinProcessor:
             max_retries=self._MAX_CHUNK_RETRIES,
             job_name_max=self._JOB_NAME_MAX,
             default_sampling_command=(
-                "sample_count"
-                if getattr(self, "session", None) is not None
-                else None
+                "sample_count" if getattr(self, "session", None) is not None else None
             ),
         )
 
