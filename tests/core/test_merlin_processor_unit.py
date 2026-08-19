@@ -2095,7 +2095,7 @@ def test_process_batch_results_preserves_probability_row_mass():
         "results_list": [{"results": {"|1,0>": 1.0, "|0,1>": 1.0}}],
     }
 
-    result = proc._process_batch_results(raw_results, 1, layer)
+    result = proc._process_batch_results(raw_results, 1, layer, is_probability=True)
 
     assert torch.allclose(result, torch.tensor([[1.0, 1.0]]))
 
