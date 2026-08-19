@@ -264,9 +264,11 @@ class TestBatchChunkerRunChunks:
         assert state.active_chunks == 0
 
     def test_first_chunk_error_is_raised(self):
-        """A failing chunk propagates its error after the pool drains."""
+        """A failing chunk propagates without submitting later chunks."""
+        started_chunks: list[float] = []
 
         def run_chunk(layer, config, chunk, nsample, state, deadline, job_base_label):
+            started_chunks.append(float(chunk[0, 0]))
             if chunk[0, 0] == 2:
                 raise RuntimeError("chunk exploded")
             return torch.ones(chunk.shape[0], 1)
@@ -279,12 +281,14 @@ class TestBatchChunkerRunChunks:
             chunker.run_chunks(
                 object(),
                 make_chunk_config(),
-                torch.tensor([[0.0], [2.0]]),
-                BatchChunker.split_batch(2, 1),
+                torch.tensor([[0.0], [2.0], [4.0]]),
+                BatchChunker.split_batch(3, 1),
                 None,
                 CallState.new(),
                 None,
             )
+
+        assert started_chunks == [0.0, 2.0]
 
     def test_deadline_cancels_all_and_raises_timeout(self):
         """An elapsed deadline cancels in-flight jobs and raises TimeoutError."""

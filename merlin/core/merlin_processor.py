@@ -1199,6 +1199,14 @@ class MerlinProcessor:
 
         B = input_tensor.shape[0]
 
+        if B == 0:
+            dist_size, _, _ = self._get_state_mapping(layer)
+            return torch.empty(
+                (0, dist_size),
+                dtype=input_tensor.dtype,
+                device=input_tensor.device,
+            )
+
         if self.backend_kind == "local_processor":
             return self._run_chunk_local(
                 layer, config, input_tensor, nsample, state, deadline

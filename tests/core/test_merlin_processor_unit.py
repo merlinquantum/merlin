@@ -2585,6 +2585,35 @@ def test_offload_quantum_layer_with_chunking_validates_and_caches_export_config(
     assert layer.export_config_calls == 1
 
 
+def test_offload_quantum_layer_with_chunking_returns_empty_batch():
+    """An empty remote batch returns the layer's distribution width."""
+    proc = make_processor(["probs", "sample_count"])
+
+    class EmptyBatchLayer(FakeLayer):
+        uid = 43
+
+        def export_config(self):
+            return {
+                "circuit": pcvl.Circuit(m=2, name="Circuit"),
+                "input_state": [1, 0],
+                "input_param_order": [],
+            }
+
+    proc._run_chunks_pooled = MagicMock(side_effect=AssertionError("must not submit"))
+
+    result = proc._offload_quantum_layer_with_chunking(
+        EmptyBatchLayer(),
+        torch.empty((0, 2), dtype=torch.float64),
+        None,
+        {},
+        None,
+    )
+
+    assert result.shape == (0, 2)
+    assert result.dtype == torch.float64
+    proc._run_chunks_pooled.assert_not_called()
+
+
 def test_offload_quantum_layer_cache_isolated_by_merlin_module_instance_uid():
     proc = make_processor(["probs", "sample_count"])
 

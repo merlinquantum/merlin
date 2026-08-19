@@ -181,9 +181,9 @@ class BatchChunker:
         in_flight = 0
         idx = 0
         futures: list[threading.Thread] = []
-        while idx < len(chunks) or in_flight > 0:
+        while in_flight > 0 or (not errors and idx < len(chunks)):
             concurrency = max(1, int(self._get_chunk_concurrency()))
-            while idx < len(chunks) and in_flight < concurrency:
+            while not errors and idx < len(chunks) and in_flight < concurrency:
                 s, e = chunks[idx]
                 state.mark_chunk_started()
                 th = threading.Thread(target=_call, args=(s, e, idx), daemon=True)
