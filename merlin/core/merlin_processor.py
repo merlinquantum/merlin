@@ -71,7 +71,7 @@ class JobStatus:
 
 class CallState:
     """Typed per-call execution state for one
-    :meth:`~merlin.core.merlin_processor.MerlinProcessor.forward_async` call.
+    ``MerlinProcessor.forward_async`` call.
 
     Replaces the anonymous mutable ``state`` dict previously threaded through
     ``forward_async()``, chunk orchestration, chunk execution, and job polling.
