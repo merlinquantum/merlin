@@ -132,10 +132,7 @@ MerlinFuture
 MerlinProcessor
 ---------------
 .. autoclass:: merlin.core.merlin_processor.JobStatus
-   :members:
-   :undoc-members:
-   :show-inheritance:
-   :noindex:
+   :no-members:
 
 .. autoclass:: merlin.core.merlin_processor.CallState
    :members:
