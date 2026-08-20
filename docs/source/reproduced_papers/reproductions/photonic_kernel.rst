@@ -15,6 +15,8 @@ Experimental Quantum-Enhanced Kernel-based Machine Learning on a Photonic Proces
 
    **DOI**: `10.1038/s41566-025-01682-5 <https://doi.org/10.1038/s41566-025-01682-5>`_
 
+   .. merlin-citations-badge:: photonic_kernel
+
    **Reproduction Status**: ✅ Complete
 
    **Reproducer**: Anthony Walsh (anthony.walsh@quandela.com)

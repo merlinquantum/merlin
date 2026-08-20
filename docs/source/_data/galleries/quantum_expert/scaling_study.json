@@ -1,0 +1,9 @@
+[
+    {
+    "title": "scaling study",
+    "summary": "Scaling graph of the QCNN, with respect to the input_size and the batch_size.",
+    "image": "_static/img/graph_scaling_study.png",
+    "doc": "quantum_expert_area/scaling_study_of_qcnn.rst",
+    "tags": ["Performance", "Best Practices"]
+  }
+]

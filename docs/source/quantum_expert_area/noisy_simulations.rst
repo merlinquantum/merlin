@@ -103,6 +103,28 @@ phase shifter, builds one unitary, computes probabilities, then averages the
 probability distributions. Amplitudes are not averaged. Use
 ``torch.manual_seed(...)`` to make the sampled perturbations reproducible.
 
+Black-box unitaries under circuit phase noise
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``pcvl.Unitary`` components contain no explicit phase shifters, but on hardware
+they are implemented by a programmable interferometer. When ``phase_imprecision``
+or ``phase_error`` is active, Merlin decomposes every ``pcvl.Unitary`` component
+into a rectangular (Clements) mesh of Mach-Zehnder interferometers. The mesh
+phases are represented by ``pcvl.PS`` components and receive phase noise. The
+fixed 50:50 ``pcvl.BS`` (beam splitter) parameters carry no phase noise.
+``pcvl.PERM`` components are waveguide crossings without programmable phases
+and are never decomposed.
+
+The decomposition runs once, when the layer is built (about 0.2 s for a
+10-mode unitary), and only when circuit phase noise is configured; without
+noise, each unitary stays precomputed as a constant tensor, exactly as before.
+The numerical fit reproduces the target unitary with a fidelity error of about
+``1e-6``, which corresponds to matrix entries agreeing to about ``1e-3``. The
+fit's arbitrary global phase is compensated on the mesh's output phase layer,
+so unitaries acting on a subset of modes keep their relative phase with the
+rest of the circuit. If the fit does not converge, construction raises an
+error instead of silently changing the mesh topology.
+
 Coherent and incoherent error
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

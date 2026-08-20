@@ -13,6 +13,9 @@ Photonic Quantum Generative Adversarial Networks for Classical Data
    **Published**: Optica Quantum, vol. 2, no. 6, pp. 458-467 (2025)
 
    **DOI**: `10.1364/OPTICAQ.530346 <https://doi.org/10.1364/OPTICAQ.530346>`_
+
+   .. merlin-citations-badge:: photonic_QGAN
+
    **Paper URL**: `arXiv:2405.06023 <https://arxiv.org/abs/2405.06023>`_
 
    **Reproduction Status**: 🚧 In Progress (MerLin QuantumLayer generator implemented; extended benchmarking and write-up ongoing)
@@ -55,6 +58,11 @@ The adversarial loop in ``lib/qgan.py`` is fully differentiable:
 * discriminator and generator are optimized with Adam,
 * BCE-with-logits loss is used for both adversaries,
 * optional label smoothing and configurable ``d_steps`` / ``g_steps`` are supported.
+
+For reproducible generated batches, the MerLin ``PhotonicGenerator`` accepts a
+dedicated ``torch.Generator`` through ``sample_latent`` and ``generate``. This
+controls normal latent sampling without advancing PyTorch's global random
+number generator; use a generator compatible with the latent sampling device.
 
 At this stage:
 

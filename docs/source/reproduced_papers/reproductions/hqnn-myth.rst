@@ -15,6 +15,8 @@ Computational Advantage in Hybrid Quantum Neural Networks: Myth or Reality?
 
    **DOI**: `10.1109/DAC63849.2025.11132906 <https://doi.org/10.1109/DAC63849.2025.11132906>`_
 
+   .. merlin-citations-badge:: hqnn-myth
+
    **Reproduction Status**: ✅ Complete
 
    **Reproducer**: Cassandre Notton (cassandre.notton@quandela.com)

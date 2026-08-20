@@ -15,6 +15,8 @@ Transfer Learning in Hybrid Classical-Quantum Neural Networks
 
    **DOI**: `10.22331/q-2020-10-09-340 <https://doi.org/10.22331/q-2020-10-09-340>`_
 
+   .. merlin-citations-badge:: quantum_transfer_learning
+
    **Reproduction Status**: Complete
 
    **Reproducer**: Benjamin Stott (benjamin.stott@quandela.com)

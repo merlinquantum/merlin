@@ -109,6 +109,11 @@ class NoisyG2SLOSComputeGraph:
                     for n_i in range(1, (2 * self.n_photons) + 1)
                 ],
             )
+            # Kept for the extra-photon sectors: photon-number-indexed SLOS
+            # graphs spanning up to 2*n_photons, reused by
+            # _augmented_obb_probs to simulate both the (grown) coherent cell
+            # and the one-hot distinguishable cells of each OBB partition.
+            self._regular_slos_graphs = regular_slos_graphs
             self._slos_graphs = [
                 NoisySLOSComputeGraph(
                     noise_groups=noise_groups,
@@ -193,6 +198,98 @@ class NoisyG2SLOSComputeGraph:
 
         return output
 
+    def _augmented_obb_probs(
+        self,
+        unitary: torch.Tensor,
+        obb: _InputStateNoisySLOSComputeGraph,
+        extra_vec: torch.Tensor,
+        n_augmented: int,
+    ) -> torch.Tensor:
+        """Compute one g2 extra-photon sector for a fixed emission combination.
+
+        Perceval's source model draws one independent coherent-vs-distinguishable
+        outcome per *original* input photon only -- the same Orthogonal Bad Bits
+        partitions ``obb`` already built for the noiseless ``n_photons`` state --
+        never an extra independent draw per g2-emitted sibling. Whatever the fate
+        of the original photons in a given partition cell, every g2 sibling
+        always joins that cell's coherent (non-excluded) group. This reuses
+        ``obb``'s cached partitions/weights, growing only the coherent cell's
+        Fock state by ``extra_vec`` before convolving with the (unchanged)
+        one-hot distinguishable cells.
+
+        Parameters
+        ----------
+        unitary : torch.Tensor
+            Circuit unitary, batched ``[batch, m, m]``.
+        obb : _InputStateNoisySLOSComputeGraph
+            Cached OBB graph for the base (non-augmented) input state.
+        extra_vec : torch.Tensor
+            Per-mode count of g2-emitted photons for this combination.
+        n_augmented : int
+            Total photon number of this sector (``n_photons`` + emitted).
+
+        Returns
+        -------
+        torch.Tensor
+            Probabilities over the ``n_augmented``-photon Fock basis, shape
+            ``[batch, n_states]``.
+        """
+        batch_size = unitary.size(0)
+        fock_keys = [
+            tuple(row) for row in self._fock_states_per_n[n_augmented].tolist()
+        ]
+        key_to_idx = {key: idx for idx, key in enumerate(fock_keys)}
+        output_probs = torch.zeros(
+            batch_size, len(fock_keys), device=self.device, dtype=self.dtype
+        )
+
+        for order, (cells, counts) in enumerate(obb._partitions):
+            bit_weight = obb._weights[order]
+            for cell, count in zip(cells, counts, strict=True):
+                if order == obb.n_photons:
+                    base_state = extra_vec
+                    bad_states = cell
+                else:
+                    base_state = cell[0] + extra_vec
+                    bad_states = cell[1:]
+
+                base_n = int(base_state.sum().item())
+                _, base_probs = self._regular_slos_graphs[base_n - 1].compute_probs(
+                    unitary, base_state
+                )
+                if base_probs.ndim == 1:
+                    base_probs = base_probs.unsqueeze(0)
+                cell_keys = [self._fock_states_per_n[base_n]]
+                cell_probs = [base_probs]
+                for bad_state in bad_states:
+                    _, bad_probs = self._regular_slos_graphs[0].compute_probs(
+                        unitary, bad_state
+                    )
+                    if bad_probs.ndim == 1:
+                        bad_probs = bad_probs.unsqueeze(0)
+                    cell_keys.append(self._fock_states_per_n[1])
+                    cell_probs.append(bad_probs)
+
+                conv_keys, conv_probs = convolve_distributions(cell_keys, *cell_probs)
+                if conv_probs.ndim == 1:
+                    conv_probs = conv_probs.unsqueeze(0)
+                conv_keys_list = (
+                    [tuple(k.tolist()) for k in conv_keys]
+                    if isinstance(conv_keys, torch.Tensor)
+                    else [tuple(k) for k in conv_keys]
+                )
+
+                for local_idx, key in enumerate(conv_keys_list):
+                    idx = key_to_idx.get(key)
+                    if idx is not None:
+                        output_probs[:, idx] = (
+                            output_probs[:, idx]
+                            + bit_weight * count.item() * conv_probs[:, local_idx]
+                        )
+
+        output_probs = output_probs / output_probs.sum(dim=1, keepdim=True)
+        return output_probs
+
     def compute_probs(
         self,
         unitary: torch.Tensor,
@@ -200,6 +297,7 @@ class NoisyG2SLOSComputeGraph:
     ) -> SectoredDistribution:
 
         sector_outputs = []
+        probs_regular: torch.Tensor
 
         if unitary.size(0) == unitary.size(1) and unitary.ndim == 2:
             unitary = unitary.unsqueeze(0)
@@ -211,6 +309,8 @@ class NoisyG2SLOSComputeGraph:
             keys_regular, probs_regular = single_graph.compute_probs(
                 unitary, input_state
             )
+            # Ensure probabilities are on the same device as the unitary
+            probs_regular = probs_regular.to(unitary.device)
             # Generate one-hot states for each active mode and compute their probs
             one_hot_slos_graphs = {}
             for mode_idx in range(len(input_state)):
@@ -220,11 +320,19 @@ class NoisyG2SLOSComputeGraph:
                     keys_one_hot, probs_one_hot = single_graph._slos_graphs[
                         0
                     ].compute_probs(unitary, one_hot_state)
+                    # Ensure probabilities are on the same device as the unitary
+                    probs_one_hot = probs_one_hot.to(unitary.device)
                     one_hot_slos_graphs[mode_idx] = (keys_one_hot, probs_one_hot)
         else:
             # Cast for mypy: _slos_graphs is list when g2_distinguishable is False
             slos_graphs_list = cast(list[NoisySLOSComputeGraph], self._slos_graphs)
-            probs_regular = slos_graphs_list[0].compute_probs(unitary, input_state)
+            slos_output = slos_graphs_list[0].compute_probs(unitary, input_state)
+            # Ensure probabilities are on the same device as the unitary
+            if isinstance(slos_output, tuple):
+                keys_regular, probs_regular = slos_output
+                probs_regular = probs_regular.to(unitary.device)
+            else:
+                probs_regular = slos_output.to(unitary.device)
 
         # Group possible extra emissions by sector. Entry k contains every
         # source-mode combination that produces n_photons + k output photons.
@@ -235,7 +343,7 @@ class NoisyG2SLOSComputeGraph:
         # probability p.  The two are related by g^(2)(0) = 2p/(1+p)^2, so:
         #   p = ((1 - g2) - sqrt(1 - 2*g2)) / g2,  valid for g2 in [0, 0.5].
         # For small g2, p ≈ g2/2 (L'Hôpital).  At g2=0 the limit is p=0.
-        _g2 = torch.as_tensor(self.g2, device=self.device, dtype=self.dtype)
+        _g2 = torch.as_tensor(self.g2, device=unitary.device, dtype=self.dtype)
         _disc = (1.0 - 2.0 * _g2).clamp(min=0.0)
         p_emit = ((1.0 - _g2) - _disc.sqrt()) / _g2.clamp(min=1e-15)
         for num_photons_added in range(len(extra_photons_combinations)):
@@ -251,7 +359,7 @@ class NoisyG2SLOSComputeGraph:
                         scheme="fock", n=self.n_photons + num_photons_added, m=self.m
                     ).compute_space_size(),
                     dtype=self.dtype,
-                    device=self.device,
+                    device=unitary.device,
                 ),
                 n_modes=self.m,
                 n_photons=self.n_photons + num_photons_added,
@@ -303,14 +411,19 @@ class NoisyG2SLOSComputeGraph:
                         probs = reordered_probs
 
                     else:
-                        input_state_to_run = list(input_state)
+                        extra_vec = torch.zeros(
+                            self.m, dtype=torch.int32, device=self.device
+                        )
                         for photon in combination:
-                            input_state_to_run[photon] += 1
-                        probs = cast(
-                            torch.Tensor,
-                            slos_graphs_list[num_photons_added].compute_probs(
-                                unitary, input_state_to_run
-                            ),
+                            extra_vec[photon] += 1
+                        obb = slos_graphs_list[0]._slos_graph_per_input[
+                            tuple(input_state)
+                        ]
+                        probs = self._augmented_obb_probs(
+                            unitary,
+                            obb,
+                            extra_vec,
+                            self.n_photons + num_photons_added,
                         )
 
                     sector.tensor = sector.tensor + weight_k * probs
@@ -356,6 +469,9 @@ class NoisyG2SLOSComputeGraph:
         else:
             for graph in self._slos_graphs:
                 graph.to(self.device)
+            if hasattr(self, "_regular_slos_graphs"):
+                for regular_graph in self._regular_slos_graphs:
+                    regular_graph.to(self.device)
 
         return self
 
@@ -769,7 +885,7 @@ class _InputStateNoisySLOSComputeGraph:
         )
 
         for i, partition in enumerate(self._partitions):
-            bit_weight = self._weights[i]
+            bit_weight = self._weights[i].to(unitary.device)
 
             for cell, count in zip(partition[0], partition[1], strict=True):
                 cell_distributions = [
@@ -782,7 +898,9 @@ class _InputStateNoisySLOSComputeGraph:
                     fock_states,
                     *cell_distributions,
                 )
-                output_probs += bit_weight * convolution * count.item()
+                output_probs += (
+                    bit_weight * convolution.to(unitary.device) * count.item()
+                )
 
         # OBB partition weights do not generally sum to one. This normalization
         # assumes output_probs spans the full Fock basis for self.n_photons; it

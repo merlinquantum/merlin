@@ -17,6 +17,8 @@ Quantum Convolutional Neural Network for Classical Data Classification
 
    **DOI**: `10.1007/s42484-021-00061-x <https://doi.org/10.1007/s42484-021-00061-x>`_
 
+   .. merlin-citations-badge:: QCNN_data_classification
+
    **Paper URL**: `arXiv:2108.00661 <https://arxiv.org/abs/2108.00661>`_
 
    **Original Repository**: `takh04/QCNN <https://github.com/takh04/QCNN>`_

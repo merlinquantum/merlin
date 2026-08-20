@@ -27,7 +27,7 @@ Main QuantumLayer implementation
 from __future__ import annotations
 
 import warnings
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, MutableMapping, Sequence
 from contextlib import contextmanager
 from typing import Any, cast
 
@@ -1125,8 +1125,12 @@ class QuantumLayer(MerlinModule):
                 raise RuntimeError(
                     "Already ran a smaller batch size: call reset(batch_size=N) before using the layer again"
                 )
-
             batch_dim = max(parameter_batch_dim, 1)
+            if batch_dim == 1 and amplitude_input is not None:
+                if len(amplitude_input.shape) == 1:
+                    batch_dim = 1
+                else:
+                    batch_dim = amplitude_input.shape[0]
 
             state_dimensions = set()
             for state in self.memristive_state:
@@ -1495,102 +1499,93 @@ class QuantumLayer(MerlinModule):
         # Fatal deprecation is handled by the sanitize_parameters decorator via registry.
         return None
 
-    def to(self, *args, **kwargs):
-        """Move the layer and auxiliary transforms to a new device or dtype.
+    # .to() routes through _apply (nn.Module.to calls self._apply), so this is the single move path.
+    def _apply(self, fn, recurse=True):
+        """Apply a transformation function to all tensors owned by the layer.
+
+        This method extends :meth:`torch.nn.Module._apply` to ensure that
+        memristive state tensors, which are stored in Python containers rather
+        than registered as parameters or buffers, are transformed together with
+        the rest of the module state. This guarantees that device and dtype
+        conversions performed through methods such as :meth:`~torch.nn.Module.cuda`,
+        :meth:`~torch.nn.Module.cpu`, :meth:`~torch.nn.Module.float`,
+        :meth:`~torch.nn.Module.double`, and
+        :meth:`~torch.nn.Module.to` are consistently applied to all tensors
+        associated with the layer.
 
         Parameters
         ----------
-        *args
-            Positional arguments forwarded to :meth:`torch.nn.Module.to`.
-        **kwargs
-            Keyword arguments forwarded to :meth:`torch.nn.Module.to`.
+        fn : callable
+            Function applied by PyTorch to each tensor during device or dtype
+            conversion. Typically generated internally by
+            :meth:`torch.nn.Module._apply`.
+        recurse:bool
+            Default is True. Whether or not to apply the function recursively.
 
         Returns
         -------
         QuantumLayer
-            The updated layer instance.
+            The updated layer instance with all registered tensors and
+            memristive state tensors transformed by ``fn``.
         """
-        super().to(*args, **kwargs)
-        # Manually move tensors that are not registered as parameters/buffers.
-        device = kwargs.get("device")
-        dtype = kwargs.get("dtype")
 
-        # Support all torch.nn.Module.to signatures.
-        if len(args) > 0:
-            first_arg = args[0]
-            if isinstance(first_arg, torch.dtype):
-                dtype = first_arg if dtype is None else dtype
-            elif isinstance(first_arg, (torch.device, str)):
-                device = first_arg if device is None else device
-            elif isinstance(first_arg, torch.Tensor):
-                if device is None:
-                    device = first_arg.device
-                if dtype is None and first_arg.dtype in (torch.float32, torch.float64):
-                    dtype = first_arg.dtype
+        # infer canonical device/dtype
+        old_device = self.device if self.device is not None else torch.device("cpu")
+        old_dtype = self.dtype if self.dtype is not None else torch.get_default_dtype()
+        probe = torch.zeros((), device=old_device, dtype=old_dtype)
+        moved = fn(probe)
 
-        if len(args) > 1 and isinstance(args[1], torch.dtype) and dtype is None:
-            dtype = args[1]
+        if moved.device != old_device:  # a real device move was requested
+            self.device = moved.device  # ...otherwise leave it (stays None)
 
-        if dtype is not None:
+        if moved.dtype != old_dtype:  # a real dtype change was requested
             _, self.dtype, self.complex_dtype = MerlinModule.setup_device_and_dtype(
-                None,
-                dtype,
+                None, moved.dtype
             )
 
-        if device is not None:
-            self.device = torch.device(device)
+        super()._apply(fn, recurse=recurse)
 
-        if device is None and dtype is None:
-            return self
+        # memristive tensors
+        for state in range(len(self.memristive_history)):
+            for t in range(len(self.memristive_history[state])):
+                tensor = self.memristive_history[state][t]
+                if torch.is_tensor(tensor):
+                    self.memristive_history[state][t] = fn(tensor)
+
+        for state in range(len(self.memristive_state)):
+            tensor = self.memristive_state[state]
+            if torch.is_tensor(tensor):
+                self.memristive_state[state] = fn(tensor)
 
         self.computation_process.to(dtype=self.dtype, device=self.device)
 
-        # Photon loss Module
+        # Move auxiliaries once
+        target_kwargs = {"dtype": self.dtype}
+        if self.device is not None:
+            target_kwargs["device"] = self.device
+
         if self._photon_loss_transform is not None:
             if isinstance(self._photon_loss_transform, Sequence):
                 for i in range(len(self._photon_loss_transform)):
                     self._photon_loss_transform[i] = self._photon_loss_transform[i].to(
-                        device=self.device,
-                        dtype=self.dtype,
+                        **target_kwargs
                     )
             else:
                 self._photon_loss_transform = self._photon_loss_transform.to(
-                    device=self.device,
-                    dtype=self.dtype,
+                    **target_kwargs
                 )
 
-        # Detector Module
         if self._detector_transform is not None:
             if isinstance(self._detector_transform, Sequence):
                 for i in range(len(self._detector_transform)):
                     self._detector_transform[i] = self._detector_transform[i].to(
-                        device=self.device,
-                        dtype=self.dtype,
+                        **target_kwargs
                     )
             else:
-                self._detector_transform = self._detector_transform.to(
-                    device=self.device,
-                    dtype=self.dtype,
-                )
+                self._detector_transform = self._detector_transform.to(**target_kwargs)
 
         if self._probability_readout is not None:
             self._probability_readout = self._probability_readout.to(device=self.device)
-
-        target_kwargs: dict[str, Any] = {"dtype": self.dtype}
-        if self.device is not None:
-            target_kwargs["device"] = self.device
-
-        # memristor state and history
-        for state in range(len(self.memristive_history)):
-            for t in range(len(self.memristive_history[state])):
-                self.memristive_history[state][t] = self.memristive_history[state][
-                    t
-                ].to(**target_kwargs)
-
-        for state in range(len(self.memristive_state)):
-            self.memristive_state[state] = self.memristive_state[state].to(
-                **target_kwargs
-            )
 
         return self
 
@@ -2208,7 +2203,12 @@ class QuantumLayer(MerlinModule):
                 else:
                     self.memristive_history[index] = []
 
-    def _save_to_state_dict(self, destination, prefix, keep_vars):
+    def _save_to_state_dict(
+        self,
+        destination: MutableMapping[str, Any],
+        prefix: str,
+        keep_vars: bool,
+    ) -> None:
         """Save module parameters plus memristive runtime state when present."""
         super()._save_to_state_dict(destination, prefix, keep_vars)
 
@@ -2223,14 +2223,14 @@ class QuantumLayer(MerlinModule):
 
     def _load_from_state_dict(
         self,
-        state_dict,
-        prefix,
-        local_metadata,
-        strict,
-        missing_keys,
-        unexpected_keys,
-        error_msgs,
-    ):
+        state_dict: MutableMapping[str, Any],
+        prefix: str,
+        local_metadata: dict[str, Any],
+        strict: bool,
+        missing_keys: list[str],
+        unexpected_keys: list[str],
+        error_msgs: list[str],
+    ) -> None:
         """Load module parameters plus memristive runtime state when present."""
         memristive_state_key = prefix + "_memristive_state"
         memristive_history_key = prefix + "_memristive_history"

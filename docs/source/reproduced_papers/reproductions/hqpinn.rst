@@ -15,6 +15,8 @@ Hybrid Quantum Physics-Informed Neural Network for High-Speed Flows
 
    **DOI**: `10.1016/j.compfluid.2025.106782 <https://doi.org/10.1016/j.compfluid.2025.106782>`_
 
+   .. merlin-citations-badge:: hqpinn
+
    **Paper URL**: `arXiv:2503.02202 <https://arxiv.org/abs/2503.02202>`_
 
    **Reproduction Status**: ✅ Complete

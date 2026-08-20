@@ -124,6 +124,231 @@ without passing a tensor (an empty feature tensor is injected automatically).
    are not accepted as ``input_state``; wrap amplitude tensors with
    :meth:`~merlin.core.state_vector.StateVector.from_tensor` first.
 
+Known Limitation: Input Parameters Used Only Inside a Branch
+--------------------------------------------------------------
+
+.. note::
+
+   This is a known limitation of ``FeedForwardBlock`` in MerLin 0.4, tracked in
+   `issue #274 <https://github.com/merlinquantum/merlin/issues/274>`_. It is
+   expected to be solved in **MerLin 0.5** with a new ``FeedForwardBlock`` backend.
+   Until then, we propose the manual workaround below.
+
+``FeedForwardBlock`` currently requires that every entry of ``input_parameters`` be
+consumed by the **first** pre-measurement stage of the experiment. If a classical
+parameter is only referenced inside one or more ``pcvl.FFCircuitProvider`` branch
+configurations — i.e. it encodes a value *after* the measurement, in a specific
+branch — construction fails immediately with:
+
+.. code-block:: text
+
+   ValueError: The first stage must use all of the input parameters. Create you own
+   stages with variable input parameters with the partial measurement strategy instead
+
+For example, the following experiment is rejected because ``x`` is only used inside the
+branch circuits of the ``FFCircuitProvider``, not in the prefix unitary:
+
+.. code-block:: python
+
+   import perceval as pcvl
+   from perceval import BasicState, Circuit
+   from merlin.algorithms.feed_forward import FeedForwardBlock
+
+   # Build a 4-mode experiment with a prefix unitary and measurement in mode 0
+   experiment = pcvl.Experiment(4)
+   experiment.add(0, Circuit(4) // pcvl.Unitary.random(4))  # prefix unitary
+   experiment.add(0, pcvl.Detector.pnr())  # measure mode 0
+
+   # Branch-local parameter "x" is only defined inside branch circuits
+   provider = pcvl.FFCircuitProvider(1, 0, Circuit(3))
+   provider.add_configuration([0], pcvl.BS(pcvl.P("x")) // pcvl.BS(pcvl.P("A")))
+   provider.add_configuration([1], pcvl.BS(pcvl.P("x")) // pcvl.BS(pcvl.P("B")))
+   experiment.add(0, provider)
+
+   # FeedForwardBlock rejects this: "x" is not consumed by the first (prefix) stage
+   FeedForwardBlock(
+       experiment,
+       input_state=BasicState([1, 1, 0, 0]),
+       trainable_parameters=["A", "B"],
+       input_parameters=["x"],   # raises ValueError: "x" is not used in the first stage
+   )
+
+**Workaround: build the stages manually with partial measurement**
+
+Until MerLin 0.5 ships, the same physical workflow can be reproduced by chaining
+:class:`~merlin.algorithms.layer.QuantumLayer` instances yourself with the
+:doc:`partial measurement strategy </quantum_expert_area/partial_measurement>`.
+Critically, to make the model trainable, you must construct layers **once** in
+an ``nn.Module.__init__``, then call :meth:`~merlin.algorithms.layer.QuantumLayer.set_input_state`
+at runtime to route conditional amplitudes through them. This is the only safe way
+to preserve trainable parameters across training steps.
+
+The pattern closely mirrors what ``FeedForwardBlock`` does internally for its
+supported case (branch-local inputs aside). However, this workaround covers a
+**single feedforward stage**; multi-stage experiments require nesting the same
+pattern per stage.
+
+Key implementation details:
+
+- **Layer construction:** Build the prefix ``QuantumLayer`` and one branch layer
+  per outcome in ``__init__``, stored in an ``nn.ModuleDict`` (or similar container).
+- **Runtime routing:** In ``forward()``, call ``set_input_state(branch.amplitudes)``
+  on each branch layer to inject the conditional measurement outcome.
+- **Batch handling:** The prefix layer is called once with no features (produces
+  batch size 1), while branch layers receive input with shape ``(batch_size, ...)``.
+  Probabilities must be broadcast correctly: use ``unsqueeze(-1)`` or indexing to
+  ensure branch and conditional probabilities are multiplied element-wise.
+
+.. code-block:: python
+
+   import torch
+   import torch.nn as nn
+   import perceval as pcvl
+   from perceval import Circuit
+   from merlin.algorithms.layer import QuantumLayer
+   from merlin.core.computation_space import ComputationSpace
+   from merlin.measurement.strategies import MeasurementStrategy
+
+   class BranchFeedforward(nn.Module):
+       """Feedforward model with branch-local parameters, trainable via gradient descent.
+
+       **Note:** This example assumes a single measured mode (e.g., measured_modes=[0]).
+       The implementation below reconstructs full-system keys for arbitrary
+       measured modes.
+       """
+
+       def __init__(self, input_state, prefix_circuit):
+           super().__init__()
+
+           # Build the prefix stage (partial measurement after mode 0).
+           self.partial_layer = QuantumLayer(
+               circuit=prefix_circuit,
+               input_state=input_state,
+               measurement_strategy=MeasurementStrategy.partial(
+                   modes=[0],
+                   computation_space=ComputationSpace.FOCK,
+               ),
+           )
+
+           # Pre-build branch layers for each outcome, keyed by measurement outcome.
+           # Initialize with input_size (classical) and n_photons (quantum dimension).
+           # A branch layer uses the photon count remaining after its measured
+           # outcome, matching the routed conditional state dimension.
+           self.branch_layers = nn.ModuleDict()
+
+           # Build 2-mode branch circuits (remaining modes after measuring mode 0).
+           c0 = Circuit(2)
+           c0.add(0, pcvl.BS(pcvl.P("x")))
+           c0.add(0, pcvl.BS(pcvl.P("A")))
+
+           c1 = Circuit(2)
+           c1.add(0, pcvl.BS(pcvl.P("x")))
+           c1.add(0, pcvl.BS(pcvl.P("B")))
+
+           c2 = Circuit(2)  # vacuum branch after measuring two photons
+
+           self.branch_configs = {
+               (0,): (c0, ["A"], ["x"]),
+               (1,): (c1, ["B"], ["x"]),
+               (2,): (c2, [], []),
+           }
+
+           for outcome, (circuit, trainable_params, input_params) in self.branch_configs.items():
+               key = str(outcome)
+               if sum(input_state) - sum(outcome) == 0:
+                   continue
+               self.branch_layers[key] = QuantumLayer(
+                   circuit=circuit,
+                   input_size=len(input_params),  # Classical input dimension
+                   n_photons=sum(input_state) - sum(outcome),
+                   trainable_parameters=trainable_params,
+                   input_parameters=input_params,
+                   measurement_strategy=MeasurementStrategy.probs(ComputationSpace.FOCK),
+               )
+
+       def forward(self, x=None):
+           # Run the prefix stage to get partial measurement branches.
+           # Note: called with no features; produces batch size 1.
+           partial_measurement = self.partial_layer()
+
+           probabilities = {}
+           for branch in partial_measurement.branches:
+               key = str(branch.outcome)
+               if sum(branch.outcome) == sum(self.partial_layer.input_state):
+                   vacuum_key = [0] * len(self.partial_layer.input_state)
+                   for mode, value in zip(partial_measurement.measured_modes, branch.outcome):
+                       vacuum_key[mode] = value
+                   probabilities[tuple(vacuum_key)] = branch.probability.expand(
+                       x.shape[0] if x is not None else 1
+                   )
+                   continue
+               branch_layer = self.branch_layers[key]
+
+               # Set the conditional amplitudes for this branch.
+               # set_input_state() is the only way to route a StateVector through
+               # a layer that was already constructed with trainable parameters.
+               branch_layer.set_input_state(branch.amplitudes)
+
+               # Execute the branch layer with its local classical inputs (if any).
+               _circuit, _trainable_params, input_params = self.branch_configs[branch.outcome]
+               if input_params:
+                   branch_output = branch_layer(x)  # shape: (batch_size, n_keys)
+               else:
+                   branch_output = branch_layer()  # shape: (batch_size, n_keys)
+
+               # Weight by branch probability with proper broadcasting.
+               # branch.probability is (batch_size,), branch_output is (batch_size, n_keys).
+               # unsqueeze(-1) broadcasts branch probability to (batch_size, 1).
+               branch_prob_weighted = branch.probability.unsqueeze(-1)  # (batch_size, 1)
+
+               for index, remaining_key in enumerate(branch_layer.output_keys):
+                   # Reconstruct the full-system key in the original mode order.
+                   output_key = [0] * len(self.partial_layer.input_state)
+                   for mode, value in zip(partial_measurement.measured_modes, branch.outcome):
+                       output_key[mode] = value
+                   for mode, value in zip(partial_measurement.unmeasured_modes, remaining_key):
+                       output_key[mode] = value
+                   output_key = tuple(output_key)
+                   branch_probs_for_key = branch_output[:, index]  # (batch_size,)
+                   weighted_probs = branch_prob_weighted.squeeze(-1) * branch_probs_for_key
+                   probabilities[output_key] = weighted_probs
+
+           return probabilities
+
+   # Usage
+   input_state = [1, 1, 0]
+   prefix = Circuit(3) // pcvl.Unitary.random(3)
+   model = BranchFeedforward(input_state, prefix)
+
+   # Single batch
+   x = torch.tensor([[0.2]])  # (batch_size=1, input_dim=1)
+   probs_single = model(x)
+
+   # Multi-batch (batch_size=3)
+   x = torch.tensor([[0.1], [0.2], [0.3]])  # (batch_size=3, input_dim=1)
+   probs_multi = model(x)  # each probability has shape (3,)
+
+   # Verify probabilities sum to 1 per batch element
+   for i in range(x.shape[0]):
+       batch_total = sum(p[i].item() for p in probs_multi.values())
+       assert abs(batch_total - 1.0) < 1e-5
+
+   # Now the model is trainable:
+   optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+   # ... training loop ...
+
+This manual composition reproduces the same output structure as ``FeedForwardBlock``
+for single-stage PNR experiments. It uses partial Fock measurement rather than
+``FeedForwardBlock``'s amplitude-based detector transform, so equivalence should
+not be assumed for non-PNR detectors or multi-stage experiments.
+
+.. note::
+
+   The pattern is verified by the test suite in
+   ``tests/algorithms/test_feedforward_manual_workaround.py``, which covers
+   single-batch, multi-batch, trainability, and error cases. When generalizing
+   to multiple measured modes (e.g., ``measured_modes=[0, 1]``), ensure key
+   reconstruction uses the correct measured modes and remaining modes.
 
 Further Reading
 ---------------
