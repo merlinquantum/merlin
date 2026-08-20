@@ -131,6 +131,16 @@ MerlinFuture
 
 MerlinProcessor
 ---------------
+.. autoclass:: merlin.core.merlin_processor.CallState
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+.. autoclass:: merlin.core.merlin_processor.ValidatedLayerConfig
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 .. class:: MerlinProcessor(remote_processor=None, session=None, microbatch_size=32, timeout=3600.0, max_shots_per_call=None, chunk_concurrency=1, token=None, *, processor=None)
 
    Create a processor that offloads quantum leaves to a Perceval backend.

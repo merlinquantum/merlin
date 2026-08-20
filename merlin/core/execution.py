@@ -400,7 +400,7 @@ class RemoteJobRunner:
         ------
         ValueError
             If the chunk exceeds the microbatch guard (an internal invariant).
-        CancelledError
+        concurrent.futures.CancelledError
             If cancellation is requested during the attempt loop.
         TimeoutError
             If ``deadline`` elapses during the attempt loop.
@@ -500,7 +500,8 @@ class RemoteJobRunner:
            - Uses ``"sample_count"`` first, otherwise ``"samples"``.
            - Number of samples = ``effective_sample_count(nsample)``.
 
-        Job names are sanitized and capped through :meth:`_capped_name`.
+        Job names are sanitized and capped through
+        :meth:`~merlin.core.execution.RemoteJobRunner._capped_name`.
 
         Parameters
         ----------
@@ -580,7 +581,7 @@ class RemoteJobRunner:
 
         Raises
         ------
-        CancelledError
+        concurrent.futures.CancelledError
             If cancellation is requested or the backend reports a cancel.
         TimeoutError
             If ``deadline`` elapses while polling.
