@@ -31,6 +31,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+import torch
+
 
 class ParameterRole(Enum):
     """Role definition for circuit parameters."""
@@ -193,8 +195,9 @@ class GenericInterferometer:
         Whether outer phase shifters are trainable.
     seed : int | None
         Optional seed controlling the random phases drawn for non-trainable
-        inner/outer phase shifters. ``None`` draws fresh entropy without
-        touching global random state.
+        inner/outer phase shifters. When omitted, a seed is drawn from
+        PyTorch's global random generator, so ``torch.manual_seed`` controls
+        reproducibility.
     fixed_inner_values : list[float]
         Fixed (non-trainable) values for the inner phase shifters, drawn
         randomly unless explicitly provided. When provided, must contain
@@ -264,6 +267,10 @@ class GenericInterferometer:
                     f"{count} entries for span {self.span}, got {len(values)}"
                 )
         if count > 0:
+            if self.seed is None and (
+                not self.trainable_inner or not self.trainable_outer
+            ):
+                self.seed = int(torch.randint(0, 2**31 - 1, ()).item())
             rng = random.Random(self.seed)
             if not self.trainable_inner and not self.fixed_inner_values:
                 self.fixed_inner_values = [

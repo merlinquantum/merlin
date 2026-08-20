@@ -17,7 +17,11 @@ import torch
 
 import merlin.core.execution as execution_module
 import merlin.core.perceval_adapter as perceval_adapter_module
-from merlin.core.execution import BatchChunker, RemoteJobRunner
+from merlin.core.execution import (
+    BatchChunker,
+    RemoteJobRunner,
+    build_iteration_parameters,
+)
 from merlin.core.merlin_processor import CallState
 from merlin.core.perceval_adapter import RemoteJobFailedError
 
@@ -264,9 +268,11 @@ class TestBatchChunkerRunChunks:
         assert state.active_chunks == 0
 
     def test_first_chunk_error_is_raised(self):
-        """A failing chunk propagates its error after the pool drains."""
+        """A failing chunk propagates without submitting later chunks."""
+        started_chunks: list[float] = []
 
         def run_chunk(layer, config, chunk, nsample, state, deadline, job_base_label):
+            started_chunks.append(float(chunk[0, 0]))
             if chunk[0, 0] == 2:
                 raise RuntimeError("chunk exploded")
             return torch.ones(chunk.shape[0], 1)
@@ -279,12 +285,14 @@ class TestBatchChunkerRunChunks:
             chunker.run_chunks(
                 object(),
                 make_chunk_config(),
-                torch.tensor([[0.0], [2.0]]),
-                BatchChunker.split_batch(2, 1),
+                torch.tensor([[0.0], [2.0], [4.0]]),
+                BatchChunker.split_batch(3, 1),
                 None,
                 CallState.new(),
                 None,
             )
+
+        assert started_chunks == [0.0, 2.0]
 
     def test_deadline_cancels_all_and_raises_timeout(self):
         """An elapsed deadline cancels in-flight jobs and raises TimeoutError."""
@@ -336,6 +344,25 @@ class TestBatchChunkerRunChunks:
         assert output.shape == (2, 1)
 
 
+class TestIterationParameters:
+    def test_input_columns_match_circuit_parameters(self):
+        """Input columns map to circuit parameters in order."""
+        input_tensor = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
+
+        assert build_iteration_parameters(input_tensor, ["theta", "phi"]) == [
+            {"theta": 1.0, "phi": 2.0},
+            {"theta": 3.0, "phi": 4.0},
+        ]
+
+    @pytest.mark.parametrize("column_count", [1, 3])
+    def test_input_column_mismatch_is_rejected(self, column_count):
+        """Missing and extra input columns raise instead of being discarded."""
+        input_tensor = torch.zeros(2, column_count)
+
+        with pytest.raises(ValueError, match="column count does not match"):
+            build_iteration_parameters(input_tensor, ["theta", "phi"])
+
+
 # ---------------------------------------------------------------------------
 # RemoteJobRunner.submit_job
 # ---------------------------------------------------------------------------
@@ -375,14 +402,13 @@ class TestSubmitJob:
         assert job is sampler.samples
         assert is_probability is False
 
-    def test_sample_count_is_default_fallback_without_commands(self):
-        """sample_count is attempted when no commands are advertised."""
+    def test_sampling_raises_without_supported_commands(self):
+        """Sampling fails clearly when no sampling command is advertised."""
         runner = make_runner(get_available_commands=lambda: ())
         sampler = FakeSampler()
 
-        job, _ = runner.submit_job(sampler, None, None)
-
-        assert job is sampler.sample_count
+        with pytest.raises(RuntimeError, match="does not support a sampling command"):
+            runner.submit_job(sampler, None, None)
 
     def test_shot_count_flows_through_effective_sample_count(self):
         """Submitted shots come from the injected effective_sample_count."""

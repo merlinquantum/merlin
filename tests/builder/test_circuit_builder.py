@@ -448,6 +448,23 @@ def test_non_trainable_entangling_layer_seed_is_reproducible():
     assert np.allclose(unitary_a, unitary_b)
 
 
+def test_non_trainable_entangling_layer_uses_torch_global_seed():
+    """Omitted seeds are reproducible through ``torch.manual_seed``."""
+    torch.manual_seed(1234)
+    builder_a = CircuitBuilder(n_modes=4)
+    builder_a.add_entangling_layer(trainable=False, name="pre_mix")
+
+    torch.manual_seed(1234)
+    builder_b = CircuitBuilder(n_modes=4)
+    builder_b.add_entangling_layer(trainable=False, name="pre_mix")
+
+    component_a = builder_a.circuit.components[-1]
+    component_b = builder_b.circuit.components[-1]
+    assert component_a.seed == component_b.seed
+    assert component_a.fixed_inner_values == component_b.fixed_inner_values
+    assert component_a.fixed_outer_values == component_b.fixed_outer_values
+
+
 def test_non_trainable_entangling_layer_partial_trainable_mix():
     """Only the trainable side should expose parameters; the other side stays random."""
     builder = CircuitBuilder(n_modes=4)

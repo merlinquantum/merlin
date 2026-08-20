@@ -19,6 +19,8 @@ Modules
      - Public circuit-component dataclasses such as rotations, beam splitters, and interferometers.
    * - :doc:`merlin.core.computation_space`
      - Computation-space enums and coercion helpers for Fock and related bases.
+   * - :doc:`merlin.core.execution`
+     - Batch chunking and remote job execution units used by Merlin processors.
    * - :doc:`merlin.core.encoding_space`
      - Input encoding definitions and logical-to-Fock mapping helpers.
    * - :doc:`merlin.core.generators`
@@ -33,6 +35,8 @@ Modules
      - Computation processes and factory logic used to execute Merlin circuits.
    * - :doc:`merlin.core.merlin_processor`
      - The high-level :class:`~merlin.core.merlin_processor.MerlinProcessor` remote/local execution interface.
+   * - :doc:`merlin.core.perceval_adapter`
+     - Compatibility adapter and normalized state objects for Perceval backends.
    * - :doc:`merlin.core.sectored_distribution`
      - Data classes used for g2 simulation outputs.
    * - :doc:`merlin.core.state`
@@ -47,6 +51,7 @@ Modules
    merlin.core.circuit
    merlin.core.components
    merlin.core.computation_space
+   merlin.core.execution
    merlin.core.encoding_space
    merlin.core.generators
    merlin.core.partial_measurement
@@ -54,6 +59,7 @@ Modules
    merlin.core.probability_distribution
    merlin.core.process
    merlin.core.merlin_processor
+   merlin.core.perceval_adapter
    merlin.core.sectored_distribution
    merlin.core.state
    merlin.core.state_vector
