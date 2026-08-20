@@ -126,6 +126,20 @@ Future-proofing
    :columns: 2
    :contour-color: #5648ED
 
+Reinforcement Learning
+~~~~~~~~~~~~~~~~~~~~~~
+
+.. toctree::
+   :maxdepth: 1
+   :hidden:
+
+   reproductions/QTRL
+
+.. merlin-gallery::
+   :data: _data/galleries/reproduced_papers/QTRL.json
+   :columns: 2
+   :contour-color: #5648ED
+
 Reproductions by Citations
 --------------------------
 
