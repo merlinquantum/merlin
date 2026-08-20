@@ -135,6 +135,7 @@ MerlinProcessor
    :members:
    :undoc-members:
    :show-inheritance:
+   :noindex:
 
 .. autoclass:: merlin.core.merlin_processor.CallState
    :members:
