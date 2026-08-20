@@ -500,8 +500,7 @@ class RemoteJobRunner:
            - Uses ``"sample_count"`` first, otherwise ``"samples"``.
            - Number of samples = ``effective_sample_count(nsample)``.
 
-        Job names are sanitized and capped through
-        :meth:`~merlin.core.execution.RemoteJobRunner._capped_name`.
+        Job names are sanitized and capped through ``_capped_name``.
 
         Parameters
         ----------

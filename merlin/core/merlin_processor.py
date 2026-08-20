@@ -70,7 +70,8 @@ class JobStatus:
 
 
 class CallState:
-    """Typed per-call execution state for one :meth:`MerlinProcessor.forward_async` call.
+    """Typed per-call execution state for one
+    :meth:`~merlin.core.merlin_processor.MerlinProcessor.forward_async` call.
 
     Replaces the anonymous mutable ``state`` dict previously threaded through
     ``forward_async()``, chunk orchestration, chunk execution, and job polling.
@@ -249,7 +250,8 @@ class CallState:
 
 
 class MerlinFuture(Future):
-    """Typed async handle returned by :meth:`MerlinProcessor.forward_async`.
+    """Typed async handle returned by
+    :meth:`~merlin.core.merlin_processor.MerlinProcessor.forward_async`.
 
     Extends ``torch.futures.Future[torch.Tensor]`` with the Merlin-specific
     async contract that was previously monkey-patched onto plain Future
@@ -387,7 +389,7 @@ class ValidatedLayerConfig:
     circuit : pcvl.ACircuit
         Perceval circuit associated with the layer.
 
-    input_state : Sequence[Integral] | pcvl.BasicState | pcvl.StateVector | pcvl.BSDistribution | pcvl.SVDistribution | None
+    input_state : Sequence[numbers.Integral] | pcvl.BasicState | pcvl.StateVector | pcvl.BSDistribution | pcvl.SVDistribution | None
         Input state for the circuit. May be ``None``, a sequence of integers,
         or one of the supported Perceval state objects. Sequence-like inputs
         are normalized through ``check_sequence()``.

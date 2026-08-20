@@ -127,6 +127,7 @@ nitpick_ignore = [
     ("py:class", "perceval.runtime.RemoteProcessor"),
     ("py:class", "perceval.runtime.session.ISession"),
     ("py:class", "pcvl.ACircuit"),
+    ("py:class", "pcvl.SVDistribution"),
     ("py:attr", "dtype"),
     ("py:attr", "device"),
 ]
