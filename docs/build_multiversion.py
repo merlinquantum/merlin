@@ -191,6 +191,40 @@ def export_tag(repo_path: Path, tag: str, destination: Path) -> None:
         raise subprocess.CalledProcessError(return_code, ["git", "archive", tag])
 
 
+def update_exported_citation_data(
+    checkout_path: Path,
+    citation_data_path: Path,
+) -> bool:
+    """Update citation counts in an exported tag when that tag supports them.
+
+        Parameters
+        ----------
+        checkout_path : pathlib.Path
+            Exported source tree for a release tag.
+        citation_data_path : pathlib.Path
+            Refreshed ``citations.json`` file to copy into the exported tree.
+
+        Returns
+        -------
+        bool
+            ``True`` when the exported tag contains a citation registry and
+            the refreshed counts were copied, otherwise ``False``.
+    """
+    citations_directory = (
+        checkout_path / "docs" / "source" / "_data" / "citations"
+    )
+    # Citation tracking was introduced after the earliest Merlin releases.
+    # Leave those exported source trees unchanged.
+    if not (citations_directory / "papers.json").is_file():
+        return False
+
+    # `git archive <tag>` contains the citation snapshot committed in the tag,
+    # not the counts fetched by the current workflow. Replace only the generated
+    # count file and preserve the tag's own paper registry.
+    shutil.copyfile(citation_data_path, citations_directory / "citations.json")
+    return True
+
+
 def discover_docnames(source_path: Path) -> list[str]:
     """Discover source document names for version-aware links.
 
@@ -489,6 +523,13 @@ def parse_arguments() -> argparse.Namespace:
         help="Build every exact x.x.x release tag instead of one patch per series.",
     )
     parser.add_argument(
+        "--citation-data",
+        help=(
+            "Refreshed citations.json to copy into tags that contain citation "
+            "tracking. Relative paths are resolved from the repository root."
+        ),
+    )
+    parser.add_argument(
         "sphinx_options",
         nargs=argparse.REMAINDER,
         help="Extra options passed to sphinx-build after a '--' separator.",
@@ -511,6 +552,16 @@ def main() -> int:
     docs_path = Path(__file__).resolve().parent
     repo_path = docs_path.parent
     output_path = (docs_path / arguments.output).resolve()
+    citation_data_path = None
+    if arguments.citation_data is not None:
+        citation_data_path = Path(arguments.citation_data)
+        if not citation_data_path.is_absolute():
+            citation_data_path = repo_path / citation_data_path
+        citation_data_path = citation_data_path.resolve()
+        if not citation_data_path.is_file():
+            raise FileNotFoundError(
+                f"Citation data file does not exist: {citation_data_path}"
+            )
     sphinx_build = arguments.sphinx_build
     # The build runs from exported tag directories. Relative executable paths
     # must therefore be resolved before changing working directory.
@@ -568,6 +619,13 @@ def main() -> int:
         for version_name, tag in selected_versions.items():
             checkout_path = temporary_path / version_name
             export_tag(repo_path, tag, checkout_path)
+            # Publication can supply freshly fetched counts. Tags without the
+            # citation extension are intentionally skipped by the helper.
+            if citation_data_path is not None and update_exported_citation_data(
+                checkout_path,
+                citation_data_path,
+            ):
+                print(f"Updated citation data for Merlin {version_name}")
             checkouts[version_name] = (tag, checkout_path)
 
         metadata = build_metadata(repo_path, checkouts, output_path)

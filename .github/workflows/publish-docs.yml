@@ -1,0 +1,108 @@
+name: Publish Documentation
+
+# A merged PR creates a push to main. Pull request builds are validated by
+# docs.yml and never enter this publication workflow.
+on:
+  push:
+    branches:
+      - main
+  # Allows an authorized maintainer to redeploy the documentation from main.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Do not overlap deployments because `aws s3 sync --delete` modifies the
+  # complete destination prefix.
+  group: publish-documentation
+  cancel-in-progress: false
+
+jobs:
+  publish-docs:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # Store the OVH credentials and S3 configuration in this environment and
+    # restrict its deployment branches to main in the repository settings.
+    environment: documentation
+    env:
+      PIP_NO_CACHE_DIR: "1"
+      PIP_NO_COMPILE: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+
+    steps:
+      - name: Check out source and release tags
+        uses: actions/checkout@v4
+        with:
+          # build_multiversion.py discovers release tags in the local clone.
+          # Full history removes the need to fetch an `upstream` remote.
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pandoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pandoc
+          sudo apt-get clean
+          sudo rm -rf /var/lib/apt/lists/*
+
+      - name: Install documentation dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install --index-url https://download.pytorch.org/whl/cpu "torch>=2.0.0,<=2.10.0"
+          pip install -r docs/requirements.txt
+
+      - name: Fetch citation counts
+        env:
+          # Optional. OpenAlex uses this contact for its polite request pool.
+          OPENALEX_MAILTO: ${{ vars.OPENALEX_MAILTO }}
+        run: python docs/fetch_citations.py --mailto "$OPENALEX_MAILTO"
+
+      - name: Validate current documentation
+        working-directory: docs
+        run: |
+          # New documentation must remain warning-free. Historical tags contain
+          # known warnings and are built separately without `-W` below.
+          SPHINXOPTS="-W --keep-going -n -D nbsphinx_execute=never" \
+            make clean html
+
+      - name: Build multiversion documentation
+        run: |
+          # Build the latest patch tag in each major/minor series. The refreshed
+          # citation payload is copied into tags that support citation tracking.
+          python docs/build_multiversion.py \
+            --output build/html \
+            --citation-data docs/source/_data/citations/citations.json \
+            -- \
+            -n \
+            -D nbsphinx_execute=never
+
+      - name: Upload documentation
+        env:
+          # Credentials are secrets; non-sensitive endpoint and destination
+          # configuration are variables in the `documentation` environment.
+          AWS_ACCESS_KEY_ID: ${{ secrets.OVH_S3_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.OVH_S3_SECRET_KEY }}
+          AWS_DEFAULT_REGION: ${{ vars.S3_REGION }}
+          S3_ENDPOINT: ${{ vars.S3_ENDPOINT }}
+          S3_BUCKET_PATH: ${{ vars.S3_BUCKET_PATH }}
+        run: |
+          : "${AWS_ACCESS_KEY_ID:?Missing OVH_S3_ACCESS_KEY secret}"
+          : "${AWS_SECRET_ACCESS_KEY:?Missing OVH_S3_SECRET_KEY secret}"
+          : "${AWS_DEFAULT_REGION:?Missing S3_REGION variable}"
+          : "${S3_ENDPOINT:?Missing S3_ENDPOINT variable}"
+          : "${S3_BUCKET_PATH:?Missing S3_BUCKET_PATH variable}"
+          aws --version
+          # S3_BUCKET_PATH should include the complete documentation prefix,
+          # for example s3://merlin-docs/html/. --delete makes S3 mirror the
+          # generated output, including removal of obsolete pages and versions.
+          aws s3 sync \
+            docs/build/html/ \
+            "$S3_BUCKET_PATH" \
+            --delete \
+            --acl public-read \
+            --endpoint-url "$S3_ENDPOINT"
