@@ -100,6 +100,10 @@ jobs:
           # S3_BUCKET_PATH should include the complete documentation prefix,
           # for example s3://merlin-docs/html/. --delete makes S3 mirror the
           # generated output, including removal of obsolete pages and versions.
+          # TODO: Enable OVH bucket versioning before using this workflow so replaced
+          # objects and delete markers can be restored after a bad deployment.
+          # TODO: Configure a lifecycle policy for noncurrent versions (for example,
+          # 30-90 days) to prevent backup storage from growing indefinitely.
           aws s3 sync \
             docs/build/html/ \
             "$S3_BUCKET_PATH" \
