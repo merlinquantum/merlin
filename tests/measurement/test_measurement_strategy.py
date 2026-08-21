@@ -41,37 +41,7 @@ from merlin.measurement.strategies import (
     resolve_measurement_strategy,
 )
 from merlin.utils.grouping import LexGrouping, ModGrouping
-
-
-def _reference_occupancy_readout(
-    output_keys: list[tuple[int, ...]],
-    probabilities: torch.Tensor,
-) -> tuple[tuple[tuple[int, ...], ...], torch.Tensor]:
-    """Collapse count-resolved probabilities to binary occupancy keys."""
-    occupancy_keys = [
-        tuple(1 if count > 0 else 0 for count in key) for key in output_keys
-    ]
-    grouped_keys = tuple(sorted(set(occupancy_keys)))
-    key_to_group = {key: index for index, key in enumerate(grouped_keys)}
-    group_indices = torch.tensor(
-        [key_to_group[key] for key in occupancy_keys],
-        dtype=torch.long,
-        device=probabilities.device,
-    )
-    grouped = torch.zeros(
-        probabilities.shape[0],
-        len(grouped_keys),
-        dtype=probabilities.dtype,
-        device=probabilities.device,
-    )
-    grouped.index_add_(1, group_indices, probabilities)
-    mass = grouped.sum(dim=1, keepdim=True)
-    grouped = torch.where(
-        mass > 0,
-        grouped / mass.clamp_min(torch.finfo(grouped.dtype).eps),
-        grouped,
-    )
-    return grouped_keys, grouped
+from tests.measurement._helpers import reference_occupancy_readout
 
 
 class TestQuantumLayerMeasurementStrategy:
@@ -500,7 +470,7 @@ class TestQuantumLayerMeasurementStrategy:
         grouped_layer.load_state_dict(ungrouped_layer.state_dict())
 
         ungrouped_output = ungrouped_layer(x)
-        reference_keys, reference = _reference_occupancy_readout(
+        reference_keys, reference = reference_occupancy_readout(
             ungrouped_layer.output_keys,
             ungrouped_output,
         )
@@ -510,6 +480,75 @@ class TestQuantumLayerMeasurementStrategy:
         assert tuple(grouped_layer.output_keys) == reference_keys
         assert output.shape == (2, grouped_layer.output_size)
         assert torch.allclose(output, reference, atol=1e-6)
+
+    def test_occupancy_readout_preserves_lossy_layer_probability_mass(self):
+        """Occupancy readout preserves mass from a sub-normalized detector response."""
+
+        class LossyPnrDetector(pcvl.Detector):
+            def __init__(self) -> None:
+                super().__init__(n_wires=2, max_detections=2)
+
+            def detect(self, theoretical_photons: int):
+                if theoretical_photons == 0:
+                    return {pcvl.BasicState([0]): 0.5}
+                return super().detect(theoretical_photons)
+
+        circuit = pcvl.Circuit(2)
+        circuit.add((0, 1), pcvl.BS())
+
+        def build_experiment() -> pcvl.Experiment:
+            experiment = pcvl.Experiment(circuit)
+            experiment.detectors[0] = LossyPnrDetector()
+            experiment.detectors[1] = LossyPnrDetector()
+            return experiment
+
+        ungrouped_layer = ML.QuantumLayer(
+            input_size=0,
+            experiment=build_experiment(),
+            input_state=[2, 0],
+            measurement_strategy=MeasurementStrategy.probs(
+                computation_space=ComputationSpace.FOCK
+            ),
+        )
+        grouped_layer = ML.QuantumLayer(
+            input_size=0,
+            experiment=build_experiment(),
+            input_state=[2, 0],
+            measurement_strategy=MeasurementStrategy.probs(
+                computation_space=ComputationSpace.FOCK,
+                occupancy_readout=True,
+            ),
+        )
+        grouped_layer.load_state_dict(ungrouped_layer.state_dict())
+
+        ungrouped_output = ungrouped_layer()
+        grouped_output = grouped_layer()
+
+        assert grouped_layer.output_size < ungrouped_layer.output_size
+        ungrouped_mass = ungrouped_output.sum(dim=-1)
+        grouped_mass = grouped_output.sum(dim=-1)
+        assert torch.all(ungrouped_mass < 1)
+        assert torch.all(grouped_mass < 1)
+        assert torch.allclose(grouped_mass, ungrouped_mass, atol=1e-6)
+
+        ungrouped_layer.return_object = True
+        grouped_layer.return_object = True
+        ungrouped_distribution = ungrouped_layer()
+        grouped_distribution = grouped_layer()
+        normalized_grouped_output = grouped_output / grouped_mass.unsqueeze(-1)
+        assert torch.allclose(
+            grouped_distribution.tensor,
+            normalized_grouped_output,
+            atol=1e-6,
+        )
+        assert torch.allclose(
+            ungrouped_distribution.tensor.sum(dim=-1),
+            torch.ones_like(ungrouped_distribution.tensor[:, 0]),
+        )
+        assert torch.allclose(
+            grouped_distribution.tensor.sum(dim=-1),
+            torch.ones_like(grouped_distribution.tensor[:, 0]),
+        )
 
     def test_occupancy_readout_requires_fock_space(self):
         """Occupancy readout is only defined for count-resolved Fock keys."""
@@ -544,7 +583,7 @@ class TestQuantumLayerMeasurementStrategy:
         )
 
         ungrouped_output = ungrouped_layer(x)
-        reference_keys, occupancy_reference = _reference_occupancy_readout(
+        reference_keys, occupancy_reference = reference_occupancy_readout(
             ungrouped_layer.output_keys,
             ungrouped_output,
         )

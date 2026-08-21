@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import math
 import os
 from pathlib import Path
 
+import numpy as np
 import perceval as pcvl
 import pytest
 import torch
@@ -376,6 +378,113 @@ def test_entangling_layer_mode_range_and_non_trainable():
     assert last.start_mode == 1 and last.span == 3
     assert last.model == "mzi"
     assert "block" in builder.trainable_parameter_prefixes
+
+
+def test_non_trainable_entangling_layer_uses_random_phases_not_zero():
+    """A non-trainable entangling layer must still carry random fixed phases.
+
+    Regression test: previously every phase shifter of a ``trainable=False``
+    entangling layer was silently pinned to 0.0, collapsing the block into a
+    deterministic swap/identity instead of a random fixed unitary (breaking,
+    e.g., reservoir-computing style architectures that rely on
+    ``add_entangling_layer(trainable=False)`` to inject a fixed random mix).
+    """
+    builder = CircuitBuilder(n_modes=4)
+    builder.add_entangling_layer(trainable=False, name="pre_mix")
+
+    component = builder.circuit.components[-1]
+    assert isinstance(component, GenericInterferometer)
+    assert component.trainable is False
+
+    # Phases must be populated and not trivially all-zero.
+    assert component.fixed_inner_values
+    assert component.fixed_outer_values
+    # random.uniform() draws from a continuous distribution; all values being
+    # exactly 0.0 has measure-zero probability and is effectively impossible.
+    # These assertions guard against the old bug where phases were hardcoded to 0.0.
+    assert any(v != 0.0 for v in component.fixed_inner_values)
+    assert any(v != 0.0 for v in component.fixed_outer_values)
+    for v in component.fixed_inner_values + component.fixed_outer_values:
+        assert 0.0 <= v < 2 * math.pi
+
+    pcvl_circuit = builder.to_pcvl_circuit(pcvl)
+
+    # No trainable parameters should have been registered.
+    assert pcvl_circuit.get_parameters() == []
+
+    unitary = np.array(pcvl_circuit.compute_unitary())
+    identity = np.eye(4)
+    swap = np.array(
+        [[0, 0, 0, 1], [0, 0, 1, 0], [0, 1, 0, 0], [1, 0, 0, 0]], dtype=complex
+    )
+    assert not np.allclose(unitary, identity, atol=1e-6)
+    assert not np.allclose(np.abs(unitary), np.abs(swap), atol=1e-6)
+
+
+def test_non_trainable_entangling_layer_is_reproducible_and_varies_by_instance():
+    """Repeated conversion is stable; separate builders draw fresh phases."""
+    builder = CircuitBuilder(n_modes=4)
+    builder.add_entangling_layer(trainable=False, name="pre_mix")
+
+    unitary_first = np.array(builder.to_pcvl_circuit(pcvl).compute_unitary())
+    unitary_second = np.array(builder.to_pcvl_circuit(pcvl).compute_unitary())
+    assert np.allclose(unitary_first, unitary_second)
+
+    other_builder = CircuitBuilder(n_modes=4)
+    other_builder.add_entangling_layer(trainable=False, name="pre_mix")
+    unitary_other = np.array(other_builder.to_pcvl_circuit(pcvl).compute_unitary())
+    assert not np.allclose(unitary_first, unitary_other)
+
+
+def test_non_trainable_entangling_layer_seed_is_reproducible():
+    builder_a = CircuitBuilder(n_modes=4)
+    builder_a.add_entangling_layer(trainable=False, name="pre_mix", seed=1234)
+
+    builder_b = CircuitBuilder(n_modes=4)
+    builder_b.add_entangling_layer(trainable=False, name="pre_mix", seed=1234)
+
+    unitary_a = np.array(builder_a.to_pcvl_circuit(pcvl).compute_unitary())
+    unitary_b = np.array(builder_b.to_pcvl_circuit(pcvl).compute_unitary())
+    assert np.allclose(unitary_a, unitary_b)
+
+
+def test_non_trainable_entangling_layer_uses_torch_global_seed():
+    """Omitted seeds are reproducible through ``torch.manual_seed``."""
+    torch.manual_seed(1234)
+    builder_a = CircuitBuilder(n_modes=4)
+    builder_a.add_entangling_layer(trainable=False, name="pre_mix")
+
+    torch.manual_seed(1234)
+    builder_b = CircuitBuilder(n_modes=4)
+    builder_b.add_entangling_layer(trainable=False, name="pre_mix")
+
+    component_a = builder_a.circuit.components[-1]
+    component_b = builder_b.circuit.components[-1]
+    assert component_a.seed == component_b.seed
+    assert component_a.fixed_inner_values == component_b.fixed_inner_values
+    assert component_a.fixed_outer_values == component_b.fixed_outer_values
+
+
+def test_non_trainable_entangling_layer_partial_trainable_mix():
+    """Only the trainable side should expose parameters; the other side stays random."""
+    builder = CircuitBuilder(n_modes=4)
+    builder.add_entangling_layer(
+        name="mix", trainable_inner=True, trainable_outer=False
+    )
+
+    component = builder.circuit.components[-1]
+    assert component.trainable_inner is True
+    assert component.trainable_outer is False
+    assert component.fixed_inner_values == []
+    assert component.fixed_outer_values
+    # random.uniform() draws from a continuous distribution; all values being
+    # exactly 0.0 has measure-zero probability and is effectively impossible.
+    assert any(v != 0.0 for v in component.fixed_outer_values)
+
+    pcvl_circuit = builder.to_pcvl_circuit(pcvl)
+    params = pcvl_circuit.get_parameters()
+    assert any(p.name.startswith("mix_li") for p in params)
+    assert not any(p.name.startswith("mix_lo") for p in params)
 
 
 def test_entangling_layer_invalid_modes():

@@ -78,6 +78,24 @@ MerLin implementation
 ----------------------
 The ready-to-use MerLin model creats the generator. It is defined as the :class:`~merlin.models.photonic_generator.PhotonicGenerator` object. This model takes noise as input and generates new features that are close to the data distribution as an output.
 
+By default, ``sample_latent`` and ``generate`` draw normal latent vectors from
+PyTorch's global random-number generator. For reproducible batches, pass a
+dedicated ``torch.Generator``. The same generator can be supplied to
+``generate`` during evaluation or to ``sample_latent`` when the latent batch is
+also needed:
+
+.. code-block:: python
+
+   sampling_generator = torch.Generator().manual_seed(1234)
+   fake_images = generator.generate(
+       batch_size=32,
+       generator=sampling_generator,
+   )
+
+Using a dedicated generator keeps latent sampling reproducible without
+advancing PyTorch's global random-number generator. The generator must be
+compatible with the device used for sampling.
+
 There is also a helper classes to help transform the output.
 
 * ``ImageAdapter``: Adapt tensor measurements to GAN-native image tensors.

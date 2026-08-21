@@ -35,6 +35,15 @@ class _OccupancyReadout(nn.Module):
 
     The readout is bound once to the layer output keys. At forward time it only
     applies the precomputed column-to-bin map to the current probability tensor.
+
+    The reduction sums grouped probabilities without renormalizing, so total
+    probability mass is preserved rather than rescaled back to 1. This keeps
+    occupancy grouping consistent with the non-occupancy ``probs()`` path,
+    which also never renormalizes. If a distribution reaches either path with
+    sub-unit mass, that mass is preserved.
+    This mass-preservation guarantee applies to raw tensor outputs; a layer
+    configured with ``return_object=True`` wraps the result in
+    ``ProbabilityDistribution``, which normalizes on construction by design.
     """
 
     input_size: int
@@ -78,6 +87,16 @@ class _OccupancyReadout(nn.Module):
     def forward(self, probabilities: torch.Tensor) -> torch.Tensor:
         """Return probabilities over binary occupancy keys.
 
+        The reduction is a mass-preserving column sum: each output bin is the
+        sum of the input probabilities that collapse to it, and the total
+        mass of ``probabilities`` is left unchanged. This intentionally
+        matches the non-occupancy ``probs()`` path (see
+        ``DistributionStrategy.process``), which never renormalizes either.
+        If the input reaches the readout with sub-unit mass, callers will see
+        that mass carried through occupancy grouping rather than silently
+        rescaled back to 1. The later ``ProbabilityDistribution`` wrapper is
+        an intentional normalization boundary for typed outputs.
+
         Parameters
         ----------
         probabilities : torch.Tensor
@@ -120,10 +139,6 @@ class _OccupancyReadout(nn.Module):
             device=probabilities.device,
         )
         grouped.index_add_(1, group_indices, matrix)
-
-        mass = grouped.sum(dim=1, keepdim=True)
-        safe_mass = mass.clamp_min(torch.finfo(grouped.dtype).eps)
-        grouped = torch.where(mass > 0, grouped / safe_mass, grouped)
 
         if probabilities.dim() == 1:
             return grouped.squeeze(0)

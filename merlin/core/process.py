@@ -869,13 +869,11 @@ class ComputationProcess(AbstractComputationProcess):
         memristive_current_state = (
             [] if memristive_current_state is None else memristive_current_state
         )
-        prepared_state = (
-            self._prepare_superposition_support() if amplitude_encoding else None
-        )
         memristive_batched = (
-            prepared_state is not None
-            and prepared_state.batch_size > 1
-            and memristive_current_state != []
+            bool(memristive_current_state)
+            and isinstance(self.input_state, torch.Tensor)
+            and amplitude_encoding
+            and self._prepare_superposition_support().batch_size > 1
         )
 
         for _sample_index in range(self._n_phase_error_samples):
@@ -966,21 +964,19 @@ class ComputationProcess(AbstractComputationProcess):
         memristive_current_state = (
             [] if memristive_current_state is None else memristive_current_state
         )
-        prepared_state = (
-            self._prepare_superposition_support() if amplitude_encoding else None
-        )
-        memristive_batched_amplitudes = (
-            prepared_state is not None
-            and prepared_state.batch_size > 1
-            and (memristive_current_state != [])
-        )
-
         if self._has_phase_error():
             return self._compute_phase_error_probabilities(
                 parameters,
                 amplitude_encoding=amplitude_encoding,
                 memristive_current_state=memristive_current_state,
             )
+
+        memristive_batched_amplitudes = (
+            bool(memristive_current_state)
+            and isinstance(self.input_state, torch.Tensor)
+            and amplitude_encoding
+            and self._prepare_superposition_support().batch_size > 1
+        )
 
         # If there is memristive PS and batched amplitude encoding, create a
         # unitary per amplitude input

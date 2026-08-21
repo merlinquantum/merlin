@@ -203,13 +203,16 @@ def discover_docnames(source_path: Path) -> list[str]:
         -------
         list[str]
             Document names without source suffixes, relative to
-            ``source_path``.
+            ``source_path``, using POSIX separators. Files with a hidden
+            path component are excluded.
     """
     docnames: set[str] = set()
     for suffix in SOURCE_SUFFIXES:
         for source_file in source_path.rglob(f"*{suffix}"):
             relative_path = source_file.relative_to(source_path)
-            docnames.add(str(relative_path.with_suffix("")))
+            if any(part.startswith(".") for part in relative_path.parts):
+                continue
+            docnames.add(relative_path.with_suffix("").as_posix())
     return sorted(docnames)
 
 
@@ -256,6 +259,33 @@ def build_metadata(
     return metadata
 
 
+def _redirect_page(target_url: str, link_text: str) -> str:
+    """Build a static HTML page that redirects to ``target_url``.
+
+        Parameters
+        ----------
+        target_url : str
+            Relative URL the browser should be redirected to.
+        link_text : str
+            Human-readable text for the fallback link.
+
+        Returns
+        -------
+        str
+            Complete HTML document contents for the redirect page.
+    """
+    return "\n".join(
+        [
+            "<!doctype html>",
+            '<meta charset="utf-8">',
+            f'<meta http-equiv="refresh" content="0; url={target_url}">',
+            f'<link rel="canonical" href="{target_url}">',
+            f'<a href="{target_url}">{link_text}</a>',
+            "",
+        ]
+    )
+
+
 def write_latest_redirect(output_path: Path, latest_version_name: str) -> None:
     """Write a root ``index.html`` redirect to the latest built version.
 
@@ -274,20 +304,75 @@ def write_latest_redirect(output_path: Path, latest_version_name: str) -> None:
     output_path.mkdir(parents=True, exist_ok=True)
     redirect_path = output_path / "index.html"
     redirect_path.write_text(
-        "\n".join(
-            [
-                "<!doctype html>",
-                '<meta charset="utf-8">',
-                '<meta http-equiv="refresh" '
-                f'content="0; url={latest_version_name}/index.html">',
-                f'<link rel="canonical" href="{latest_version_name}/index.html">',
-                f'<a href="{latest_version_name}/index.html">'
-                f"Open Merlin {latest_version_name} documentation</a>",
-                "",
-            ]
+        _redirect_page(
+            f"{latest_version_name}/index.html",
+            f"Open Merlin {latest_version_name} documentation",
         ),
         encoding="utf-8",
     )
+
+
+def write_legacy_page_redirects(
+    output_path: Path,
+    latest_version_name: str,
+    docnames: list[str],
+) -> None:
+    """Write root-level redirects for pre-versioning, unversioned page URLs.
+
+        Before multi-version documentation was introduced, pages were served
+        directly at the site root, for example
+        ``https://merlinquantum.ai/reproduced_papers/index.html``. Those pages
+        now live under a version prefix, for example
+        ``https://merlinquantum.ai/0.4/reproduced_papers/index.html``. This
+        writes a stub redirect page at each old unversioned location so that
+        existing external links and search engine results reach the
+        equivalent page in the latest built version instead of a 404.
+
+        Parameters
+        ----------
+        output_path : pathlib.Path
+            Root directory containing all versioned HTML builds.
+        latest_version_name : str
+            Public version name that unversioned URLs should redirect into.
+        docnames : list[str]
+            Document names (without suffix) present in the latest version,
+            relative to its Sphinx source directory.
+
+        Returns
+        -------
+        None
+            One redirect page per docname is written under ``output_path``,
+            skipping ``index`` which is already handled by
+            ``write_latest_redirect``.
+    """
+    for docname in docnames:
+        if docname == "index":
+            continue
+        # Build the filename by string concatenation rather than
+        # ``Path.with_suffix()``. Many docnames contain dots, for example
+        # generated API reference pages like
+        # ``api_reference/api/merlin.algorithms.feed_forward``.
+        # ``with_suffix()`` replaces everything after the last dot in the
+        # final path component, which would both write the stub at the wrong
+        # path and collapse multiple docnames onto the same file.
+        legacy_path = output_path / f"{docname}.html"
+        # Guard against a docname escaping the output directory, for example
+        # via a leading "..".
+        if output_path.resolve() not in legacy_path.resolve().parents:
+            continue
+
+        depth = docname.count("/")
+        relative_prefix = "../" * depth
+        target_url = f"{relative_prefix}{latest_version_name}/{docname}.html"
+
+        legacy_path.parent.mkdir(parents=True, exist_ok=True)
+        legacy_path.write_text(
+            _redirect_page(
+                target_url,
+                f"This page moved to Merlin {latest_version_name} documentation",
+            ),
+            encoding="utf-8",
+        )
 
 
 def build_version(
@@ -332,7 +417,10 @@ def build_version(
     """
     source_path = checkout_path / "docs" / "source"
     version_output_path = output_path / version_name
+    # Keep nbsphinx auxiliary images relative to the exported source tree.
+    doctree_path = checkout_path / "docs" / "build" / "doctrees" / version_name
     version_output_path.mkdir(parents=True, exist_ok=True)
+    doctree_path.mkdir(parents=True, exist_ok=True)
 
     env = os.environ.copy()
     env["MERLIN_DOCS_REPO_PATH"] = str(checkout_path)
@@ -348,6 +436,8 @@ def build_version(
         sphinx_build,
         "-b",
         "html",
+        "-d",
+        str(doctree_path),
         "-D",
         f"smv_metadata_path={metadata_path}",
         "-D",
@@ -499,6 +589,11 @@ def main() -> int:
             )
 
     write_latest_redirect(output_path, latest_version_name)
+    write_legacy_page_redirects(
+        output_path,
+        latest_version_name,
+        metadata[latest_version_name]["docnames"],
+    )
     print(f"Built versions: {', '.join(selected_versions)}")
     print(f"Open {output_path / 'index.html'}")
     return 0

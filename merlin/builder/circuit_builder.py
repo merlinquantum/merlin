@@ -575,6 +575,7 @@ class CircuitBuilder:
         name: str | None = None,
         trainable_inner: bool | None = None,
         trainable_outer: bool | None = None,
+        seed: int | None = None,
     ) -> "CircuitBuilder":
         """Add an entangling layer spanning a range of modes.
 
@@ -595,6 +596,10 @@ class CircuitBuilder:
             Override for the internal phase shifters.
         trainable_outer : bool | None
             Override for the output phase shifters.
+        seed : int | None
+            Optional seed for the random phases assigned to non-trainable
+            phase shifters. When omitted, the seed is drawn from PyTorch's
+            global random generator.
 
         Returns
         -------
@@ -648,6 +653,7 @@ class CircuitBuilder:
             model=normalized_model,
             trainable_inner=trainable_inner,
             trainable_outer=trainable_outer,
+            seed=seed,
         )
 
         self.circuit.add(component)
@@ -939,16 +945,19 @@ class CircuitBuilder:
                             component, "trainable_outer", component.trainable
                         ),
                         base: str = prefix,
+                        block: GenericInterferometer = component,
                     ):
                         """Build a Mach-Zehnder interferometer optionally parameterised per index."""
                         if inner_trainable:
                             phi_inner = pcvl_module.P(f"{base}_li{i}")
                         else:
-                            phi_inner = 0.0
+                            fixed = block.fixed_inner_values
+                            phi_inner = fixed[i] if i < len(fixed) else 0.0
                         if outer_trainable:
                             phi_outer = pcvl_module.P(f"{base}_lo{i}")
                         else:
-                            phi_outer = 0.0
+                            fixed = block.fixed_outer_values
+                            phi_outer = fixed[i] if i < len(fixed) else 0.0
                         return (
                             pcvl_module.BS()
                             // pcvl_module.PS(phi_inner)
@@ -975,16 +984,19 @@ class CircuitBuilder:
                             component, "trainable_outer", component.trainable
                         ),
                         base: str = prefix,
+                        block: GenericInterferometer = component,
                     ):
                         """Build a Mach-Zehnder interferometer optionally parameterised per index."""
                         if inner_trainable:
                             phi_inner = pcvl_module.P(f"{base}_li{i}")
                         else:
-                            phi_inner = 0.0
+                            fixed = block.fixed_inner_values
+                            phi_inner = fixed[i] if i < len(fixed) else 0.0
                         if outer_trainable:
                             phi_outer = pcvl_module.P(f"{base}_lo{i}")
                         else:
-                            phi_outer = 0.0
+                            fixed = block.fixed_outer_values
+                            phi_outer = fixed[i] if i < len(fixed) else 0.0
 
                         circuit = pcvl_module.Circuit(2)
                         circuit.add(0, pcvl_module.BS())

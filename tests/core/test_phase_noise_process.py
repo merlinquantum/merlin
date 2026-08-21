@@ -80,6 +80,24 @@ def _phase_parameter(value: float = 0.37) -> list[torch.Tensor]:
     return [torch.tensor([value], dtype=torch.float64, requires_grad=True)]
 
 
+def test_phase_error_accepts_fock_input_with_amplitude_encoding_flag():
+    """Deprecated amplitude encoding does not force tensor support preparation."""
+    process = _process(
+        noise_groups=NoiseGroups(
+            source=None,
+            circuit={"phase_error": 0.1},
+            post_measurement=None,
+        )
+    )
+
+    probabilities = process.compute(
+        _phase_parameter(),
+        amplitude_encoding=True,
+    )
+
+    assert isinstance(probabilities, torch.Tensor)
+
+
 def _manual_phase_error_average(
     process: ComputationProcess,
     parameters: list[torch.Tensor],
