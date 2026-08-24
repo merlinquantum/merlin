@@ -94,6 +94,7 @@ extensions = [
     "nbsphinx",
     "sphinx_multiversion",
     "merlin_gallery",
+    "merlin_citations",
     "sphinx.ext.intersphinx",
 ]
 
@@ -115,6 +116,18 @@ nitpick_ignore = [
     ("py:class", "merlin.measurement.strategies._LegacyMeasurementStrategy"),
     ("py:class", "torch.nn.modules.loss._Loss"),
     ("py:class", "Module"),
+    # Perceval's published v1.2 inventory does not expose these symbols under
+    # the import paths used by Merlin's type hints.
+    ("py:class", "AProcessor"),
+    ("py:class", "RemoteJob"),
+    ("py:class", "Sampler"),
+    ("py:class", "perceval.algorithm.Sampler"),
+    ("py:class", "perceval.runtime.AProcessor"),
+    ("py:class", "perceval.runtime.RemoteJob"),
+    ("py:class", "perceval.runtime.RemoteProcessor"),
+    ("py:class", "perceval.runtime.session.ISession"),
+    ("py:class", "pcvl.ACircuit"),
+    ("py:class", "pcvl.SVDistribution"),
     ("py:attr", "dtype"),
     ("py:attr", "device"),
 ]

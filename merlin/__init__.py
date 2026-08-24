@@ -49,7 +49,7 @@ from .builder.circuit_builder import CircuitBuilder
 # Advanced components (for power users)
 from .core.computation_space import ComputationSpace
 from .core.encoding_space import EncodingSpace
-from .core.merlin_processor import MerlinProcessor
+from .core.merlin_processor import MerlinFuture, MerlinProcessor
 from .core.process import ComputationProcess
 from .core.state import StatePattern, generate_state
 from .measurement import (
@@ -78,7 +78,7 @@ from .utils.combinadics import Combinadics
 from .utils.grouping import LexGrouping, ModGrouping
 
 # Version and metadata
-__version__ = "0.4.0"
+__version__ = "0.4.1"
 __author__ = "Merlin Team"
 __description__ = "Photonic Quantum Machine Learning Framework"
 
@@ -106,6 +106,7 @@ __all__ = [
     "resolve_detectors",
     "ModeExpectations",
     "MerlinProcessor",
+    "MerlinFuture",
     "Amplitudes",
     "LexGrouping",
     "ModGrouping",

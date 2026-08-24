@@ -15,6 +15,8 @@ Photonic Quantum Convolutional Neural Networks with Adaptive State Injection
 
    **DOI**: `10.48550/arXiv.2504.20989 <https://doi.org/10.48550/arXiv.2504.20989>`_
 
+   .. merlin-citations-badge:: photonic_qcnn
+
    **Reproduction Status**: ✅ Complete
 
    **Reproducer**: Philippe Schoeb (philippe.schoeb@quandela.com) and Anthony Walsh (anthony.walsh@quandela.com)

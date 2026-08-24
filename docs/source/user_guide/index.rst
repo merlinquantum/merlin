@@ -7,6 +7,31 @@ User Guide
 ==========
 Here are a few pages to guide you through your MerLin usage.
 
+Compatibility
+----------------------------------------
+.. merlin-gallery::
+   :data: _data/galleries/user_guide/compatibility.json
+   :columns: 2
+   :contour-color: #f2994a
+
+.. toctree::
+   :hidden:
+   :maxdepth: 1
+
+   compatibility
+
+Hardware aware design
+----------------------------------------
+.. merlin-gallery::
+   :data: _data/galleries/user_guide/Hardware-aware_design.json
+   :columns: 2
+   :contour-color: #f2994a
+
+.. toctree::
+   :hidden:
+   :maxdepth: 1
+
+   hardware_design_checklist
 
 Master the QuantumLayer
 ----------------------------
@@ -60,18 +85,6 @@ Noisy simulations
 
    noisy_simulations
 
-Send your code to simulators or QPUs
-----------------------------------------
-.. merlin-gallery::
-   :data: _data/galleries/user_guide/send_code_qpu.json
-   :columns: 2
-
-.. toctree::
-   :hidden:
-   :maxdepth: 1
-
-   remote_execution
-
 Ready to use quantum models
 ----------------------------------------
 .. merlin-gallery::
@@ -83,6 +96,18 @@ Ready to use quantum models
    :maxdepth: 1
 
    models/index
+
+Send your code to simulators or QPUs
+----------------------------------------
+.. merlin-gallery::
+   :data: _data/galleries/user_guide/send_code_qpu.json
+   :columns: 2
+
+.. toctree::
+   :hidden:
+   :maxdepth: 1
+
+   remote_execution
 
 Specific algorithms
 ----------------------------------------
@@ -97,25 +122,8 @@ Specific algorithms
    feed_forward
    kernels
 
-Compatibility
-----------------------------------------
-.. merlin-gallery::
-   :data: _data/galleries/user_guide/compatibility.json
-   :columns: 2
-   :contour-color: #f2994a
-
-.. toctree::
-   :hidden:
-   :maxdepth: 1
-
-   compatibility
-
 Migration guide
 ----------------------------------------
-.. merlin-gallery::
-   :data: _data/galleries/user_guide/migration.json
-   :columns: 2
-   :contour-color: #f2994a
 
 .. toctree::
    :hidden:

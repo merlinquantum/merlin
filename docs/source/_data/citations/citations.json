@@ -1,0 +1,74 @@
+{
+  "source": "OpenAlex",
+  "fetched_at": "2026-07-22",
+  "papers": {
+    "QCNN_data_classification": {
+      "cited_by_count": 368,
+      "openalex_id": "W3192227636"
+    },
+    "amplitude_limitations": {
+      "cited_by_count": 0,
+      "openalex_id": "W4415084970"
+    },
+    "distributed_nn": {
+      "cited_by_count": 0,
+      "openalex_id": "W6910423078"
+    },
+    "fock_state_expressivity": {
+      "cited_by_count": 31,
+      "openalex_id": "W3178462323"
+    },
+    "hqnn-myth": {
+      "cited_by_count": 18,
+      "openalex_id": "W4414198122"
+    },
+    "hqpinn": {
+      "cited_by_count": 3,
+      "openalex_id": "W4413251953"
+    },
+    "nearest_centroids": {
+      "cited_by_count": 7,
+      "openalex_id": "W3113282065"
+    },
+    "nqe": {
+      "cited_by_count": 16,
+      "openalex_id": "W4401421850"
+    },
+    "photonic_QGAN": {
+      "cited_by_count": 8,
+      "openalex_id": "W4404059122"
+    },
+    "photonic_kernel": {
+      "cited_by_count": 20,
+      "openalex_id": "W4410966984"
+    },
+    "photonic_memristor": {
+      "cited_by_count": 0,
+      "openalex_id": "W4416887527"
+    },
+    "photonic_qcnn": {
+      "cited_by_count": 0,
+      "openalex_id": "W4417172998"
+    },
+    "qllm_finetuning": {
+      "cited_by_count": 2,
+      "openalex_id": "W4416874873"
+    },
+    "qssl": {
+      "cited_by_count": 38,
+      "openalex_id": "W3141189820"
+    },
+    "quantum_adversarial_ml": {
+      "cited_by_count": 138,
+      "openalex_id": "W2998262898"
+    },
+    "quantum_reservoir_computing": {
+      "cited_by_count": 9,
+      "openalex_id": "W4410252038"
+    },
+    "quantum_transfer_learning": {
+      "cited_by_count": 394,
+      "openalex_id": "W2995742898"
+    }
+  }
+}

@@ -26,6 +26,7 @@ Tests for the main QuantumLayer class.
 
 import math
 import re
+from collections.abc import Sequence
 from copy import deepcopy
 
 import numpy as np
@@ -45,6 +46,7 @@ from merlin.core.state_vector import StateVector
 from merlin.algorithms.layer import QuantumLayer
 from merlin.core import StateVector, EncodingSpace
 from merlin import CircuitBuilder, QuantumLayer, MeasurementStrategy, ComputationSpace
+
 
 class TestQuantumLayer:
     """Test suite for QuantumLayer."""
@@ -382,10 +384,12 @@ class TestQuantumLayer:
             measurement_strategy=ML.MeasurementStrategy.probs(),
         )
 
-        params, batch_dim = layer._prepare_classical_parameters([
-            torch.rand(2, 2),
-            torch.rand(2, 2),
-        ])
+        params, batch_dim = layer._prepare_classical_parameters(
+            [
+                torch.rand(2, 2),
+                torch.rand(2, 2),
+            ]
+        )
 
         assert batch_dim == 2
         assert len(params) >= 2
@@ -1040,9 +1044,9 @@ class TestQuantumLayer:
         assert model[1].out_features == 3
         # Check that it has trainable parameters (only in Linear layer)
         trainable_params_layer = [p for p in layer.parameters() if p.requires_grad]
-        assert len(trainable_params_layer) == 0, (
-            "Layer should have no trainable parameters"
-        )
+        assert (
+            len(trainable_params_layer) == 0
+        ), "Layer should have no trainable parameters"
         trainable_params = [p for p in model.parameters() if p.requires_grad]
         assert len(trainable_params) > 0, "Model should have trainable parameters"
 
@@ -2361,12 +2365,12 @@ def test_memristive_state_dict_round_trip_preserves_state_and_history():
     restored = _layer(_builder_with_memristor(with_inputs=True), input_size=2)
     restored.load_state_dict(torch.load(buffer, weights_only=True))
 
-    assert torch.allclose(restored.memristive_state[0], state_before), (
-        "memristive_state was not preserved across a state_dict round-trip"
-    )
-    assert len(restored.memristive_history[0]) == history_len_before, (
-        "memristive_history length was not preserved across a state_dict round-trip"
-    )
+    assert torch.allclose(
+        restored.memristive_state[0], state_before
+    ), "memristive_state was not preserved across a state_dict round-trip"
+    assert (
+        len(restored.memristive_history[0]) == history_len_before
+    ), "memristive_history length was not preserved across a state_dict round-trip"
 
 
 def test_memristive_state_dict_round_trip_as_submodule():
@@ -2629,9 +2633,9 @@ def test_memristive_works_with_typed_objects_and_cloning_protects_gradients():
     loss_sv = output_sv_typed.tensor.abs().sum()
     loss_sv.backward()
     assert input_data.grad is not None
-    assert torch.any(input_data.grad != 0), (
-        "Gradients should flow through StateVector output"
-    )
+    assert torch.any(
+        input_data.grad != 0
+    ), "Gradients should flow through StateVector output"
 
     # Verify memristive history accumulated (one forward pass = one state)
     assert len(layer_statevector_typed.memristive_history[0]) >= 1
@@ -2646,9 +2650,7 @@ def test_memristive_works_with_typed_objects_and_cloning_protects_gradients():
     # Verify output is NOT modified by the update rule (cloning protected it)
     assert not torch.allclose(
         output_pd_typed.tensor, torch.full_like(output_pd_typed.tensor, 999.0)
-    ), (
-        "ProbabilityDistribution output was incorrectly modified by memristive update rule"
-    )
+    ), "ProbabilityDistribution output was incorrectly modified by memristive update rule"
     assert output_pd_typed.tensor.requires_grad
 
     # Compute loss and backward for ProbabilityDistribution
@@ -2782,9 +2784,9 @@ def test_detach_at_each_forward_false_allows_full_gradient_history():
     outputs = [layer(input_batch) for input_batch in inputs]
 
     # Verify memristive history accumulated
-    assert len(layer.memristive_history[0]) == 6, (
-        f"Expected 6 history entries, got {len(layer.memristive_history[0])}"
-    )
+    assert (
+        len(layer.memristive_history[0]) == 6
+    ), f"Expected 6 history entries, got {len(layer.memristive_history[0])}"
 
     # Compute loss from the last output and backpropagate
     loss = outputs[-1][:, 0].sum()
@@ -2799,9 +2801,9 @@ def test_detach_at_each_forward_false_allows_full_gradient_history():
 
     # All inputs should have non-zero gradients (full history retained)
     for i, grad_norm in enumerate(grad_norms):
-        assert grad_norm > 1e-8, (
-            f"Input {i} should have non-zero gradient with full history, got {grad_norm}"
-        )
+        assert (
+            grad_norm > 1e-8
+        ), f"Input {i} should have non-zero gradient with full history, got {grad_norm}"
 
 
 def test_detach_at_each_forward_is_boolean_flag():
@@ -2899,9 +2901,9 @@ def test_mixed_memristors_with_different_detach_settings():
         assert state.grad_fn is None, "Detached memristor states should have no grad_fn"
 
     # Second memristor (full grad) should retain gradients
-    assert layer.memristive_history[1][-1].grad_fn is not None, (
-        "Non-detached memristor should retain gradients"
-    )
+    assert (
+        layer.memristive_history[1][-1].grad_fn is not None
+    ), "Non-detached memristor should retain gradients"
 
 
 def test_detach_at_each_forward_false_has_larger_gradients_than_true():
@@ -2946,9 +2948,9 @@ def test_detach_at_each_forward_false_has_larger_gradients_than_true():
 
     # Earlier inputs should have larger or equal gradients with full history
     for i in range(N - 1):  # All except last
-        assert grads_full[i] >= grads_detached[i] * 0.9, (
-            "Full gradient flow should have larger or equal gradients for earlier inputs"
-        )
+        assert (
+            grads_full[i] >= grads_detached[i] * 0.9
+        ), "Full gradient flow should have larger or equal gradients for earlier inputs"
 
 
 def test_reset_properly_detaches_or_keeps_initial_state():
@@ -2962,12 +2964,12 @@ def test_reset_properly_detaches_or_keeps_initial_state():
     # Test with detach=True
     layer_detached = _make_memristive_layer(detach_at_each_forward=True)
     layer_detached.reset(batch_size=1)
-    assert layer_detached.memristive_state[0].grad_fn is None, (
-        "Initial state should be detached with detach_at_each_forward=True"
-    )
-    assert layer_detached.memristive_history[0][0].grad_fn is None, (
-        "Initial history state should be detached with detach_at_each_forward=True"
-    )
+    assert (
+        layer_detached.memristive_state[0].grad_fn is None
+    ), "Initial state should be detached with detach_at_each_forward=True"
+    assert (
+        layer_detached.memristive_history[0][0].grad_fn is None
+    ), "Initial history state should be detached with detach_at_each_forward=True"
 
     # Test with detach=False
     layer_full = _make_memristive_layer(detach_at_each_forward=False)
@@ -2976,9 +2978,9 @@ def test_reset_properly_detaches_or_keeps_initial_state():
     # But after first forward it should retain gradients
     inp = torch.randn(1, 2, requires_grad=True)
     layer_full(inp)
-    assert layer_full.memristive_state[0].grad_fn is not None, (
-        "State should retain gradients after forward with detach_at_each_forward=False"
-    )
+    assert (
+        layer_full.memristive_state[0].grad_fn is not None
+    ), "State should retain gradients after forward with detach_at_each_forward=False"
 
 
 def test_detach_at_each_forward_with_batch_dimension():
@@ -3075,90 +3077,132 @@ def test_long_sequence_with_manual_sliding_window_detach():
 
 
 def test_quantum_layer_photon_count_mismatch_list():
-    with pytest.raises(ValueError, match="Inconsistent number of photons between input_state and n_photons."):
+    with pytest.raises(
+        ValueError,
+        match="Inconsistent number of photons between input_state and n_photons.",
+    ):
         QuantumLayer(
             input_size=0,
             circuit=pcvl.Circuit(3),
-            input_state=[1, 1, 1], 
+            input_state=[1, 1, 1],
             n_photons=1,
-            measurement_strategy=ML.MeasurementStrategy.probs(),)
+            measurement_strategy=ML.MeasurementStrategy.probs(),
+        )
+
+
 def test_quantum_layer_photon_count_mismatch_tuple():
-    with pytest.raises(ValueError, match="Inconsistent number of photons between input_state and n_photons."):
+    with pytest.raises(
+        ValueError,
+        match="Inconsistent number of photons between input_state and n_photons.",
+    ):
         QuantumLayer(
             input_size=0,
             circuit=pcvl.Circuit(3),
-            input_state=(1, 1, 1), 
+            input_state=(1, 1, 1),
             n_photons=1,
-            measurement_strategy=ML.MeasurementStrategy.probs(),)
+            measurement_strategy=ML.MeasurementStrategy.probs(),
+        )
+
+
 def test_quantum_layer_photon_count_mismatch_list_is_float_compatible_working():
-    with pytest.raises(ValueError, match="Inconsistent number of photons between input_state and n_photons."):
+    with pytest.raises(
+        ValueError,
+        match="Inconsistent number of photons between input_state and n_photons.",
+    ):
         QuantumLayer(
             input_size=0,
             circuit=pcvl.Circuit(3),
-            input_state=[1, 1, 1], 
+            input_state=[1, 1, 1],
             n_photons=1,
-            measurement_strategy=ML.MeasurementStrategy.probs(),)
+            measurement_strategy=ML.MeasurementStrategy.probs(),
+        )
+
+
 def test_quantum_layer_photon_count_match_list_is_float_compatible_working():
-        layer = QuantumLayer(
-            input_size=0,
-            circuit=pcvl.Circuit(3),
-            input_state=[1, 1, 1], 
-            n_photons=3,
-            measurement_strategy=ML.MeasurementStrategy.probs(),)
-        assert layer is not None
-        assert isinstance(layer, QuantumLayer)
+    layer = QuantumLayer(
+        input_size=0,
+        circuit=pcvl.Circuit(3),
+        input_state=[1, 1, 1],
+        n_photons=3,
+        measurement_strategy=ML.MeasurementStrategy.probs(),
+    )
+    assert layer is not None
+    assert isinstance(layer, QuantumLayer)
+
+
 def test_quantum_layer_photon_count_mismatch_StateVector():
-    with pytest.raises(ValueError, match="Inconsistent number of photons between input_state and n_photons."):
+    with pytest.raises(
+        ValueError,
+        match="Inconsistent number of photons between input_state and n_photons.",
+    ):
         QuantumLayer(
             input_size=0,
             circuit=pcvl.Circuit(3),
-            input_state=pcvl.StateVector("|1,0,1>"), 
+            input_state=pcvl.StateVector("|1,0,1>"),
             n_photons=1,
-            measurement_strategy=ML.MeasurementStrategy.probs(),)
+            measurement_strategy=ML.MeasurementStrategy.probs(),
+        )
+
 
 def test_quantum_layer_photon_count_mismatch_BasicState():
-    with pytest.raises(ValueError, match="Inconsistent number of photons between input_state and n_photons."):
+    with pytest.raises(
+        ValueError,
+        match="Inconsistent number of photons between input_state and n_photons.",
+    ):
         QuantumLayer(
             input_size=0,
             circuit=pcvl.Circuit(3),
-            input_state=pcvl.BasicState("|1,0,1>"), 
+            input_state=pcvl.BasicState("|1,0,1>"),
             n_photons=1,
-            measurement_strategy=ML.MeasurementStrategy.probs(),)
-        
+            measurement_strategy=ML.MeasurementStrategy.probs(),
+        )
+
+
 def test_quantum_layer_photon_count_mismatch_StateVector_superposition():
-    with pytest.raises(ValueError, match="Inconsistent number of photons between input_state and n_photons."):
+    with pytest.raises(
+        ValueError,
+        match="Inconsistent number of photons between input_state and n_photons.",
+    ):
         QuantumLayer(
             input_size=0,
             circuit=pcvl.Circuit(3),
-            input_state=pcvl.StateVector("|1,0,1>")+pcvl.StateVector("|0,1,1>"), 
+            input_state=pcvl.StateVector("|1,0,1>") + pcvl.StateVector("|0,1,1>"),
             n_photons=1,
-            measurement_strategy=ML.MeasurementStrategy.probs(),)
+            measurement_strategy=ML.MeasurementStrategy.probs(),
+        )
+
 
 def test_quantum_layer_photon_count_match_StateVector():
-        layer = QuantumLayer(
-            input_size=0,
-            circuit=pcvl.Circuit(3),
-            input_state=pcvl.StateVector("|1,0,1>"), 
-            n_photons=2,
-            measurement_strategy=ML.MeasurementStrategy.probs(),)
-        assert layer is not None
-        assert isinstance(layer, QuantumLayer)
+    layer = QuantumLayer(
+        input_size=0,
+        circuit=pcvl.Circuit(3),
+        input_state=pcvl.StateVector("|1,0,1>"),
+        n_photons=2,
+        measurement_strategy=ML.MeasurementStrategy.probs(),
+    )
+    assert layer is not None
+    assert isinstance(layer, QuantumLayer)
+
+
 def test_quantum_layer_photon_count_match_List():
-        layer = QuantumLayer(
-            input_size=0,
-            circuit=pcvl.Circuit(3),
-            input_state=[1,0,1], 
-            n_photons=2,
-            measurement_strategy=ML.MeasurementStrategy.probs(),)
-        assert layer is not None
-        assert isinstance(layer, QuantumLayer)
+    layer = QuantumLayer(
+        input_size=0,
+        circuit=pcvl.Circuit(3),
+        input_state=[1, 0, 1],
+        n_photons=2,
+        measurement_strategy=ML.MeasurementStrategy.probs(),
+    )
+    assert layer is not None
+    assert isinstance(layer, QuantumLayer)
+
+
 def test_quantum_layer_photon_count_match_amplitude():
     layer = QuantumLayer(
         circuit=pcvl.Circuit(3),
         n_photons=2,
         measurement_strategy=ML.MeasurementStrategy.probs(),
         input_state=None,
-        amplitude_encoding=True,   
+        amplitude_encoding=True,
     )
     assert layer is not None
     assert isinstance(layer, QuantumLayer)
@@ -3167,14 +3211,14 @@ def test_quantum_layer_photon_count_match_amplitude():
 def test_quantum_layer_photon_count_match_amplitude():
     builder = CircuitBuilder(n_modes=4)
     builder.add_entangling_layer()
-    
+
     input_state = StateVector(
-        tensor=torch.rand(1, 10), 
+        tensor=torch.rand(1, 10),
         n_modes=4,
         n_photons=2,
         encoding=ML.EncodingSpace.FOCK,
     )
-    
+
     QuantumLayer(
         input_size=0,
         builder=builder,
@@ -3185,44 +3229,351 @@ def test_quantum_layer_photon_count_match_amplitude():
         input_state=input_state,
     )
 
+
 def test_quantum_layer_list_not_contain_integers():
     """see if an input state reject list of float."""
-    expected_msg =("List/tuple input_state must contain non-negative integer "
-                   "occupations; use a StateVector for superposed inputs.")
-    
+    expected_msg = (
+        "List/tuple input_state must contain non-negative integer "
+        "occupations; use a StateVector for superposed inputs."
+    )
+
     with pytest.raises(ValueError, match=re.escape(expected_msg)):
         QuantumLayer(
             input_size=0,
             circuit=pcvl.Circuit(3),
-            input_state=[0.3, 0, 1], #invalide input for list.
+            input_state=[0.3, 0, 1],  # invalide input for list.
             measurement_strategy=ML.MeasurementStrategy.probs(),
         )
 
+
 def test_quantum_layer_tuple_not_contain_integers():
     """see if an input state reject list of float."""
-    expected_msg =("List/tuple input_state must contain non-negative integer "
-                   "occupations; use a StateVector for superposed inputs.")
-    
+    expected_msg = (
+        "List/tuple input_state must contain non-negative integer "
+        "occupations; use a StateVector for superposed inputs."
+    )
+
     with pytest.raises(ValueError, match=re.escape(expected_msg)):
         QuantumLayer(
             input_size=0,
             circuit=pcvl.Circuit(3),
-            input_state=(0.3, 0, 1), #invalide input for list.
+            input_state=(0.3, 0, 1),  # invalide input for list.
             measurement_strategy=ML.MeasurementStrategy.probs(),
         )
+
 
 def test_quantum_layer_experiment_input_state_overrides_without_error():
     circuit = pcvl.Circuit(2)
     experiment = pcvl.Experiment(circuit)
     experiment.with_input(pcvl.BasicState([1, 0]))
     expected_warning = "Both 'experiment.input_state' and 'input_state' are provided. 'experiment.input_state' will be used."
-    
+
     with pytest.raises(UserWarning, match=re.escape(expected_warning)):
         layer = QuantumLayer(
             input_size=0,
             experiment=experiment,
-            input_state=[1, 1],   # ignored, replaced by experiment.input_state
+            input_state=[1, 1],  # ignored, replaced by experiment.input_state
             n_photons=1,
             measurement_strategy=ML.MeasurementStrategy.probs(),
         )
         assert layer.n_photons == 1
+
+
+def test_memristive_amplitude_input_batched():
+    def update_rule(state: torch.Tensor, output: torch.Tensor):
+        x = state + output[:, 0]
+        return x
+
+    circ = ML.CircuitBuilder(n_modes=3)
+    circ.add_entangling_layer()
+    circ.add_memristive_ps(mode=0, update_rule=update_rule, initial_state=0)
+    circ.add_entangling_layer()
+
+    ql = ML.QuantumLayer(
+        builder=circ,
+        n_photons=1,
+        measurement_strategy=ML.MeasurementStrategy.probs(
+            computation_space=ML.ComputationSpace.FOCK
+        ),
+    )
+    ql.reset(batch_size=2)
+
+    input = torch.tensor([[1, 0, 0], [0, 1, 0]], dtype=torch.complex64)
+
+    output = ql(input)
+
+    assert output.shape == (2, 3)
+    assert not ql.memristive_state[0][0] == ql.memristive_state[0][1]
+    assert ql.memristive_history[0][0][0] == ql.memristive_history[0][0][1]
+
+    input = torch.tensor([[1, 0, 0], [1, 0, 0]], dtype=torch.complex64)
+
+    output = ql(input)
+
+    assert not torch.allclose(output[0], output[1])
+
+
+def test_memristive_amplitude_input_batched_with_noise():
+    def update_rule(state: torch.Tensor, output: torch.Tensor):
+        x = state + output[:, 0]
+        return x
+
+    circ = ML.CircuitBuilder(n_modes=3)
+    circ.add_entangling_layer()
+    circ.add_memristive_ps(mode=0, update_rule=update_rule, initial_state=0)
+    circ.add_entangling_layer()
+
+    # Both source and phase
+    ql = ML.QuantumLayer(
+        builder=circ,
+        n_photons=1,
+        measurement_strategy=ML.MeasurementStrategy.probs(
+            computation_space=ML.ComputationSpace.FOCK
+        ),
+        noise=pcvl.NoiseModel(
+            brightness=0.9,
+            indistinguishability=0.7,
+            g2=0.1,
+            phase_error=0.01,
+            phase_imprecision=0.01,
+        ),
+        n_phase_error_samples=1,
+    )
+    ql.reset(batch_size=2)
+
+    input = torch.tensor([[1, 0, 0], [0, 1, 0]], dtype=torch.complex64)
+
+    output = ql(input)
+
+    assert output.shape == (2, 10)
+    assert not ql.memristive_state[0][0] == ql.memristive_state[0][1]
+    assert ql.memristive_history[0][0][0] == ql.memristive_history[0][0][1]
+
+    input = torch.tensor([[1, 0, 0], [1, 0, 0]], dtype=torch.complex64)
+
+    output = ql(input)
+
+    assert not torch.allclose(output[0], output[1])
+
+    # Source noise only
+    ql = ML.QuantumLayer(
+        builder=circ,
+        n_photons=1,
+        measurement_strategy=ML.MeasurementStrategy.probs(
+            computation_space=ML.ComputationSpace.FOCK
+        ),
+        noise=pcvl.NoiseModel(
+            indistinguishability=0.7,
+            g2=0.1,
+        ),
+    )
+    ql.reset(batch_size=2)
+
+    input = torch.tensor([[1, 0, 0], [0, 1, 0]], dtype=torch.complex64)
+
+    output = ql(input)
+
+    assert output.shape == (2, 9)
+    assert not ql.memristive_state[0][0] == ql.memristive_state[0][1]
+    assert ql.memristive_history[0][0][0] == ql.memristive_history[0][0][1]
+
+    input = torch.tensor([[1, 0, 0], [1, 0, 0]], dtype=torch.complex64)
+
+    output = ql(input)
+
+    assert not torch.allclose(output[0], output[1])
+
+    # Phase noise only
+    ql = ML.QuantumLayer(
+        builder=circ,
+        n_photons=1,
+        measurement_strategy=ML.MeasurementStrategy.probs(
+            computation_space=ML.ComputationSpace.FOCK
+        ),
+        noise=pcvl.NoiseModel(
+            phase_error=0.01,
+            phase_imprecision=0.01,
+        ),
+        n_phase_error_samples=1,
+    )
+    ql.reset(batch_size=2)
+
+    input = torch.tensor([[1, 0, 0], [0, 1, 0]], dtype=torch.complex64)
+
+    output = ql(input)
+
+    assert output.shape == (2, 3)
+    assert not ql.memristive_state[0][0] == ql.memristive_state[0][1]
+    assert ql.memristive_history[0][0][0] == ql.memristive_history[0][0][1]
+
+    input = torch.tensor([[1, 0, 0], [1, 0, 0]], dtype=torch.complex64)
+
+    output = ql(input)
+
+    assert not torch.allclose(output[0], output[1])
+
+
+@pytest.fixture
+def layer():
+    def update_rule(state: torch.Tensor, output: torch.Tensor):
+        x = state + output[:, 0]
+        return x
+
+    circ = ML.CircuitBuilder(n_modes=3)
+    circ.add_entangling_layer()
+    circ.add_memristive_ps(mode=0, update_rule=update_rule, initial_state=0)
+    circ.add_entangling_layer()
+
+    # Both source and phase
+    ql = ML.QuantumLayer(
+        builder=circ,
+        n_photons=1,
+        measurement_strategy=ML.MeasurementStrategy.probs(
+            computation_space=ML.ComputationSpace.FOCK
+        ),
+    )
+    return ql
+
+
+@pytest.fixture
+def noisy_layer():
+    def update_rule(state: torch.Tensor, output: torch.Tensor):
+        x = state + output[:, 0]
+        return x
+
+    circ = ML.CircuitBuilder(n_modes=3)
+    circ.add_entangling_layer()
+    circ.add_memristive_ps(mode=0, update_rule=update_rule, initial_state=0)
+    circ.add_entangling_layer()
+
+    # Both source and phase
+    ql = ML.QuantumLayer(
+        builder=circ,
+        n_photons=1,
+        measurement_strategy=ML.MeasurementStrategy.probs(
+            computation_space=ML.ComputationSpace.FOCK
+        ),
+        noise=pcvl.NoiseModel(
+            brightness=0.9,
+            indistinguishability=0.7,
+            g2=0.1,
+            phase_error=0.01,
+            phase_imprecision=0.01,
+        ),
+        n_phase_error_samples=1,
+    )
+    return ql
+
+
+def test_half_raises_value_error(layer):
+    """Merlin only supports float32/float64, so .half()/float16 must raise."""
+    with pytest.raises(ValueError):
+        deepcopy(layer).half()
+    with pytest.raises(ValueError):
+        deepcopy(layer).to(torch.float16)
+
+
+def test_dtype_only_move_leaves_device_unchanged(layer):
+    """A pure dtype move must not assign a concrete device."""
+    original_device = layer.device
+    moved = deepcopy(layer).double()
+    assert moved.device == original_device
+    assert moved.dtype == torch.float64
+
+
+def _iter_layer_tensors(layer):
+    """Yield (name, tensor) for every tensor the layer owns — including the
+    memristive state/history stored in plain Python lists (not buffers)."""
+    yield from layer.named_parameters()
+    yield from layer.named_buffers()
+    for i, s in enumerate(layer.memristive_state):
+        if torch.is_tensor(s):
+            yield f"memristive_state[{i}]", s
+    for i, hist in enumerate(layer.memristive_history):
+        for j, t in enumerate(hist):
+            if torch.is_tensor(t):
+                yield f"memristive_history[{i}][{j}]", t
+
+
+def assert_layer_on(layer, *, device, real_dtype):
+    """Ground truth: assert the end state of a move directly, with no reference
+    to any other code path."""
+    dev = torch.device(device)
+    seen_memristive = False
+    for name, t in _iter_layer_tensors(layer):
+        assert t.device.type == dev.type, f"{name}: {t.device} != {dev}"
+        if t.is_floating_point():  # complex left to its own test
+            assert t.dtype == real_dtype, f"{name}: {t.dtype} != {real_dtype}"
+        if name.startswith("memristive"):
+            seen_memristive = True
+    # guard against a fixture that silently has no memristive tensors —
+    # otherwise this whole helper would vacuously pass
+    assert seen_memristive, "fixture has no memristive tensors to check"
+    # layer bookkeeping
+    assert layer.dtype == real_dtype
+    assert layer.computation_process.dtype == real_dtype
+    if layer.device is not None:  # None == 'default/cpu', allowed
+        assert layer.device.type == dev.type
+
+
+@pytest.mark.parametrize(
+    ("move", "exp_device", "exp_dtype"),
+    [
+        (lambda l: l.cpu(), "cpu", torch.float32),  # default real dtype
+        (lambda l: l.float(), "cpu", torch.float32),
+        (lambda l: l.double(), "cpu", torch.float64),
+    ],
+)
+def test_move_lands_on_expected_state(layer, move, exp_device, exp_dtype):
+    moved = move(deepcopy(layer))
+    assert_layer_on(moved, device=exp_device, real_dtype=exp_dtype)
+
+
+@pytest.mark.parametrize(
+    ("move", "exp_device", "exp_dtype"),
+    [
+        (lambda l: l.cpu(), "cpu", torch.float32),
+        (lambda l: l.float(), "cpu", torch.float32),
+        (lambda l: l.double(), "cpu", torch.float64),
+    ],
+)
+def test_move_lands_on_expected_state_noisy(noisy_layer, move, exp_device, exp_dtype):
+    moved = move(deepcopy(noisy_layer))
+    assert_layer_on(moved, device=exp_device, real_dtype=exp_dtype)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA unavailable")
+def test_cuda_lands_on_expected_state(layer):
+    moved = deepcopy(layer).cuda()
+    assert_layer_on(moved, device="cuda", real_dtype=torch.float32)
+
+
+@pytest.mark.parametrize(
+    "move",
+    [
+        lambda l: l.float(),
+        lambda l: l.double(),
+        lambda l: l.cpu(),
+    ],
+)
+def test_forward_runs_after_move(layer, move):
+    moved = move(deepcopy(layer))
+    out = moved()  # must not raise device/dtype mismatch
+    assert out.device.type == (moved.device.type if moved.device is not None else "cpu")
+    if out.is_floating_point():
+        assert out.dtype == moved.dtype
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA unavailable")
+def test_forward_runs_after_cuda_roundtrip(layer):
+    moved = deepcopy(layer).cuda().cpu()  # round-trip exercises both directions
+    out = moved()
+    assert out.device.type == "cpu"
+
+
+def test_to_delegates_to_apply(layer):
+    """to() must remain a thin alias of _apply (no divergent override)."""
+    via_to = deepcopy(layer).to(dtype=torch.float64)
+    via_apply = deepcopy(layer).double()
+    assert_layer_on(via_to, device="cpu", real_dtype=torch.float64)
+    assert_layer_on(via_apply, device="cpu", real_dtype=torch.float64)

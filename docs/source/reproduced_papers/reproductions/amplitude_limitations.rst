@@ -15,6 +15,8 @@ Limitations of Amplitude Encoding on Quantum Classification
 
    **DOI**: `https://arxiv.org/abs/2503.01545 <https://arxiv.org/abs/2503.01545>`_
 
+   .. merlin-citations-badge:: amplitude_limitations
+
    **Reproduction Status**: ✅ Complete
 
    **Reproducer**: Louis-Félix Vigneux (louis-felix.vigneux@quandela.com)

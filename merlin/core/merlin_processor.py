@@ -1,12 +1,9 @@
-import copy
 import logging
 import threading
 import time
 import uuid
 import warnings
-import zlib
-from collections.abc import Iterable, Sequence
-from contextlib import suppress
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from numbers import Integral
 from typing import Any, Protocol, cast, runtime_checkable
@@ -15,13 +12,23 @@ import numpy as np
 import perceval as pcvl
 import torch
 import torch.nn as nn
-from perceval.algorithm import Sampler
-from perceval.runtime import AProcessor, Processor, RemoteJob, RemoteProcessor
+from perceval.runtime import AProcessor, RemoteJob, RemoteProcessor
 from perceval.runtime.session import ISession
 from torch.futures import Future
 
 from ..algorithms.module import MerlinModule
 from ..utils.combinadics import Combinadics
+from .execution import (
+    BatchChunker,
+    RemoteJobRunner,
+    build_iteration_parameters,
+    select_sampling_command,
+)
+from .perceval_adapter import (
+    LocalExperimentSnapshot,
+    PercevalAdapter,
+    TokenExtractionError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,39 +41,278 @@ class BackendCapabilities:
     ----------
     name : str
         Backend platform name (e.g., "sim:slos", "perceval-qpu:scaleway").
-    available_commands : tuple[str]
-        Immutable snapshot of supported commands (e.g., ["probs", "sample_count"]).
+    available_commands : tuple[str, ...]
+        Immutable snapshot of supported commands (e.g., ("probs", "sample_count")).
     """
 
     name: str
-    available_commands: tuple[str]
+    available_commands: tuple[str, ...]
 
 
 @dataclass(frozen=True)
-class _LocalExperimentMetadata:
-    """Experiment-level state that must survive local circuit replacement."""
+class JobStatus:
+    """Immutable snapshot of the most recently observed backend job status.
 
-    circuit_size: int
-    in_ports: tuple[tuple[Any, tuple[int, ...]], ...]
-    out_ports: tuple[tuple[Any, tuple[int, ...]], ...]
-    detectors: tuple[Any | None, ...]
-    detectors_injected: tuple[int, ...]
-    in_mode_type: tuple[Any, ...]
-    out_mode_type: tuple[Any, ...]
-    anon_herald_num: int
-    postselection: Any
+    Attributes
+    ----------
+    state : Any
+        Backend-reported job state (e.g. ``"RUNNING"``), or ``None`` when the
+        backend did not expose one.
+    progress : Any
+        Backend-reported progress value, or ``None``.
+    message : Any
+        Backend-reported stop/status message, or ``None``.
+    """
+
+    state: Any = None
+    progress: Any = None
+    message: Any = None
+
+
+class CallState:
+    """Typed per-call execution state for one
+    ``MerlinProcessor.forward_async`` call.
+
+    Replaces the anonymous mutable ``state`` dict previously threaded through
+    ``forward_async()``, chunk orchestration, chunk execution, and job polling.
+    All per-call runtime state is owned by this object and mutated only through
+    named helpers, making the contract explicit and searchable.
+
+    **Thread ownership**
+
+    - ``call_id``: immutable after creation; readable from any thread.
+    - ``cancel_requested``: set (never cleared) by the caller thread through
+      :meth:`request_cancel`; read cooperatively by the pipeline, chunk, and
+      polling threads.
+    - ``current_status``: written by polling threads through
+      :meth:`set_current_status`; read by :meth:`status_snapshot`.
+    - ``job_ids``: appended (with deduplication) by polling threads through
+      :meth:`record_job_id`. The list object is intentionally shared with
+      ``future.job_ids`` so recorded ids appear on the future as they arrive.
+    - Chunk counters (``chunks_total``, ``chunks_done``, ``active_chunks``):
+      mutated by the chunk orchestration thread through
+      :meth:`add_planned_chunks`, :meth:`mark_chunk_started`, and
+      :meth:`mark_chunk_finished` under the internal lock.
+    """
+
+    def __init__(self, call_id: str) -> None:
+        """Initialize an empty call state.
+
+        Parameters
+        ----------
+        call_id : str
+            Short identifier embedded in remote job names for traceability.
+            Use :meth:`new` to generate one automatically.
+        """
+        self.call_id = call_id
+        self.job_ids: list[str] = []
+        self._lock = threading.Lock()
+        self._cancel_requested = False
+        self._current_status: JobStatus | None = None
+        self._chunks_total = 0
+        self._chunks_done = 0
+        self._active_chunks = 0
+
+    @classmethod
+    def new(cls) -> "CallState":
+        """Create a fresh call state with a short unique call identifier.
+
+        Returns
+        -------
+        CallState
+            Empty state carrying an 8-character hex ``call_id``.
+        """
+        return cls(call_id=uuid.uuid4().hex[:8])
+
+    # ---- cancellation ----
 
     @property
-    def has_mode_metadata(self) -> bool:
-        """Return whether metadata is tied to a concrete circuit mode layout."""
+    def cancel_requested(self) -> bool:
+        """Whether cooperative cancellation has been requested for this call."""
+        return self._cancel_requested
 
-        return (
-            bool(self.in_ports)
-            or bool(self.out_ports)
-            or any(detector is not None for detector in self.detectors)
-            or bool(self.detectors_injected)
-            or self.postselection != pcvl.PostSelect()
+    def request_cancel(self) -> None:
+        """Request cooperative cancellation of this call (irreversible)."""
+        self._cancel_requested = True
+
+    # ---- job ids ----
+
+    def record_job_id(self, job_id: str) -> None:
+        """Record a remote job id, deduplicating repeated observations.
+
+        Parameters
+        ----------
+        job_id : str
+            Identifier reported by the backend for a submitted job. Re-observing
+            an already-recorded id (each polling cycle re-reads it) is a no-op.
+        """
+        with self._lock:
+            if job_id not in self.job_ids:
+                self.job_ids.append(job_id)
+
+    # ---- backend job status ----
+
+    @property
+    def current_status(self) -> JobStatus | None:
+        """Most recent backend job status, or ``None`` before first poll."""
+        return self._current_status
+
+    def set_current_status(
+        self, *, state: Any = None, progress: Any = None, message: Any = None
+    ) -> None:
+        """Record the latest backend job status observed while polling.
+
+        Parameters
+        ----------
+        state : Any
+            Backend-reported job state (e.g. ``"RUNNING"``), or ``None``.
+            Default value is None.
+        progress : Any
+            Backend-reported progress value, or ``None``. Default value is None.
+        message : Any
+            Backend-reported stop/status message, or ``None``. Default value
+            is None.
+        """
+        self._current_status = JobStatus(
+            state=state, progress=progress, message=message
         )
+
+    # ---- chunk counters ----
+
+    @property
+    def chunks_total(self) -> int:
+        """Total number of chunks planned so far for this call."""
+        return self._chunks_total
+
+    @property
+    def chunks_done(self) -> int:
+        """Number of chunks that finished (successfully or not)."""
+        return self._chunks_done
+
+    @property
+    def active_chunks(self) -> int:
+        """Number of chunk jobs currently in flight."""
+        return self._active_chunks
+
+    def add_planned_chunks(self, count: int) -> None:
+        """Register additional chunks planned for submission.
+
+        Parameters
+        ----------
+        count : int
+            Number of chunks about to be submitted for one quantum leaf.
+        """
+        with self._lock:
+            self._chunks_total += count
+
+    def mark_chunk_started(self) -> None:
+        """Mark one chunk job as submitted and in flight."""
+        with self._lock:
+            self._active_chunks += 1
+
+    def mark_chunk_finished(self) -> None:
+        """Mark one in-flight chunk job as finished."""
+        with self._lock:
+            self._active_chunks = max(0, self._active_chunks - 1)
+            self._chunks_done += 1
+
+    # ---- snapshots ----
+
+    def status_snapshot(self, future_done: bool = False) -> dict:
+        """Return the public status dict exposed through ``future.status()``.
+
+        Parameters
+        ----------
+        future_done : bool
+            Whether the owning future has already resolved. A resolved future
+            with no recorded backend status reports state ``"COMPLETE"``.
+
+        Returns
+        -------
+        dict
+            ``{"state", "progress", "message", "chunks_total", "chunks_done",
+            "active_chunks"}`` with the same semantics as before the CallState
+            refactor.
+        """
+        js = self._current_status
+        return {
+            "state": (
+                "COMPLETE"
+                if future_done and js is None
+                else (js.state if js else "IDLE")
+            ),
+            "progress": js.progress if js else 0.0,
+            "message": js.message if js else None,
+            "chunks_total": self._chunks_total,
+            "chunks_done": self._chunks_done,
+            "active_chunks": self._active_chunks,
+        }
+
+
+class MerlinFuture(Future):
+    """Typed async handle returned by
+    :meth:`~merlin.core.merlin_processor.MerlinProcessor.forward_async`.
+
+    Extends ``torch.futures.Future[torch.Tensor]`` with the Merlin-specific
+    async contract that was previously monkey-patched onto plain Future
+    instances at runtime: remote-job visibility (:attr:`job_ids`), progress
+    reporting (:meth:`status`), and cooperative cancellation
+    (:meth:`cancel_remote`). All inherited Future behavior (``wait``,
+    ``done``, ``then``, ``value``, ...) is unchanged.
+
+    Parameters
+    ----------
+    call_state : CallState
+        Typed per-call state backing this handle. Job ids, chunk counters,
+        and backend status recorded during execution are read live from it.
+    cancel_all : Callable[[], None]
+        Processor-level callback cancelling all in-flight remote jobs; used
+        by :meth:`cancel_remote`.
+    """
+
+    def __init__(self, call_state: CallState, cancel_all: Callable[[], None]) -> None:
+        super().__init__()
+        self._call_state = call_state
+        self._cancel_all = cancel_all
+
+    @property
+    def job_ids(self) -> list[str]:
+        """Remote job ids accumulated across chunks, in observation order.
+
+        This is a live view of the underlying :class:`CallState` list: ids
+        recorded while chunks are polling appear here immediately.
+        """
+        return self._call_state.job_ids
+
+    def status(self) -> dict:
+        """Return the current progress and state of this call.
+
+        Returns
+        -------
+        dict
+            ``{"state", "progress", "message", "chunks_total", "chunks_done",
+            "active_chunks"}``. ``state`` is ``"IDLE"`` before the first
+            backend poll, the backend-reported state while polling, and
+            ``"COMPLETE"`` once the future resolves without a recorded
+            backend status.
+        """
+        return self._call_state.status_snapshot(future_done=self.done())
+
+    def cancel_remote(self) -> None:
+        """Cooperatively cancel this call and its in-flight remote jobs.
+
+        Requests cancellation on the per-call state (observed by chunk and
+        polling threads), cancels all active remote jobs best-effort, and
+        resolves this future with ``concurrent.futures.CancelledError`` if
+        it is not already done. Awaiting the future afterwards raises that
+        error.
+        """
+        from concurrent.futures import CancelledError
+
+        self._call_state.request_cancel()
+        self._cancel_all()
+        if not self.done():
+            self.set_exception(CancelledError("Remote call was cancelled"))
 
 
 _ALLOWED_STATE_TYPES = (
@@ -143,7 +389,7 @@ class ValidatedLayerConfig:
     circuit : pcvl.ACircuit
         Perceval circuit associated with the layer.
 
-    input_state : Sequence[Integral] | pcvl.BasicState | pcvl.StateVector | pcvl.BSDistribution | pcvl.SVDistribution | None
+    input_state : Sequence[numbers.Integral] | pcvl.BasicState | pcvl.StateVector | pcvl.BSDistribution | pcvl.SVDistribution | None
         Input state for the circuit. May be ``None``, a sequence of integers,
         or one of the supported Perceval state objects. Sequence-like inputs
         are normalized through ``check_sequence()``.
@@ -566,7 +812,7 @@ class MerlinProcessor:
 
                 # Build ONE initial processor to extract metadata (backend name, available commands).
                 # Fresh processors will be created per chunk via _create_fresh_rp().
-                _init_rp = self.session.build_remote_processor()
+                _init_rp = PercevalAdapter.build_from_session(self.session)
                 remote_processor = _init_rp
             else:
                 self.backend_kind = "remote_processor"
@@ -586,11 +832,12 @@ class MerlinProcessor:
         assert capability_processor is not None
 
         # Extract backend capabilities (name and available commands)
-        backend_name = capability_processor.name
-        available_cmds = capability_processor.available_commands
+        backend_name, available_cmds = PercevalAdapter.get_backend_capabilities(
+            capability_processor
+        )
         self.backend_capabilities = BackendCapabilities(
             name=backend_name,
-            available_commands=tuple(available_cmds),
+            available_commands=available_cmds,
         )
 
         # Check if commands list is empty and warn
@@ -613,13 +860,17 @@ class MerlinProcessor:
                 self._token = self._extract_rp_token(remote_processor)
 
             if self._token is None:
-                raise ValueError(
+                raise TokenExtractionError(
                     "Could not extract auth token from RemoteProcessor. "
                     "Either pass token= to MerlinProcessor or call "
                     "RemoteConfig.set_token() before constructing the "
                     "RemoteProcessor."
                 )
 
+        if microbatch_size <= 0:
+            raise ValueError(
+                f"microbatch_size must be strictly positive, got {microbatch_size}."
+            )
         self.microbatch_size = microbatch_size
         self.default_timeout = float(timeout)
         self.max_shots_per_call = (
@@ -651,7 +902,7 @@ class MerlinProcessor:
         return self.backend_capabilities.name
 
     @property
-    def available_commands(self) -> tuple[str]:
+    def available_commands(self) -> tuple[str, ...]:
         """Snapshot of supported remote commands (e.g., ("probs", "sample_count")).
 
         This is a backward-compatibility property. Use `backend_capabilities.available_commands` directly.
@@ -722,10 +973,7 @@ class MerlinProcessor:
         with self._lock:
             jobs = list(self._active_jobs)
         for job in jobs:
-            cancel = getattr(job, "cancel", None)
-            if callable(cancel):
-                with suppress(Exception):
-                    cancel()
+            PercevalAdapter.cancel_job(job)
 
     def forward(
         self,
@@ -793,10 +1041,11 @@ class MerlinProcessor:
         *,
         nsample: int | None = None,
         timeout: float | None = None,
-    ) -> Future:
+    ) -> MerlinFuture:
         """Asynchronously execute a module against the configured Perceval backend.
 
-        Returns a ``torch.futures.Future`` that resolves to the output tensor.
+        Returns a :class:`MerlinFuture` (a ``torch.futures.Future`` subclass)
+        that resolves to the output tensor.
         Remote batches are automatically chunked and submitted with limited
         concurrency. Local processor inputs are kept as one Merlin-level batch
         and represented as Perceval sampler iterations using an isolated
@@ -832,8 +1081,8 @@ class MerlinProcessor:
 
         Returns
         -------
-        Future
-            ``torch.futures.Future[torch.Tensor]`` with extra attributes:
+        MerlinFuture
+            Typed ``torch.futures.Future[torch.Tensor]`` subclass exposing:
 
             - ``future.job_ids: list[str]`` — accumulates remote job IDs
               across chunks.
@@ -885,48 +1134,8 @@ class MerlinProcessor:
         original_dtype = input.dtype
         layers: list[Any] = list(self._iter_layers_in_order(module))
 
-        fut: Future = Future()
-        state = {
-            "cancel_requested": False,
-            "current_status": None,
-            "job_ids": [],
-            "chunks_total": 0,
-            "chunks_done": 0,
-            "active_chunks": 0,
-            "call_id": uuid.uuid4().hex[:8],
-        }
-
-        def _cancel_remote():
-            state["cancel_requested"] = True
-            self.cancel_all()
-            if not fut.done():
-                try:
-                    from concurrent.futures import CancelledError
-                except Exception:  # pragma: no cover
-
-                    class CancelledError(RuntimeError):
-                        pass
-
-                fut.set_exception(CancelledError("Remote call was cancelled"))
-
-        def _status():
-            js = state.get("current_status")
-            return {
-                "state": (
-                    "COMPLETE"
-                    if fut.done() and not js
-                    else (js.get("state") if js else "IDLE")
-                ),
-                "progress": js.get("progress") if js else 0.0,
-                "message": js.get("message") if js else None,
-                "chunks_total": state["chunks_total"],
-                "chunks_done": state["chunks_done"],
-                "active_chunks": state["active_chunks"],
-            }
-
-        fut.cancel_remote = _cancel_remote  # type: ignore[attr-defined]
-        fut.status = _status  # type: ignore[attr-defined]
-        fut.job_ids = state["job_ids"]  # type: ignore[attr-defined]
+        state = CallState.new()
+        fut = MerlinFuture(state, self.cancel_all)
 
         def _run_pipeline():
             try:
@@ -943,7 +1152,7 @@ class MerlinProcessor:
                     else:
                         should_offload = False
 
-                    if state["cancel_requested"]:
+                    if state.cancel_requested:
                         raise self._cancelled_error()
 
                     if should_offload:
@@ -970,7 +1179,7 @@ class MerlinProcessor:
         layer: MerlinModule,
         input_tensor: torch.Tensor,
         nsample: int | None,
-        state: dict,
+        state: CallState,
         deadline: float | None,
     ) -> torch.Tensor:
         """Execute a quantum layer through the selected backend route.
@@ -997,17 +1206,20 @@ class MerlinProcessor:
 
         B = input_tensor.shape[0]
 
+        if B == 0:
+            dist_size, _, _ = self._get_state_mapping(layer)
+            return torch.empty(
+                (0, dist_size),
+                dtype=input_tensor.dtype,
+                device=input_tensor.device,
+            )
+
         if self.backend_kind == "local_processor":
             return self._run_chunk_local(
                 layer, config, input_tensor, nsample, state, deadline
             )
 
-        chunks: list[tuple[int, int]] = []
-        start = 0
-        while start < B:
-            end = min(start + self.microbatch_size, B)
-            chunks.append((start, end))
-            start = end
+        chunks = BatchChunker.split_batch(B, self.microbatch_size)
         return self._run_chunks_pooled(
             layer, config, input_tensor, chunks, nsample, state, deadline
         )
@@ -1019,67 +1231,71 @@ class MerlinProcessor:
         input_tensor: torch.Tensor,
         chunks: list[tuple[int, int]],
         nsample: int | None,
-        state: dict,
+        state: CallState,
         deadline: float | None,
     ) -> torch.Tensor:
-        """Submit chunk jobs with limited concurrency and stitch results."""
-        state["chunks_total"] += len(chunks)
-        outputs: list[torch.Tensor | None] = [None] * len(chunks)
-        errors: list[BaseException] = []
+        """Submit chunk jobs with limited concurrency and stitch results.
 
-        total_chunks = len(chunks)
-        layer_name = getattr(layer, "name", layer.__class__.__name__)
+        Delegates chunk orchestration to :class:`BatchChunker`; kept as the
+        processor-level entry point so callers and tests interact with the
+        coordinator rather than the execution unit directly.
+        """
+        return self._make_batch_chunker().run_chunks(
+            layer, config, input_tensor, chunks, nsample, state, deadline
+        )
 
-        def _call(s: int, e: int, idx: int):
-            try:
-                base_label = (
-                    f"mer:{layer_name}:{state['call_id']}:{idx + 1}/{total_chunks}"
-                )
-                t = self._run_chunk(
-                    layer,
-                    config,
-                    input_tensor[s:e],
-                    nsample,
-                    state,
-                    deadline,
-                    job_base_label=base_label,
-                )
-                outputs[idx] = t
-            except BaseException as ex:
-                errors.append(ex)
+    # ---------------- Execution unit factories ----------------
 
-        in_flight = 0
-        idx = 0
-        futures: list[threading.Thread] = []
-        while idx < len(chunks) or in_flight > 0:
-            while idx < len(chunks) and in_flight < self.chunk_concurrency:
-                s, e = chunks[idx]
-                with self._lock:
-                    state["active_chunks"] += 1
-                th = threading.Thread(target=_call, args=(s, e, idx), daemon=True)
-                th.start()
-                futures.append(th)
-                idx += 1
-                in_flight += 1
+    def _make_batch_chunker(self) -> BatchChunker:
+        """Build the chunk orchestration unit wired to this processor.
 
-            for th in list(futures):
-                if not th.is_alive():
-                    futures.remove(th)
-                    in_flight -= 1
-                    with self._lock:
-                        state["active_chunks"] = max(0, state["active_chunks"] - 1)
-                        state["chunks_done"] += 1
+        ``run_chunk`` is bound at call time so monkeypatched processor
+        methods remain observable, matching pre-extraction behavior.
+        """
+        return BatchChunker(
+            run_chunk=self._run_chunk,
+            get_chunk_concurrency=lambda: self.chunk_concurrency,
+            cancel_all=self.cancel_all,
+        )
 
-            if deadline is not None and time.time() >= deadline:
-                self.cancel_all()
-                raise TimeoutError("Remote call timed out (remote cancel issued)")
+    def _make_job_runner(self) -> RemoteJobRunner:
+        """Build the remote chunk execution unit wired to this processor.
 
-            time.sleep(0.01)
+        Dependencies are injected as bound methods and deferred lambdas so
+        that live attribute mutation (e.g. ``max_shots_per_call``) and
+        monkeypatched processor methods keep working exactly as before the
+        extraction.
+        """
+        return RemoteJobRunner(
+            create_processor=self._create_fresh_rp,
+            get_available_commands=lambda: self.available_commands,
+            extract_input_params=self._extract_input_params,
+            effective_sample_count=self._effective_sample_count,
+            get_max_shots_per_call=lambda: self.max_shots_per_call,
+            default_shots_per_call=self.DEFAULT_SHOTS_PER_CALL,
+            map_results=self._process_batch_results,
+            register_job=self._register_job,
+            unregister_job=self._unregister_job,
+            get_microbatch_limit=(
+                lambda: None if self.session is not None else self.microbatch_size
+            ),
+            max_retries=self._MAX_CHUNK_RETRIES,
+            job_name_max=self._JOB_NAME_MAX,
+            default_sampling_command=(
+                "sample_count" if getattr(self, "session", None) is not None else None
+            ),
+        )
 
-        if errors:
-            raise errors[0]
+    def _register_job(self, job: RemoteJob) -> None:
+        """Track a submitted job for cancellation and history."""
+        with self._lock:
+            self._active_jobs.add(job)
+            self._job_history.append(job)
 
-        return torch.cat(outputs, dim=0)  # type: ignore[arg-type]
+    def _unregister_job(self, job: RemoteJob) -> None:
+        """Remove a job from active cancellation tracking."""
+        with self._lock:
+            self._active_jobs.discard(job)
 
     def _run_chunk(
         self,
@@ -1087,116 +1303,45 @@ class MerlinProcessor:
         config: ValidatedLayerConfig,
         input_chunk: torch.Tensor,
         nsample: int | None,
-        state: dict,
+        state: CallState,
         deadline: float | None,
         job_base_label: str | None = None,
     ) -> torch.Tensor:
-        """Submit a single chunk job with retries and return the mapped tensor."""
-        from concurrent.futures import CancelledError
+        """Submit a single chunk job with retries and return the mapped tensor.
 
+        Local backends are dispatched to :meth:`_run_chunk_local`; remote
+        chunk execution is delegated to :class:`RemoteJobRunner`.
+        """
         if self.backend_kind == "local_processor":
             return self._run_chunk_local(
                 layer, config, input_chunk, nsample, state, deadline
             )
 
-        batch_size = input_chunk.shape[0]
-        if self.session is None and batch_size > self.microbatch_size:
-            raise ValueError(
-                f"Chunk size {batch_size} exceeds microbatch {self.microbatch_size}. "
-                "Please report this bug."
-            )
+        return self._make_job_runner().run_chunk(
+            layer,
+            config,
+            input_chunk,
+            nsample,
+            state,
+            deadline,
+            job_base_label=job_base_label,
+        )
 
-        input_param_names = self._extract_input_params(config)
-        input_np = input_chunk.detach().cpu().numpy()
-
-        # Pre-compute iteration params (cheap, only done once).
-        iteration_params: list[dict[str, float]] = []
-        for i in range(batch_size):
-            circuit_params = {}
-            for j, param_name in enumerate(input_param_names):
-                circuit_params[param_name] = (
-                    float(input_np[i, j]) if j < input_chunk.shape[1] else 0.0
-                )
-            iteration_params.append(circuit_params)
-
-        def _capped_name(base: str, cmd: str) -> str:
-            name = f"{base}:{cmd}"
-            name = "".join(ch if ch.isalnum() or ch in "-_:/=." else "_" for ch in name)
-            if len(name) <= self._JOB_NAME_MAX:
-                return name
-            h = f"{zlib.adler32(name.encode()):08x}"
-            keep = self._JOB_NAME_MAX - 1 - len(h)
-            if keep < 1:
-                return h[: self._JOB_NAME_MAX]
-            return name[:keep] + "~" + h
-
-        last_error: BaseException | None = None
-        for attempt in range(self._MAX_CHUNK_RETRIES):
-            if state.get("cancel_requested"):
-                raise CancelledError("Remote call was cancelled")
-            if deadline is not None and time.time() >= deadline:
-                raise TimeoutError("Remote call timed out (remote cancel issued)")
-
-            # Build a fresh RemoteProcessor and Sampler on each attempt so that
-            # a corrupted RP doesn't poison retries.
-            rp = self._create_fresh_rp()
-            rp.set_circuit(config.circuit)
-            if config.input_state:
-                input_state = pcvl.BasicState(config.input_state)
-                rp.with_input(input_state)
-                n_photons = sum(config.input_state)
-                rp.min_detected_photons_filter(n_photons)
-
-            max_shots_arg = (
-                self.DEFAULT_SHOTS_PER_CALL
-                if self.max_shots_per_call is None
-                else int(self.max_shots_per_call)
-            )
-            sampler = Sampler(rp, max_shots_per_call=max_shots_arg)
-            sampler.clear_iterations()
-            for params in iteration_params:
-                sampler.add_iteration(circuit_params=params)
-
-            job = None
-            try:
-                job, is_probability = self._submit_job(
-                    sampler, nsample, job_base_label, _capped_name
-                )
-                with self._lock:
-                    self._active_jobs.add(job)
-                    self._job_history.append(job)
-
-                return self._poll_job(
-                    job, state, deadline, batch_size, layer, nsample, is_probability
-                )
-            except (CancelledError, TimeoutError, KeyboardInterrupt):
-                raise
-            except Exception as exc:
-                last_error = exc
-                if job is not None:
-                    with self._lock:
-                        self._active_jobs.discard(job)
-                logger.warning(
-                    "Chunk attempt %d/%d failed: %s",
-                    attempt + 1,
-                    self._MAX_CHUNK_RETRIES,
-                    exc,
-                )
-                if attempt < self._MAX_CHUNK_RETRIES - 1:
-                    time.sleep(min(1.0 * (2**attempt), 5.0))
-
-        raise RuntimeError(
-            f"Chunk failed after {self._MAX_CHUNK_RETRIES} attempts"
-        ) from last_error
-
-    def _create_fresh_local_processor(self) -> AProcessor:
+    def _create_fresh_local_processor(
+        self,
+    ) -> tuple[AProcessor, LocalExperimentSnapshot]:
         """Create an isolated local Perceval processor for one execution.
+
+        Delegates to :meth:`PercevalAdapter.rebuild_local_processor`, which
+        snapshots the experiment metadata and rebuilds the processor from a
+        copied experiment and fresh backend.
 
         Returns
         -------
-        AProcessor
-            Fresh local processor with copied non-circuit experiment state and
-            a fresh backend instance.
+        tuple[AProcessor, LocalExperimentSnapshot]
+            Fresh local processor (copied non-circuit experiment state and a
+            fresh backend instance) and the experiment snapshot to restore after
+            the execution circuit is installed.
 
         Raises
         ------
@@ -1204,135 +1349,7 @@ class MerlinProcessor:
             If the configured local processor cannot be reconstructed safely.
         """
         assert self.processor is not None
-
-        experiment = getattr(self.processor, "experiment", None)
-        backend_object = getattr(self.processor, "backend", None)
-        experiment_copy = getattr(experiment, "copy", None)
-        if (
-            experiment is None
-            or backend_object is None
-            or not callable(experiment_copy)
-        ):
-            raise TypeError(
-                "Local execution requires a Perceval processor with copyable "
-                "experiment state and a reconstructable local backend."
-            )
-
-        backend_name = getattr(backend_object, "name", None)
-        backend: str | object
-        if isinstance(backend_name, str):
-            backend = backend_name
-        else:
-            try:
-                backend = type(backend_object)()
-            except Exception as exc:
-                raise TypeError(
-                    "Local processor backend cannot be reconstructed safely."
-                ) from exc
-
-        experiment_metadata = self._snapshot_local_experiment_metadata(experiment)
-        copied_experiment = experiment_copy()
-        copied_experiment.clear_input_and_circuit()
-
-        processor = Processor(backend, copied_experiment)
-        processor._merlin_local_experiment_metadata = experiment_metadata
-        return processor
-
-    @staticmethod
-    def _snapshot_local_experiment_metadata(
-        experiment: Any,
-    ) -> _LocalExperimentMetadata:
-        """Copy non-circuit local experiment metadata before Perceval clears it.
-
-        Parameters
-        ----------
-        experiment : Any
-            Perceval experiment owned by the caller's local processor.
-
-        Returns
-        -------
-        _LocalExperimentMetadata
-            Deep-copied metadata that is independent from the caller's processor.
-        """
-
-        in_ports = tuple(
-            (port, tuple(modes))
-            for port, modes in copy.deepcopy(experiment._in_ports).items()
-        )
-        out_ports = tuple(
-            (port, tuple(modes))
-            for port, modes in copy.deepcopy(experiment._out_ports).items()
-        )
-        return _LocalExperimentMetadata(
-            circuit_size=int(experiment.circuit_size),
-            in_ports=in_ports,
-            out_ports=out_ports,
-            detectors=tuple(copy.deepcopy(experiment.detectors)),
-            detectors_injected=tuple(copy.deepcopy(experiment.detectors_injected)),
-            in_mode_type=tuple(copy.deepcopy(experiment._in_mode_type)),
-            out_mode_type=tuple(copy.deepcopy(experiment._out_mode_type)),
-            anon_herald_num=int(experiment._anon_herald_num),
-            postselection=copy.copy(experiment.post_select_fn),
-        )
-
-    @staticmethod
-    def _restore_local_experiment_metadata(
-        experiment: Any, metadata: _LocalExperimentMetadata
-    ) -> None:
-        """Restore local experiment metadata after the execution circuit is set.
-
-        Parameters
-        ----------
-        experiment : Any
-            Perceval experiment owned by the fresh local execution processor.
-        metadata : _LocalExperimentMetadata
-            Metadata copied from the caller's local processor.
-
-        Raises
-        ------
-        ValueError
-            If mode-indexed metadata cannot be applied to the execution circuit
-            because the circuit sizes differ.
-        """
-
-        if metadata.has_mode_metadata:
-            circuit_size = int(experiment.circuit_size)
-            if circuit_size != metadata.circuit_size:
-                raise ValueError(
-                    "Local processor experiment metadata is tied to circuit size "
-                    f"{metadata.circuit_size}, but the execution circuit has size "
-                    f"{circuit_size}."
-                )
-            experiment._in_ports = {
-                port: list(modes) for port, modes in metadata.in_ports
-            }
-            experiment._out_ports = {
-                port: list(modes) for port, modes in metadata.out_ports
-            }
-            experiment._detectors = list(metadata.detectors)
-            experiment.detectors_injected = list(metadata.detectors_injected)
-            experiment._in_mode_type = list(metadata.in_mode_type)
-            experiment._out_mode_type = list(metadata.out_mode_type)
-            experiment._anon_herald_num = metadata.anon_herald_num
-
-        experiment._postselect = copy.copy(metadata.postselection)
-        experiment._circuit_changed()
-
-    @staticmethod
-    def _copy_circuit_for_execution(circuit: pcvl.ACircuit) -> pcvl.ACircuit:
-        """Return a circuit copy for processor execution.
-
-        Parameters
-        ----------
-        circuit : pcvl.ACircuit
-            Circuit exported by the quantum layer.
-
-        Returns
-        -------
-        pcvl.ACircuit
-            Independent circuit object used by a single backend execution.
-        """
-        return circuit.copy()
+        return PercevalAdapter.rebuild_local_processor(self.processor)
 
     def _run_chunk_local(
         self,
@@ -1340,7 +1357,7 @@ class MerlinProcessor:
         config: ValidatedLayerConfig,
         input_chunk: torch.Tensor,
         nsample: int | None,
-        state: dict,
+        state: CallState,
         deadline: float | None,
     ) -> torch.Tensor:
         """Execute a local AProcessor batch with an isolated processor.
@@ -1368,9 +1385,9 @@ class MerlinProcessor:
         nsample : int | None
             Number of samples per row.  ``None`` or ``<= 0`` triggers exact
             probability computation when the backend supports ``"probs"``.
-        state : dict
-            Shared call-state dictionary.  Must contain the key
-            ``"cancel_requested"`` (bool).
+        state : CallState
+            Typed per-call state; its ``cancel_requested`` flag is checked
+            cooperatively before and after execution.
         deadline : float | None
             Absolute wall-clock deadline (``time.time()`` seconds).  ``None``
             means no deadline.
@@ -1384,14 +1401,14 @@ class MerlinProcessor:
         Raises
         ------
         concurrent.futures.CancelledError
-            If ``state["cancel_requested"]`` is ``True`` before or after
+            If ``state.cancel_requested`` is ``True`` before or after
             execution.
         TimeoutError
             If ``deadline`` has elapsed before or after execution.
         """
         from concurrent.futures import CancelledError
 
-        if state.get("cancel_requested"):
+        if state.cancel_requested:
             raise CancelledError("Local call was cancelled")
         if deadline is not None and time.time() >= deadline:
             raise TimeoutError("Local call timed out")
@@ -1400,53 +1417,36 @@ class MerlinProcessor:
 
         batch_size = input_chunk.shape[0]
         input_param_names = self._extract_input_params(config)
-        input_np = input_chunk.detach().cpu().numpy()
+        iteration_params = build_iteration_parameters(input_chunk, input_param_names)
 
-        iteration_params: list[dict[str, float]] = []
-        for i in range(batch_size):
-            circuit_params = {}
-            for j, param_name in enumerate(input_param_names):
-                circuit_params[param_name] = (
-                    float(input_np[i, j]) if j < input_chunk.shape[1] else 0.0
-                )
-            iteration_params.append(circuit_params)
-
-        processor = self._create_fresh_local_processor()
-        processor.set_circuit(self._copy_circuit_for_execution(config.circuit))
-        experiment_metadata = getattr(
-            processor, "_merlin_local_experiment_metadata", None
+        processor, experiment_snapshot = self._create_fresh_local_processor()
+        PercevalAdapter.set_circuit(
+            processor, PercevalAdapter.copy_circuit(config.circuit)
         )
-        if isinstance(experiment_metadata, _LocalExperimentMetadata):
-            self._restore_local_experiment_metadata(
-                processor.experiment, experiment_metadata
-            )
-        if config.input_state:
-            input_state = pcvl.BasicState(config.input_state)
-            processor.with_input(input_state)
-            n_photons = sum(config.input_state)
-            processor.min_detected_photons_filter(n_photons)
+        PercevalAdapter.restore_experiment(processor.experiment, experiment_snapshot)
+        PercevalAdapter.set_input(processor, config.input_state)
 
-        sampler = Sampler(processor, max_shots_per_call=self.max_shots_per_call)
-        sampler.clear_iterations()
-        for params in iteration_params:
-            sampler.add_iteration(circuit_params=params)
+        sampler = PercevalAdapter.create_sampler(
+            processor, self.max_shots_per_call, iteration_params
+        )
 
         is_probability = ("probs" in self.available_commands) and (
             nsample is None or int(nsample) <= 0
         )
 
         if is_probability:
-            raw_results = sampler.probs.execute_sync()
+            raw_results = PercevalAdapter.execute_sync(sampler, "probs")
         else:
             use_shots = self._effective_sample_count(nsample)
-            if "sample_count" in self.available_commands:
-                raw_results = sampler.sample_count.execute_sync(max_samples=use_shots)
-            elif "samples" in self.available_commands:
-                raw_results = sampler.samples.execute_sync(max_samples=use_shots)
-            else:
-                raw_results = sampler.sample_count.execute_sync(max_samples=use_shots)
+            cmd = select_sampling_command(
+                self.available_commands,
+                default_command="sample_count",
+            )
+            raw_results = PercevalAdapter.execute_sync(
+                sampler, cmd, max_samples=use_shots
+            )
 
-        if state.get("cancel_requested"):
+        if state.cancel_requested:
             raise CancelledError("Local call was cancelled")
         if deadline is not None and time.time() >= deadline:
             raise TimeoutError("Local call timed out")
@@ -1455,239 +1455,14 @@ class MerlinProcessor:
             raw_results, batch_size, layer, nsample, is_probability
         )
 
-    def _submit_job(self, sampler, nsample, job_base_label, _capped_name):
-        """Submit a job to the sampler, selecting command based on backend capabilities.
-
-        **Command Selection Strategy**
-
-        The processor selects which Perceval sampler command to use based on:
-
-        1. **Exact Probabilities** (``"probs"`` command):
-           - Used if backend exposes ``"probs"`` AND (``nsample`` is None or ``nsample <= 0``).
-           - Returns normalized probability distribution.
-           - ``nsample`` parameter is ignored.
-
-        2. **Sampling** (``"sample_count"`` or ``"samples"`` commands):
-           - Used if exact probabilities are not available or ``nsample > 0``.
-           - Tries ``"sample_count"`` first, falls back to ``"samples"``.
-           - Number of samples = ``nsample`` if provided, else
-             ``min(DEFAULT_SHOTS_PER_CALL, max_shots_per_call)``.
-
-        Parameters
-        ----------
-        sampler : Sampler
-            Perceval Sampler instance configured with circuit and iterations.
-        nsample : int | None
-            Number of samples requested. If ``None`` or ``<= 0``, triggers
-            exact probability computation (if available).
-        job_base_label : str | None
-            Base label for the remote job name.
-        _capped_name : callable
-            Function to cap and format job names.
-
-        Returns
-        -------
-        tuple[RemoteJob, bool]
-            - **RemoteJob**: The submitted job handle.
-            - **bool**: ``is_probability`` flag indicating execution mode:
-              ``True`` if using exact probabilities, ``False`` if sampling.
-        """
-        is_probability = ("probs" in self.available_commands) and (
-            nsample is None or int(nsample) <= 0
-        )
-
-        if is_probability:
-            job = sampler.probs
-            cmd = "probs"
-            if job_base_label:
-                job.name = _capped_name(job_base_label, cmd)
-            self._ensure_serializable_sampler_iterator(job, sampler)
-            return job.execute_async(), is_probability
-
-        use_shots = self._effective_sample_count(nsample)
-
-        if "sample_count" in self.available_commands:
-            job = sampler.sample_count
-            cmd = "sample_count"
-        elif "samples" in self.available_commands:
-            job = sampler.samples
-            cmd = "samples"
-        else:
-            job = sampler.sample_count
-            cmd = "sample_count"
-
-        if job_base_label:
-            job.name = _capped_name(job_base_label, cmd)
-        self._ensure_serializable_sampler_iterator(job, sampler)
-        return job.execute_async(max_samples=use_shots), is_probability
-
-    @staticmethod
-    def _ensure_serializable_sampler_iterator(job: RemoteJob, sampler: Sampler) -> None:
-        """Replace Perceval 1.2 iterator objects with JSON-serializable data.
-
-        Parameters
-        ----------
-        job : RemoteJob
-            Prepared Perceval remote job whose private request payload may contain
-            a sampler iterator.
-        sampler : Sampler
-            Perceval sampler used to prepare the job.
-
-        Notes
-        -----
-        Perceval 1.1 stores sampler iterations as a plain list. Perceval 1.2
-        stores them in a ``ParameterIterator`` object, but the Scaleway session
-        handler still serializes ``payload["payload"]`` with ``json.dumps``.
-        Until Perceval exposes a public serializer for that object, Merlin
-        normalizes the remote-job payload back to the list shape accepted by the
-        cloud side.
-        """
-        iterator = getattr(sampler, "_iterator", None)
-        iterations = getattr(iterator, "iterations", None)
-        if not iterations:
-            return
-
-        request_data = getattr(job, "_request_data", None)
-        if not isinstance(request_data, dict):
-            return
-
-        payload = request_data.get("payload")
-        if isinstance(payload, dict) and payload.get("iterator") is iterator:
-            payload["iterator"] = list(iterations)
-
-    def _poll_job(
-        self,
-        job: RemoteJob,
-        state: dict,
-        deadline: float | None,
-        batch_size: int,
-        layer: MerlinModule,
-        nsample: int | None,
-        is_probability: bool = False,
-    ) -> torch.Tensor:
-        """Poll a submitted job until complete/failed/timeout and return results.
-
-        Continuously polls the job status, updating state and handling timeouts,
-        cancellation, and failures. Upon completion, processes results according
-        to the execution mode (probabilities vs. samples) and normalizes to a
-        ``torch.Tensor``.
-
-        Parameters
-        ----------
-        job : RemoteJob
-            Submitted Perceval job to poll.
-        state : dict
-            Shared state dict tracking cancellation, chunks, job IDs, etc.
-        deadline : float | None
-            Absolute time (seconds) when execution should timeout.
-        batch_size : int
-            Number of inputs in the current chunk.
-        layer : MerlinModule
-            Reference to the quantum layer (used for output extraction).
-        nsample : int | None
-            Original sample count request (for logging/context only).
-        is_probability : bool
-            If ``True``, job is in exact probability mode; results are normalized.
-            If ``False``, job is in sampling mode; results are normalized from counts.
-            Default: False.
-
-        Returns
-        -------
-        torch.Tensor
-            Normalized output tensor ``[batch_size, ...]`` extracted and formatted
-            from the remote job results. Probability vs. sample interpretation is
-            determined by ``is_probability``.
-        """
-        from concurrent.futures import CancelledError
-
-        _MAX_NON_DICT_RETRIES = 60  # 60 * 0.1s = 6s
-        non_dict_retries = 0
-        sleep_ms = 50
-        while True:
-            if state.get("cancel_requested"):
-                cancel = getattr(job, "cancel", None)
-                if callable(cancel):
-                    with suppress(Exception):
-                        cancel()
-                raise CancelledError("Remote call was cancelled")
-
-            if deadline is not None and time.time() >= deadline:
-                cancel = getattr(job, "cancel", None)
-                if callable(cancel):
-                    with suppress(Exception):
-                        cancel()
-                raise TimeoutError("Remote call timed out (remote cancel issued)")
-
-            s = getattr(job, "status", None)
-            state["current_status"] = {
-                "state": getattr(s, "state", None) if s else None,
-                "progress": getattr(s, "progress", None) if s else None,
-                "message": getattr(s, "stop_message", None) if s else None,
-            }
-
-            job_id = getattr(job, "id", None) or getattr(job, "job_id", None)
-            if job_id is not None and job_id not in state["job_ids"]:
-                state["job_ids"].append(job_id)
-
-            if getattr(job, "is_failed", False):
-                msg = state["current_status"].get("message")
-                if msg and "Cancel requested" in str(msg):
-                    with self._lock:
-                        self._active_jobs.discard(job)
-                    raise CancelledError("Remote call was cancelled")
-                with self._lock:
-                    self._active_jobs.discard(job)
-                raise RuntimeError(
-                    f"Remote job failed: {msg or 'unknown error'} (job_id={job_id!r})"
-                )
-
-            if getattr(job, "is_complete", False):
-                try:
-                    raw = job.get_results()
-                except RuntimeError as ex:
-                    msg = str(ex)
-                    if "Results are not available" in msg:
-                        time.sleep(0.05)
-                        continue
-                    if "Cancel requested" in msg:
-                        with self._lock:
-                            self._active_jobs.discard(job)
-                        raise CancelledError("Remote call was cancelled")
-                    raise
-
-                if isinstance(raw, dict):
-                    with self._lock:
-                        self._active_jobs.discard(job)
-                    return self._process_batch_results(
-                        raw, batch_size, layer, nsample, is_probability
-                    )
-
-                # The backend sometimes reports completion before the dict
-                # payload is actually available.  Re-poll the same job for a
-                # bounded window before giving up to the outer retry loop.
-                non_dict_retries += 1
-                if non_dict_retries >= _MAX_NON_DICT_RETRIES:
-                    with self._lock:
-                        self._active_jobs.discard(job)
-                    raise RuntimeError(
-                        f"Job complete but results were not a dict after "
-                        f"{_MAX_NON_DICT_RETRIES} re-polls; "
-                        f"job_id={job_id!r}, type={type(raw)}, value={raw!r}"
-                    )
-                time.sleep(0.1)
-                continue
-
-            time.sleep(sleep_ms / 1000.0)
-            sleep_ms = min(sleep_ms * 2, 400)
-
     # ---------------- Per-call RP pool helpers ----------------
 
     def _create_fresh_rp(self) -> RemoteProcessor:
         """Build a fresh RemoteProcessor for each chunk/attempt.
 
         Creates a new, independent RemoteProcessor to ensure thread-safe execution
-        per chunk. Used in conjunction with :meth:`_submit_job` and :meth:`_poll_job`
-        to determine whether to use exact probabilities or sampling.
+        per chunk. Consumed by :class:`~merlin.core.execution.RemoteJobRunner`,
+        which submits and polls the job for exact probabilities or sampling.
 
         **Dual-Path Strategy**
 
@@ -1700,7 +1475,8 @@ class MerlinProcessor:
         The fresh RP is then passed to ``Sampler`` to submit jobs with backend
         capabilities already extracted in ``backend_capabilities``. Backend commands
         (``"probs"`` vs. ``"sample_count"``/``"samples"``) are selected during
-        :meth:`_submit_job` based on ``nsample`` and available capabilities.
+        :meth:`~merlin.core.execution.RemoteJobRunner.submit_job` based on
+        ``nsample`` and available capabilities.
 
         Returns
         -------
@@ -1715,7 +1491,7 @@ class MerlinProcessor:
         """
         if self.session is not None:
             # Session path: create a fresh processor from the session
-            return self.session.build_remote_processor()
+            return PercevalAdapter.build_from_session(self.session)
         if self.remote_processor is None:
             raise RuntimeError(
                 "Fresh RemoteProcessor creation is only available for remote "
@@ -1730,61 +1506,21 @@ class MerlinProcessor:
         """Create a sibling RemoteProcessor with its own RPC handler (thread-safe).
 
         Forwards the token extracted at init time so that inline-token
-        RemoteProcessors are cloned correctly.
+        RemoteProcessors are cloned correctly. Delegates the Perceval
+        handler access to :class:`PercevalAdapter`.
         """
-        return RemoteProcessor(
-            name=rp.name,
-            token=self._token,
-            url=(
-                rp.get_rpc_handler().url
-                if hasattr(rp.get_rpc_handler(), "url")
-                else None
-            ),
-            proxies=rp.proxies,
-        )
+        return PercevalAdapter.clone_remote_processor(rp, self._token)
 
     @staticmethod
     def _extract_rp_token(rp: RemoteProcessor) -> str | None:
         """Extract the auth token from a RemoteProcessor.
 
-        Perceval stores the token on the RPC handler as ``handler.token``
-        and also embeds it in ``handler.headers['Authorization']``.  We
-        probe both locations so that inline-token and global-config
-        ``RemoteProcessor`` instances are both handled.
-
-        As a last resort, falls back to ``RemoteConfig().get_token()``.
-        Returns ``None`` only if every strategy fails.
+        Delegates to :meth:`PercevalAdapter.extract_token`, which probes the
+        RPC handler token attributes, the Authorization header, and the
+        global ``RemoteConfig`` fallback. Returns ``None`` only if every
+        strategy fails.
         """
-        try:
-            handler = rp.get_rpc_handler()
-        except Exception:
-            handler = None
-
-        if handler is not None:
-            # Primary: handler.token (set by RPCHandler.__init__)
-            for attr in ("token", "_token", "auth_token"):
-                val = getattr(handler, attr, None)
-                if isinstance(val, str) and val:
-                    return val
-
-            # Fallback: parse 'Bearer <token>' from Authorization header
-            headers = getattr(handler, "headers", None)
-            if isinstance(headers, dict):
-                auth = headers.get("Authorization", "")
-                if auth.startswith("Bearer ") and len(auth) > 7:
-                    return auth[7:]
-
-        # Last resort: check the global config
-        try:
-            from perceval.runtime import RemoteConfig
-
-            global_token = (RemoteConfig().get_token() or "").strip()
-            if global_token:
-                return global_token
-        except Exception:
-            logger.debug("RemoteConfig token lookup failed", exc_info=True)
-
-        return None
+        return PercevalAdapter.extract_token(rp)
 
     def _iter_layers_in_order(self, module: nn.Module) -> Iterable[nn.Module]:
         """Yield execution leaves in deterministic order.
@@ -1819,7 +1555,9 @@ class MerlinProcessor:
         ----------
         is_probability : bool
             Whether results are probabilities (True) or sample counts (False).
-            This is determined at submit time in _submit_job to avoid recalculation.
+            Determined at submit time by
+            :meth:`~merlin.core.execution.RemoteJobRunner.submit_job` to avoid
+            recalculation.
         """
         if raw_results is None:
             raise RuntimeError(
@@ -1845,42 +1583,42 @@ class MerlinProcessor:
                         result_item["results"], is_probability
                     )
                     probs = torch.zeros(dist_size)
-                    if state_counts:
-                        if valid_states is not None:
-                            filtered_counts = {}
-                            for state_str, count in state_counts.items():
-                                state_tuple = self._parse_perceval_state(state_str)
-                                if state_tuple in valid_states:
-                                    filtered_counts[state_str] = count
-                            state_counts = filtered_counts
-
-                        if not state_counts:
-                            output_tensors.append(torch.zeros(dist_size))
-                            continue
-
-                        total = 1.0 if is_probability else sum(state_counts.values())
-
-                        for state_str, value in state_counts.items():
-                            state_tuple = self._parse_perceval_state(state_str)
-                            if not state_tuple:
-                                continue
-                            if state_to_index is not None:
-                                if state_tuple not in state_to_index:
-                                    continue
-                                idx = state_to_index[state_tuple]
-                            else:
-                                continue
-                            if idx < dist_size:
-                                probs[idx] = (
-                                    value
-                                    if is_probability
-                                    else (value / total if total > 0 else 0)
-                                )
-
-                        prob_sum = probs.sum()
-                        if prob_sum > 0 and abs(float(prob_sum) - 1.0) > 1e-6:
-                            probs = probs / prob_sum
+                    if not state_counts:
                         output_tensors.append(probs)
+                        continue
+
+                    if valid_states is not None:
+                        filtered_counts = {}
+                        for state_str, count in state_counts.items():
+                            state_tuple = self._parse_perceval_state(state_str)
+                            if state_tuple in valid_states:
+                                filtered_counts[state_str] = count
+                        state_counts = filtered_counts
+
+                    if not state_counts:
+                        output_tensors.append(probs)
+                        continue
+
+                    total = 1.0 if is_probability else sum(state_counts.values())
+
+                    for state_str, value in state_counts.items():
+                        state_tuple = self._parse_perceval_state(state_str)
+                        if not state_tuple:
+                            continue
+                        if state_to_index is not None:
+                            if state_tuple not in state_to_index:
+                                continue
+                            idx = state_to_index[state_tuple]
+                        else:
+                            continue
+                        if idx < dist_size:
+                            probs[idx] = (
+                                value
+                                if is_probability
+                                else (value / total if total > 0 else 0)
+                            )
+
+                    output_tensors.append(probs)
                 else:
                     output_tensors.append(torch.zeros(dist_size))
 
@@ -2074,13 +1812,9 @@ class MerlinProcessor:
             )
         config = ValidatedLayerConfig(layer.export_config())
         child_rp = self._create_fresh_rp()
-        child_rp.set_circuit(config.circuit)
-
-        if config.input_state:
-            input_state = pcvl.BasicState(config.input_state)
-            child_rp.with_input(input_state)
-            n_photons = sum(config.input_state)
-            child_rp.min_detected_photons_filter(n_photons)
+        PercevalAdapter.configure_processor(
+            child_rp, config.circuit, config.input_state
+        )
 
         input_param_names = self._extract_input_params(config)
 
@@ -2099,8 +1833,8 @@ class MerlinProcessor:
             last_ex: Exception | None = None
             for _attempt in range(self._MAX_ESTIMATOR_RETRIES):
                 try:
-                    est = child_rp.estimate_required_shots(
-                        desired_samples_per_input, param_values=param_values
+                    est = PercevalAdapter.estimate_required_shots(
+                        child_rp, desired_samples_per_input, param_values
                     )
                     break
                 except requests.exceptions.ReadTimeout as ex:

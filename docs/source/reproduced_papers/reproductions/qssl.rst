@@ -15,6 +15,8 @@ Quantum Self-Supervised Learning (QSSL)
 
    **DOI**: `10.1088/2058-9565/ac6825 <https://doi.org/10.1088/2058-9565/ac6825>`_
 
+   .. merlin-citations-badge:: qssl
+
    **Paper URL**: `arXiv:2103.14653 <https://arxiv.org/abs/2103.14653>`_
 
    **Reproduction Status**: ✅ Complete

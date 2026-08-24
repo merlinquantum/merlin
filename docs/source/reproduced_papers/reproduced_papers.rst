@@ -7,6 +7,15 @@ Reproduced Papers
 MerLin provides reproducible implementations of published quantum machine learning papers.
 Each card links to a dedicated reproduction page with paper metadata, implementation details, code access, and results.
 
+Research Impact
+---------------
+
+MerLin's reproductions span published quantum machine learning research; the
+figures below summarize how many papers have been reproduced and how widely
+those papers have been cited.
+
+.. merlin-citations-summary::
+
 Available Reproductions
 -----------------------
 
@@ -117,6 +126,14 @@ Future-proofing
    :data: _data/galleries/reproduced_papers/reproduced_papers_future_proofing.json
    :columns: 2
    :contour-color: #5648ED
+
+Reproductions by Citations
+--------------------------
+
+The papers reproduced in MerLin, ordered by citation count. Each row links to
+the reproduction page; the arrow opens the original paper.
+
+.. merlin-citations-table::
 
 Contributing Reproductions
 --------------------------
