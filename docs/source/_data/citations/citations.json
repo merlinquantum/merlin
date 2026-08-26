@@ -1,9 +1,9 @@
 {
   "source": "OpenAlex",
-  "fetched_at": "2026-08-18",
+  "fetched_at": "2026-08-26",
   "papers": {
     "QCNN_data_classification": {
-      "cited_by_count": 376,
+      "cited_by_count": 377,
       "openalex_id": "W3192227636"
     },
     "amplitude_limitations": {
@@ -11,8 +11,12 @@
       "openalex_id": "W4415084970"
     },
     "barren_plateaus": {
-      "cited_by_count": 2249,
+      "cited_by_count": 2256,
       "openalex_id": "W2794444783"
+    },
+    "bve_qnn": {
+      "cited_by_count": 16,
+      "openalex_id": "W4404465609"
     },
     "distributed_nn": {
       "cited_by_count": 0,
@@ -31,9 +35,7 @@
       "openalex_id": "W4413251953"
     },
     "latentqgan": {
-      "cited_by_count": 17,
-      "source": "Google Scholar",
-      "source_url": "https://scholar.google.fr/scholar?hl=fr&as_sdt=0%2C5&q=LatentQGAN%3A+A+Hybrid+QGAN+with+Classical+Convolutional+Autoencoder&btnG=",
+      "cited_by_count": 0,
       "openalex_id": "W4403780150"
     },
     "nearest_centroids": {
@@ -49,7 +51,7 @@
       "openalex_id": "W4404059122"
     },
     "photonic_kernel": {
-      "cited_by_count": 24,
+      "cited_by_count": 25,
       "openalex_id": "W4410966984"
     },
     "photonic_memristor": {
@@ -73,11 +75,11 @@
       "openalex_id": "W2998262898"
     },
     "quantum_reservoir_computing": {
-      "cited_by_count": 11,
+      "cited_by_count": 12,
       "openalex_id": "W4410252038"
     },
     "quantum_transfer_learning": {
-      "cited_by_count": 409,
+      "cited_by_count": 413,
       "openalex_id": "W2995742898"
     }
   }

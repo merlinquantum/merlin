@@ -40,5 +40,12 @@
     "image": "_static/reproduced_papers/QRKD.png",
     "url": "https://github.com/merlinquantum/reproduced_papers/tree/main/papers/QRKD",
     "tags": ["Liu et al.", "2025", "Complete", "Knowledge Distillation"]
+  },
+  {
+    "title": "Weather QSciML with Photonic QNN",
+    "summary": "Dual-rail photonic reproduction of Experiment 1 (stream-function regression) from Jaderberg et al.",
+    "image": "_static/reproduced_papers/bve_qnn.png",
+    "doc": "reproduced_papers/reproductions/bve_qnn",
+    "tags": ["Jaderberg et al.", "2024", "Partial"]
   }
 ]

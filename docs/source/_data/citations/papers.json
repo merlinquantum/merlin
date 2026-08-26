@@ -153,6 +153,15 @@
     "doc": "reproduced_papers/reproductions/photonic_qcnn"
   },
   {
+    "key": "bve_qnn",
+    "title": "Potential of quantum scientific machine learning applied to weather modeling",
+    "authors_short": "Jaderberg et al.",
+    "year": 2024,
+    "venue": "Physical Review A",
+    "doi": "10.1103/PhysRevA.110.052423",
+    "doc": "reproduced_papers/reproductions/bve_qnn"
+  },
+  {
     "key": "data_reuploading",
     "title": "Experimental Data Re-uploading with Provable Enhanced Learning Capabilities",
     "authors_short": "Mauser et al.",

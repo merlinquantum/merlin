@@ -106,6 +106,7 @@ Advanced Training Paradigms
    reproductions/qssl
    reproductions/quantum_adversarial_ml
    reproductions/hqpinn
+   reproductions/bve_qnn
    reproductions/quantum_transfer_learning
 
 .. merlin-gallery::
