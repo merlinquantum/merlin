@@ -10,6 +10,10 @@
       "cited_by_count": 0,
       "openalex_id": "W4415084970"
     },
+    "barren_plateaus": {
+      "cited_by_count": 2256,
+      "openalex_id": "W2794444783"
+    },
     "bve_qnn": {
       "cited_by_count": 16,
       "openalex_id": "W4404465609"
@@ -29,6 +33,10 @@
     "hqpinn": {
       "cited_by_count": 4,
       "openalex_id": "W4413251953"
+    },
+    "latentqgan": {
+      "cited_by_count": 0,
+      "openalex_id": "W4403780150"
     },
     "nearest_centroids": {
       "cited_by_count": 7,

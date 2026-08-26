@@ -33,5 +33,12 @@
     "image": "_static/reproduced_papers/nqe/phase_1_paper.png",
     "doc": "reproduced_papers/reproductions/nqe",
     "tags": ["Hur et al.", "2024", "Complete"]
+  },
+  {
+    "title": "Barren Plateaus in QNN Training Landscapes",
+    "summary": "Gradient-variance scaling reproduction with gate-based and MerLin photonic implementations.",
+    "image": "_static/reproduced_papers/BP_QNN_figure3_merlin.png",
+    "doc": "reproduced_papers/reproductions/BP_QNN",
+    "tags": ["McClean et al.", "2018", "Partial"]
   }
 ]

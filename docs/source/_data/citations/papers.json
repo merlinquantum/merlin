@@ -170,5 +170,23 @@
     "doi": "10.48550/arXiv.2507.05120",
     "doc": "reproduced_papers/reproductions/data_reuploading",
     "not_indexed": true
+  },
+  {
+    "key": "latentqgan",
+    "title": "LatentQGAN: A Hybrid QGAN with Classical Convolutional Autoencoder",
+    "authors_short": "Vieloszynski et al.",
+    "year": 2024,
+    "venue": "arXiv preprint",
+    "doi": "10.48550/arXiv.2409.14622",
+    "doc": "reproduced_papers/reproductions/LatentQGAN"
+  },
+  {
+    "key": "barren_plateaus",
+    "title": "Barren plateaus in quantum neural network training landscapes",
+    "authors_short": "McClean et al.",
+    "year": 2018,
+    "venue": "Nature Communications",
+    "doi": "10.1038/s41467-018-07090-4",
+    "doc": "reproduced_papers/reproductions/BP_QNN"
   }
 ]

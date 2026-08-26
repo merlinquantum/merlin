@@ -1,0 +1,16 @@
+[
+  {
+    "title": "Photonic Quantum GAN",
+    "summary": "Photonic QGAN for classical image generation with a MerLin QuantumLayer patch generator.",
+    "image": "_static/reproduced_papers/photonicQGAN.png",
+    "doc": "reproduced_papers/reproductions/photonic_QGAN",
+    "tags": ["Sedrakyan and Salavrakos", "2025", "In Progress"]
+  },
+  {
+    "title": "LatentQGAN",
+    "summary": "Hybrid quantum-classical MNIST generation in a learned latent space with a MerLin photonic variant.",
+    "image": "_static/reproduced_papers/LatentQGAN.png",
+    "doc": "reproduced_papers/reproductions/LatentQGAN",
+    "tags": ["Vieloszynski et al.", "2024", "Partial"]
+  }
+]
