@@ -175,7 +175,12 @@ templates_path = [str(DOCS_SOURCE_PATH / "_templates")]
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = []
+exclude_patterns = [
+    # ``Kernels.ipynb`` replaced this legacy notebook, but some build contexts
+    # still surface the old filename and fail strict ``-W`` docs builds unless
+    # it is explicitly ignored.
+    "notebooks/classical_vs_quantum_kernels_iris.ipynb",
+]
 
 # nbsphinx_allow_errors = True
 
