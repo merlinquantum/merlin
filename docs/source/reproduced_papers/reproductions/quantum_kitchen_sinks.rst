@@ -96,7 +96,7 @@ Key Contributions Reproduced
     the gate code to 1e-5. Two-qubit equivalence follows from a post-selected
     KLM CNOT (success 1/9), exact to 1.3e-07.
   * Reproducing that gate is not necessary. A deterministic 4-mode circuit — two
-    MZI encoders, one balanced splitter joining the logical-|1> rails (HOM
+    MZI encoders, one balanced splitter joining the logical ``|1>`` rails (HOM
     interference, no ancillas), threshold detectors, **no post-selection** —
     reaches **1.60 ± 0.00%** on (3,5)-MNIST, at parity with the gate ansatz.
   * Circuit design, not photonics, is what matters here: a generic random mesh

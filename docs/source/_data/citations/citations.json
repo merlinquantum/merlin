@@ -1,9 +1,9 @@
 {
   "source": "OpenAlex",
-  "fetched_at": "2026-08-26",
+  "fetched_at": "2026-08-27",
   "papers": {
     "QCNN_data_classification": {
-      "cited_by_count": 377,
+      "cited_by_count": 378,
       "openalex_id": "W3192227636"
     },
     "amplitude_limitations": {
@@ -11,7 +11,7 @@
       "openalex_id": "W4415084970"
     },
     "barren_plateaus": {
-      "cited_by_count": 2256,
+      "cited_by_count": 2259,
       "openalex_id": "W2794444783"
     },
     "bve_qnn": {
