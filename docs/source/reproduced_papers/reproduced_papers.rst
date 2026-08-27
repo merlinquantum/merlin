@@ -48,6 +48,7 @@ For a Better Understanding of Photonic QML Theory
    reproductions/data_reuploading
    reproductions/amplitude_limitations
    reproductions/nqe
+   reproductions/BP_QNN
 
 .. merlin-gallery::
    :data: _data/galleries/reproduced_papers/reproduced_papers_variational_methods.json
@@ -79,6 +80,21 @@ Sequential Tasks
    :columns: 3
    :contour-color: #5648ED
 
+Generative Algorithms
+~~~~~~~~~~~~~~~~~~~~~
+
+.. toctree::
+   :maxdepth: 1
+   :hidden:
+
+   reproductions/photonic_QGAN
+   reproductions/LatentQGAN
+
+.. merlin-gallery::
+   :data: _data/galleries/reproduced_papers/reproduced_papers_generative_algorithms.json
+   :columns: 2
+   :contour-color: #5648ED
+
 Advanced Training Paradigms
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -89,8 +105,8 @@ Advanced Training Paradigms
    reproductions/qllm_finetuning
    reproductions/qssl
    reproductions/quantum_adversarial_ml
-   reproductions/photonic_QGAN
    reproductions/hqpinn
+   reproductions/bve_qnn
    reproductions/quantum_transfer_learning
 
 .. merlin-gallery::

@@ -1,14 +1,22 @@
 {
   "source": "OpenAlex",
-  "fetched_at": "2026-07-22",
+  "fetched_at": "2026-08-26",
   "papers": {
     "QCNN_data_classification": {
-      "cited_by_count": 368,
+      "cited_by_count": 377,
       "openalex_id": "W3192227636"
     },
     "amplitude_limitations": {
       "cited_by_count": 0,
       "openalex_id": "W4415084970"
+    },
+    "barren_plateaus": {
+      "cited_by_count": 2256,
+      "openalex_id": "W2794444783"
+    },
+    "bve_qnn": {
+      "cited_by_count": 16,
+      "openalex_id": "W4404465609"
     },
     "distributed_nn": {
       "cited_by_count": 0,
@@ -23,15 +31,19 @@
       "openalex_id": "W4414198122"
     },
     "hqpinn": {
-      "cited_by_count": 3,
+      "cited_by_count": 4,
       "openalex_id": "W4413251953"
+    },
+    "latentqgan": {
+      "cited_by_count": 0,
+      "openalex_id": "W4403780150"
     },
     "nearest_centroids": {
       "cited_by_count": 7,
       "openalex_id": "W3113282065"
     },
     "nqe": {
-      "cited_by_count": 16,
+      "cited_by_count": 18,
       "openalex_id": "W4401421850"
     },
     "photonic_QGAN": {
@@ -39,7 +51,7 @@
       "openalex_id": "W4404059122"
     },
     "photonic_kernel": {
-      "cited_by_count": 20,
+      "cited_by_count": 25,
       "openalex_id": "W4410966984"
     },
     "photonic_memristor": {
@@ -51,23 +63,23 @@
       "openalex_id": "W4417172998"
     },
     "qllm_finetuning": {
-      "cited_by_count": 2,
+      "cited_by_count": 4,
       "openalex_id": "W4416874873"
     },
     "qssl": {
-      "cited_by_count": 38,
+      "cited_by_count": 39,
       "openalex_id": "W3141189820"
     },
     "quantum_adversarial_ml": {
-      "cited_by_count": 138,
+      "cited_by_count": 141,
       "openalex_id": "W2998262898"
     },
     "quantum_reservoir_computing": {
-      "cited_by_count": 9,
+      "cited_by_count": 12,
       "openalex_id": "W4410252038"
     },
     "quantum_transfer_learning": {
-      "cited_by_count": 394,
+      "cited_by_count": 413,
       "openalex_id": "W2995742898"
     },
     "QTRL": {
