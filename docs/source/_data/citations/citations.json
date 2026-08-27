@@ -81,6 +81,10 @@
     "quantum_transfer_learning": {
       "cited_by_count": 413,
       "openalex_id": "W2995742898"
+    },
+    "QTRL": {
+      "cited_by_count": 25,
+      "openalex_id": "W4406261916"
     }
   }
 }

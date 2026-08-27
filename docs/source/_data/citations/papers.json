@@ -153,6 +153,15 @@
     "doc": "reproduced_papers/reproductions/photonic_qcnn"
   },
   {
+    "key": "QTRL",
+    "title": "QTRL: Toward Practical Quantum Reinforcement Learning via Quantum-Train",
+    "authors_short": "Chen-Yu Liu et al.",
+    "year": 2024,
+    "venue": "arXiv preprint",
+    "doi": "10.48550/arXiv.2507.05120",
+    "doc": "reproduced_papers/reproductions/QTRL"
+  },
+  {
     "key": "bve_qnn",
     "title": "Potential of quantum scientific machine learning applied to weather modeling",
     "authors_short": "Jaderberg et al.",
