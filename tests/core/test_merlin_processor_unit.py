@@ -1797,23 +1797,19 @@ def test_submit_job_falls_back_to_samples_when_sample_count_is_unavailable():
     assert sampler.sample_count.executed is False
 
 
-def test_submit_job_defaults_to_sample_count_when_commands_are_empty():
-    """An empty command list currently means sampling through sample_count."""
+def test_submit_job_raises_when_commands_are_empty():
+    """An empty command list clearly rejects unsupported sampling."""
     proc = make_processor([])
     sampler = FakeSampler()
 
-    returned_job, is_probability = proc._make_job_runner().submit_job(
-        sampler,
-        nsample=None,
-        job_base_label=None,
-    )
-
-    assert returned_job is sampler.sample_count
-    assert is_probability is False
-    assert sampler.sample_count.executed is True
-    assert sampler.sample_count.execute_kwargs == {
-        "max_samples": MerlinProcessor.DEFAULT_SHOTS_PER_CALL
-    }
+    with pytest.raises(RuntimeError, match="does not support a sampling command"):
+        proc._make_job_runner().submit_job(
+            sampler,
+            nsample=None,
+            job_base_label=None,
+        )
+    assert sampler.sample_count.executed is False
+    assert sampler.sample_count.execute_kwargs is None
     assert sampler.probs.executed is False
     assert sampler.samples.executed is False
 
@@ -2069,17 +2065,39 @@ def test_process_batch_results_zero_fills_missing_rows():
     )
 
 
-def test_process_batch_results_probability_heuristic_renormalizes_float_rows():
-    """The current heuristic treats first float <= 1 as probability payloads."""
+def test_process_batch_results_preserves_alignment_for_empty_rows():
+    """Rows with empty counts do not shift subsequent result rows."""
+    proc = make_processor(["probs"])
+    layer = FakeLayer()
+    raw_results = {
+        "results_list": [
+            {"results": {}},
+            {"results": {"|0,1>": 1.0}},
+        ],
+    }
+
+    result = proc._process_batch_results(raw_results, 2, layer)
+
+    assert torch.allclose(
+        result,
+        torch.tensor([
+            [0.0, 0.0],
+            [0.0, 1.0],
+        ]),
+    )
+
+
+def test_process_batch_results_preserves_probability_row_mass():
+    """Probability payloads preserve their reported total mass."""
     proc = make_processor(["probs"])
     layer = FakeLayer()
     raw_results = {
         "results_list": [{"results": {"|1,0>": 1.0, "|0,1>": 1.0}}],
     }
 
-    result = proc._process_batch_results(raw_results, 1, layer)
+    result = proc._process_batch_results(raw_results, 1, layer, is_probability=True)
 
-    assert torch.allclose(result, torch.tensor([[0.5, 0.5]]))
+    assert torch.allclose(result, torch.tensor([[1.0, 1.0]]))
 
 
 # ────── Tests for _create_fresh_rp() ──────
@@ -2583,6 +2601,35 @@ def test_offload_quantum_layer_with_chunking_validates_and_caches_export_config(
         None,
     )
     assert layer.export_config_calls == 1
+
+
+def test_offload_quantum_layer_with_chunking_returns_empty_batch():
+    """An empty remote batch returns the layer's distribution width."""
+    proc = make_processor(["probs", "sample_count"])
+
+    class EmptyBatchLayer(FakeLayer):
+        uid = 43
+
+        def export_config(self):
+            return {
+                "circuit": pcvl.Circuit(m=2, name="Circuit"),
+                "input_state": [1, 0],
+                "input_param_order": [],
+            }
+
+    proc._run_chunks_pooled = MagicMock(side_effect=AssertionError("must not submit"))
+
+    result = proc._offload_quantum_layer_with_chunking(
+        EmptyBatchLayer(),
+        torch.empty((0, 2), dtype=torch.float64),
+        None,
+        {},
+        None,
+    )
+
+    assert result.shape == (0, 2)
+    assert result.dtype == torch.float64
+    proc._run_chunks_pooled.assert_not_called()
 
 
 def test_offload_quantum_layer_cache_isolated_by_merlin_module_instance_uid():

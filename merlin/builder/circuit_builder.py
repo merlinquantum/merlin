@@ -598,7 +598,8 @@ class CircuitBuilder:
             Override for the output phase shifters.
         seed : int | None
             Optional seed for the random phases assigned to non-trainable
-            phase shifters. ``None`` draws fresh entropy each call.
+            phase shifters. When omitted, the seed is drawn from PyTorch's
+            global random generator.
 
         Returns
         -------
