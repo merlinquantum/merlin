@@ -3,7 +3,7 @@
     "title": "Quantum train reinforcement learning",
     "summary": "Training a hybrid quantum-classical model to build classical models using reinforcement learning",
     "image": "_static/reproduced_papers/QTRL/QTRL.png",
-    "url": "https://github.com/merlinquantum/reproduced_papers/tree/main/papers/QTRL",
-    "tags": ["External Link", "QTRL", "Repository"]
+    "doc": "reproduced_papers/reproductions/QTRL",
+    "tags": ["Internal Link", "QTRL", "Repository"]
   }
 ]
