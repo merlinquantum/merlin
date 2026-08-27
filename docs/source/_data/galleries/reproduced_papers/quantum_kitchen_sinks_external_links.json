@@ -1,0 +1,9 @@
+[
+  {
+    "title": "Run the Quantum Kitchen Sinks package",
+    "summary": "Gate-model QKS on picture frames and (3,5)-MNIST, plus four MerLin photonic architectures, with configs, committed run artifacts and tests.",
+    "image": "_static/reproduced_papers/quantum_kitchen_sinks.png",
+    "url": "https://github.com/merlinquantum/reproduced_papers/tree/main/papers/quantum_kitchen_sinks",
+    "tags": ["Reproduced papers", "QKS", "Random features", "Dual-rail", "MerLin"]
+  }
+]

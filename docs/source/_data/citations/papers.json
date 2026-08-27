@@ -188,5 +188,14 @@
     "venue": "Nature Communications",
     "doi": "10.1038/s41467-018-07090-4",
     "doc": "reproduced_papers/reproductions/BP_QNN"
+  },
+  {
+    "key": "quantum_kitchen_sinks",
+    "title": "Quantum Kitchen Sinks: An algorithm for machine learning on near-term quantum computers",
+    "authors_short": "Wilson et al.",
+    "year": 2018,
+    "venue": "arXiv",
+    "doi": "10.48550/arXiv.1806.08321",
+    "doc": "reproduced_papers/reproductions/quantum_kitchen_sinks"
   }
 ]
