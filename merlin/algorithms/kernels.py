@@ -1475,8 +1475,7 @@ class _CCInvQuantumLayer(QuantumLayer):
 
         if x2 is not None:
             U_adjoint = (
-                self
-                ._compute_unitary_batch(
+                self._compute_unitary_batch(
                     x2,
                     apply_phase_error=apply_phase_error,
                 )
@@ -2332,3 +2331,286 @@ class FidelityKernel(MerlinModule):
                 UserWarning,
                 stacklevel=2,
             )
+
+
+class ProjectedFidelityKernel(MerlinModule):
+    """
+    Projected Quantum Kernel.
+
+    Calculates the similarity between two datapoints using the squared Euclidean
+    distance between the marginal distributions of each mode (the probability
+    of measuring 0 photons in mode k).
+    """
+
+    def __init__(
+        self,
+        feature_map,  # Type: FeatureMap
+        input_state: list[int] | None = None,
+        *,
+        gamma: float = 1.0,  # The new hyperparameter for the RBF/Gaussian kernel width
+        n_photons: int | None = None,
+        shots: int | None = None,
+        sampling_method: str = "multinomial",
+        computation_space: ComputationSpace | str | None = None,
+        force_psd: bool = True,
+        device: torch.device | None = None,
+        dtype: str | torch.dtype | None = None,
+    ) -> None:
+        super().__init__()
+
+        # --- 1. Initialization of standard and new hyperparameters ---
+        self.feature_map = feature_map
+        self.gamma = gamma
+        self.shots = shots or 0
+        self.sampling_method = sampling_method
+        self.force_psd = force_psd
+
+        base_device = device if device is not None else feature_map.device
+        self.device = (
+            torch.device(base_device)
+            if base_device is not None
+            else torch.device("cpu")
+        )
+        self.dtype = to_torch_dtype(dtype, default=feature_map.dtype)
+        self.input_size = self.feature_map.input_size
+
+        if computation_space is None:
+            self.computation_space = ComputationSpace.FOCK
+        else:
+            self.computation_space = ComputationSpace.coerce(computation_space)
+
+        # --- 2. Inference and validation of the input state ---
+        # (Reusing FidelityKernel's logic to ensure compatibility)
+        m = self.feature_map.circuit.m
+        if input_state is not None and n_photons is not None:
+            if sum(input_state) != n_photons:
+                raise ValueError(
+                    f"n_photons={n_photons} does not match the photon count "
+                    f"({sum(input_state)}) of the provided input_state."
+                )
+        elif input_state is None:
+            if n_photons is None:
+                input_state = [1 if i % 2 == 0 else 0 for i in range(m)]
+            else:
+                if n_photons <= 0 or n_photons > m:
+                    raise ValueError(
+                        f"n_photons must be between 1 and {m} (the number of circuit modes)."
+                    )
+                alternating_slot_count = (m + 1) // 2
+                if n_photons <= alternating_slot_count:
+                    state = [0] * m
+                    for i in range(n_photons):
+                        state[2 * i] = 1
+                    input_state = state
+                else:
+                    state = [1 if i % 2 == 0 else 0 for i in range(m)]
+                    remaining = n_photons - sum(state)
+                    for i in range(1, m, 2):
+                        if remaining <= 0:
+                            break
+                        state[i] = 1
+                        remaining -= 1
+                    input_state = state
+
+        if len(input_state) != m:
+            raise ValueError("Input state length does not match circuit size.")
+
+        self._kernel_input_state = list(input_state)
+
+        # --- 3. Preparation of the Perceval experiment ---
+        experiment = getattr(self.feature_map, "experiment", None)
+        if experiment is None:
+            experiment = pcvl.Experiment(self.feature_map.circuit)
+            self.feature_map.experiment = experiment
+        self.experiment = experiment
+
+        # --- 4. Initialization of the computational backend ---
+        # We use a standard QuantumLayer (instead of _CCInvQuantumLayer)
+        # because we only want to propagate data through U(x) and observe the output.
+
+        # Resolve the parameter size expected by the circuit
+        spec_mappings = self.feature_map._circuit_graph.spec_mappings
+        input_prefix = self.feature_map.input_parameters
+        backend_input_size = (
+            len(spec_mappings.get(input_prefix, []))
+            if input_prefix
+            else self.input_size
+        )
+        if backend_input_size == 0:
+            backend_input_size = self.input_size
+
+        self._quantum_layer = QuantumLayer(
+            experiment=self.experiment,
+            input_state=self._kernel_input_state,
+            input_size=backend_input_size,
+            input_parameters=[input_prefix] if input_prefix else [],
+            trainable_parameters=self.feature_map.trainable_parameters,
+            measurement_strategy=MeasurementStrategy.probs(
+                computation_space=self.computation_space,
+            ),
+            dtype=self.dtype,
+            device=self.device,
+        )
+
+        self.is_trainable = self.feature_map.is_trainable
+
+    def _build_projection_mask(self, keys: list[tuple[int, ...]]) -> None:
+        """
+        Builds a static projection mask to compute marginal probabilities efficiently.
+
+        For each mode k, the mask contains 1.0 at the index of a basis state
+        if that state has exactly 0 photons in mode k, and 0.0 otherwise.
+
+        Parameters
+        ----------
+        keys : list[tuple[int, ...]]
+            The list of computational basis states (Fock states) produced by the circuit.
+        """
+        m = self.feature_map.circuit.m
+        num_states = len(keys)
+
+        # Initialize a mask of shape (n_modes, n_states)
+        mask = torch.zeros((m, num_states), dtype=self.dtype, device=self.device)
+
+        for state_idx, state in enumerate(keys):
+            for mode_idx in range(m):
+                if state[mode_idx] == 0:
+                    mask[mode_idx, state_idx] = 1.0
+
+        # Register as a buffer so PyTorch handles device movements automatically
+        self.register_buffer("_zero_photon_mask", mask)
+
+    def _get_projected_features(self, x: Tensor) -> Tensor:
+        """
+        Passes the input data through the quantum circuit and projects the resulting
+        state into the classical feature space (marginal probabilities of 0 photons per mode).
+        """
+        # 1. Evaluate the circuit
+        result = self._quantum_layer(x)
+
+        from ..core.sectored_distribution import SectoredDistribution
+
+        # Extract probabilities
+        if isinstance(result, SectoredDistribution):
+            probs = result.to(dtype=self.dtype)
+        else:
+            probs = result.to(dtype=self.dtype)
+
+        # Extract keys from the layer's internal attributes
+        raw_keys = self._quantum_layer._raw_output_keys
+
+        # Handle sectored vs non-sectored keys
+        if raw_keys and isinstance(raw_keys[0], list):
+            keys = [k for sector in raw_keys for k in sector]
+        else:
+            keys = raw_keys
+
+        # Ensure probs is a 2D tensor (batch_size, num_states)
+        if probs.ndim == 1:
+            probs = probs.unsqueeze(0)
+
+        # 2. Build the projection mask dynamically on the first forward pass
+        if not hasattr(self, "_zero_photon_mask"):
+            self._build_projection_mask(keys)
+
+        # Optional: Apply pseudo-sampling (shot noise) if requested
+        if self.shots > 0:
+            from ..measurement.autodiff import AutoDiffProcess
+
+            autodiff_process = AutoDiffProcess()
+            probs = autodiff_process.sampling_noise.pcvl_sampler(
+                probs, self.shots, self.sampling_method
+            )
+
+        # 3. Compute the marginals (rho_k) using PyTorch matrix multiplication
+        projected_features = probs @ self._zero_photon_mask.T
+
+        return projected_features
+
+    def forward(
+        self,
+        x1: float | list | tuple | Tensor,
+        x2: float | list | tuple | Tensor | None = None,
+    ) -> float | Tensor:
+        """
+        Calculates the projected quantum kernel matrix for the given inputs.
+
+        Parameters
+        ----------
+        x1 : float | list | tuple | torch.Tensor
+            First input datapoint or dataset.
+        x2 : float | list | tuple | torch.Tensor | None
+            Second input datapoint or dataset. If omitted, the symmetric
+            training kernel matrix for `x1` is computed.
+
+        Returns
+        -------
+        float | torch.Tensor
+            Scalar kernel value for single datapoints, or a 2D kernel matrix
+            for datasets.
+        """
+        # 1. Input formatting and validation
+        if not isinstance(x1, torch.Tensor):
+            x1 = torch.as_tensor(x1, dtype=self.dtype, device=self.device)
+        else:
+            x1 = x1.to(dtype=self.dtype, device=self.device)
+
+        if x2 is not None:
+            if not isinstance(x2, torch.Tensor):
+                x2 = torch.as_tensor(x2, dtype=self.dtype, device=self.device)
+            else:
+                x2 = x2.to(dtype=self.dtype, device=self.device)
+
+        # Handle single datapoint vs batch evaluation
+        is_datapoint = self.feature_map.is_datapoint(x1)
+
+        if is_datapoint:
+            if x2 is None:
+                raise ValueError(
+                    "For a single input datapoint, you must specify an x2 argument."
+                )
+            x1 = x1.reshape(1, self.input_size)
+            x2 = x2.reshape(1, self.input_size)
+        else:
+            x1 = x1.reshape(-1, self.input_size)
+            if x2 is not None:
+                x2 = x2.reshape(-1, self.input_size)
+
+        # 2. Extract projected quantum features (rho_k)
+        # features shape: (batch_size, n_modes)
+        features1 = self._get_projected_features(x1)
+
+        if x2 is None:
+            features2 = features1
+        else:
+            features2 = self._get_projected_features(x2)
+
+        # 3. Compute pairwise squared distances explicitly as
+        # sum_k ||rho_k(x_i) - rho_k(x_j)||^2 over all modes k.
+        # Here each rho_k is the projected scalar feature for mode k.
+        pairwise_diff = features1[:, None, :] - features2[None, :, :]
+        squared_distances = (pairwise_diff**2).sum(dim=-1)
+
+        # 4. Apply the Gaussian/RBF kernel formula
+        # K(x_i, x_j) = exp(-gamma * sum_k ||rho_k(x_i) - rho_k(x_j)||^2)
+        kernel_matrix = torch.exp(-self.gamma * squared_distances)
+
+        # 5. Post-processing for numerical stability (Training matrix case)
+        if x2 is None:
+            # Force the diagonal to be exactly 1.0 (distance of a point to itself is 0)
+            kernel_matrix.fill_diagonal_(1.0)
+
+            # Symmetrize the matrix to fix tiny floating-point inaccuracies
+            kernel_matrix = 0.5 * (kernel_matrix + kernel_matrix.T)
+
+            # Project to the closest Positive Semi-Definite matrix if requested
+            if self.force_psd:
+                # We assume _project_psd_matrix is imported or available in the file
+                # from .kernels import _project_psd_matrix
+                kernel_matrix = _project_psd_matrix(kernel_matrix)
+
+        # If the input was just two individual points, return a float instead of a 1x1 matrix
+        if is_datapoint:
+            return float(kernel_matrix.reshape(-1)[0].item())
+
+        return kernel_matrix
