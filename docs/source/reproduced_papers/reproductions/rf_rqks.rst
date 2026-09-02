@@ -21,7 +21,7 @@ RF Spectrogram Anomaly Detection with Quantum Kitchen Sinks
 
    **Reproduction Status**: ⚠️ Partial — evaluated on one LTE band
 
-   **Reproducer**: MerLin reproduced-papers contributors
+   **Reproducer**: Louis-Félix Vigneux and Cassandre Notton
 
 Project Repository
 ==================

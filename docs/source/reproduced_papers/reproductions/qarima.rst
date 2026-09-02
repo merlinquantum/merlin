@@ -21,7 +21,7 @@ QARIMA: A Quantum Approach to Time-Series Analysis
 
    **Reproduction Status**: ⚠️ Partial — headline claim not supported under fair baselines
 
-   **Reproducer**: MerLin reproduced-papers contributors
+   **Reproducer**: Cassandre Notton
 
 Project Repository
 ==================

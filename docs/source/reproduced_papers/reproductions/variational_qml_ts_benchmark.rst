@@ -21,7 +21,7 @@ Quantum vs. Classical Time-Series Benchmark
 
    **Reproduction Status**: ✅ Complete
 
-   **Reproducer**: MerLin reproduced-papers contributors
+   **Reproducer**: Cassandre Notton
 
 Project Repository
 ==================
