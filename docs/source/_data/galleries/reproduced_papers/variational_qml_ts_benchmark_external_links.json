@@ -1,0 +1,9 @@
+[
+  {
+    "title": "Run the Time-Series Benchmark",
+    "summary": "Quantum and classical forecasting benchmark with MerLin dressed-QNN and photonic-reservoir extensions.",
+    "image": "_static/reproduced_papers/TS-benchmark.png",
+    "url": "https://github.com/merlinquantum/reproduced_papers/tree/main/papers/variational_qml_ts_benchmark",
+    "tags": ["External Link", "Time series", "Repository"]
+  }
+]

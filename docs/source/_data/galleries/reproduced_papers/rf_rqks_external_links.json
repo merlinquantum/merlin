@@ -1,0 +1,9 @@
+[
+  {
+    "title": "Run the RF-RQKS Reproduction",
+    "summary": "RF spectrogram anomaly detection with photonic MerLin and gate-based quantum kitchen sinks.",
+    "image": "_static/reproduced_papers/RF-QKS.png",
+    "url": "https://github.com/merlinquantum/reproduced_papers/tree/main/papers/RF-RQKS",
+    "tags": ["External Link", "RF-QKS", "Repository"]
+  }
+]

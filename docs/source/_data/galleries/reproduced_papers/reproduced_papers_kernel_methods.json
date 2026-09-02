@@ -12,5 +12,12 @@
     "image": "_static/reproduced_papers/Centroids.png",
     "doc": "reproduced_papers/reproductions/nearest_centroids",
     "tags": ["Johri et al.", "2020", "Complete", "Image TBD"]
+  },
+  {
+    "title": "RF Anomaly Detection with Quantum Kitchen Sinks",
+    "summary": "Photonic and gate-based random quantum features for anomaly detection in measured LTE spectrograms.",
+    "image": "_static/reproduced_papers/RF-QKS.png",
+    "doc": "reproduced_papers/reproductions/rf_rqks",
+    "tags": ["Aaraba et al.", "2026", "Partial", "RF-QKS"]
   }
 ]
