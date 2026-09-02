@@ -12,5 +12,12 @@
     "image": "_static/reproduced_papers/Centroids.png",
     "doc": "reproduced_papers/reproductions/nearest_centroids",
     "tags": ["Johri et al.", "2020", "Complete", "Image TBD"]
+  },
+  {
+    "title": "Quantum Kitchen Sinks",
+    "summary": "Open-loop random quantum features feeding a linear classifier, with a photonic adaptation that matches the gate-model ansatz exactly.",
+    "image": "_static/reproduced_papers/quantum_kitchen_sinks.png",
+    "doc": "reproduced_papers/reproductions/quantum_kitchen_sinks",
+    "tags": ["Wilson et al.", "2018", "Complete", "Random features"]
   }
 ]

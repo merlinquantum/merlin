@@ -30,6 +30,7 @@ Kernel Methods
 
    reproductions/photonic_kernel
    reproductions/nearest_centroids
+   reproductions/quantum_kitchen_sinks
 
 .. merlin-gallery::
    :data: _data/galleries/reproduced_papers/reproduced_papers_kernel_methods.json
