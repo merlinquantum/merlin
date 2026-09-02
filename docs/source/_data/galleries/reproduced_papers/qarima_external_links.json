@@ -1,0 +1,9 @@
+[
+  {
+    "title": "Run the QARIMA Reproduction",
+    "summary": "Classical, gate-based, and MerLin photonic ARIMA refiners with order sweeps and fair seasonal baselines.",
+    "image": "_static/reproduced_papers/QARIMA.png",
+    "url": "https://github.com/merlinquantum/reproduced_papers/tree/main/papers/QARIMA",
+    "tags": ["External Link", "QARIMA", "Repository"]
+  }
+]

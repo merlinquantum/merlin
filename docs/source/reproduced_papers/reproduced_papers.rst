@@ -30,6 +30,7 @@ Kernel Methods
 
    reproductions/photonic_kernel
    reproductions/nearest_centroids
+   reproductions/rf_rqks
 
 .. merlin-gallery::
    :data: _data/galleries/reproduced_papers/reproduced_papers_kernel_methods.json
@@ -65,6 +66,7 @@ Computer Vision
    reproductions/quantum_reservoir_computing
    reproductions/photonic_qcnn
    reproductions/QCNN_data_classification
+   reproductions/photonic_quantum_accelerated_ml
 
 .. merlin-gallery::
    :data: _data/galleries/reproduced_papers/reproduced_papers_computer_vision.json
@@ -74,6 +76,13 @@ Computer Vision
 
 Sequential Tasks
 ~~~~~~~~~~~~~~~~
+
+.. toctree::
+   :maxdepth: 1
+   :hidden:
+
+   reproductions/qarima
+   reproductions/variational_qml_ts_benchmark
 
 .. merlin-gallery::
    :data: _data/galleries/reproduced_papers/reproduced_papers_sequential.json

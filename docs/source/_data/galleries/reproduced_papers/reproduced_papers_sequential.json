@@ -12,5 +12,19 @@
     "image": "_static/reproduced_papers/QLSTM.png",
     "url": "https://github.com/merlinquantum/reproduced_papers/tree/main/papers/QLSTM",
     "tags": ["Yen-Chi et al.", "2020", "Complete", "Sequential"]
+  },
+  {
+    "title": "QARIMA",
+    "summary": "Quantum-inspired ARIMA reproduced with classical, gate-based, and photonic refiners under fair baseline comparisons.",
+    "image": "_static/reproduced_papers/QARIMA.png",
+    "doc": "reproduced_papers/reproductions/qarima",
+    "tags": ["Mohanty et al.", "2026", "Partial", "Time series"]
+  },
+  {
+    "title": "Quantum vs. Classical Time-Series Benchmark",
+    "summary": "A 27-task benchmark of variational quantum and classical forecasters with additional photonic models.",
+    "image": "_static/reproduced_papers/TS-benchmark.png",
+    "doc": "reproduced_papers/reproductions/variational_qml_ts_benchmark",
+    "tags": ["Fellner et al.", "2026", "Complete", "Time series"]
   }
 ]

@@ -36,6 +36,42 @@
     "doc": "reproduced_papers/reproductions/qssl"
   },
   {
+    "key": "photonic_quantum_accelerated_ml",
+    "title": "Photonic Quantum-Accelerated Machine Learning",
+    "authors_short": "Rambach et al.",
+    "year": 2025,
+    "venue": "arXiv preprint",
+    "doi": "10.48550/arXiv.2512.08318",
+    "doc": "reproduced_papers/reproductions/photonic_quantum_accelerated_ml"
+  },
+  {
+    "key": "qarima",
+    "title": "QARIMA: A Quantum Approach To Classical Time Series Analysis",
+    "authors_short": "Mohanty et al.",
+    "year": 2026,
+    "venue": "arXiv preprint",
+    "doi": "10.48550/arXiv.2604.08277",
+    "doc": "reproduced_papers/reproductions/qarima"
+  },
+  {
+    "key": "variational_qml_ts_benchmark",
+    "title": "Quantum vs. Classical: A Comprehensive Benchmark Study for Predicting Time Series with Variational Quantum Machine Learning",
+    "authors_short": "Fellner et al.",
+    "year": 2026,
+    "venue": "Machine Learning: Science and Technology",
+    "doi": "10.1088/2632-2153/ae365f",
+    "doc": "reproduced_papers/reproductions/variational_qml_ts_benchmark"
+  },
+  {
+    "key": "rf_rqks",
+    "title": "RF Spectrogram Anomaly Detection with Quantum Kitchen Sinks: Architecture, Representation, and Hardware Validation",
+    "authors_short": "Aaraba et al.",
+    "year": 2026,
+    "venue": "IEEE Quantum Week",
+    "doi": "10.48550/arXiv.2607.13897",
+    "doc": "reproduced_papers/reproductions/rf_rqks"
+  },
+  {
     "key": "fock_state_expressivity",
     "title": "Fock State-enhanced Expressivity of Quantum Machine Learning Models",
     "authors_short": "Gan et al.",
