@@ -22,7 +22,7 @@ Photonic Quantum-Accelerated Machine Learning
    **Reproduction Status**: ✅ Complete
 
    **Reproducer**: Cassandre Notton
-   
+
 Project Repository
 ==================
 
