@@ -197,5 +197,14 @@
     "venue": "Nature Communications",
     "doi": "10.1038/s41467-018-07090-4",
     "doc": "reproduced_papers/reproductions/BP_QNN"
+  },
+  {
+    "key": "bosonic_binary_solver",
+    "title": "A Binary Optimisation Algorithm for Near-Term Photonic Quantum Processors",
+    "authors_short": "Makarovskiy et al.",
+    "year": 2025,
+    "venue": "arXiv preprint",
+    "doi": "10.48550/arXiv.2510.08274",
+    "doc": "reproduced_papers/reproductions/bosonic_binary_solver"
   }
 ]

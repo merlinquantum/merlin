@@ -95,6 +95,20 @@ Generative Algorithms
    :columns: 2
    :contour-color: #5648ED
 
+Combinatorial Optimisation
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. toctree::
+   :maxdepth: 1
+   :hidden:
+
+   reproductions/bosonic_binary_solver
+
+.. merlin-gallery::
+   :data: _data/galleries/reproduced_papers/reproduced_papers_combinatorial_optimisation.json
+   :columns: 2
+   :contour-color: #5648ED
+
 Advanced Training Paradigms
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

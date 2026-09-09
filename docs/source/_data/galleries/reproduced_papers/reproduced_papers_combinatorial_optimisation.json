@@ -1,0 +1,15 @@
+[
+  {
+    "title": "Bosonic Binary Solver",
+    "summary": "Threshold-detected samples from a fixed time-bin interferometer, post-processed by a trainable bit-flip layer, used as the proposal distribution for knapsack and TSP. The circuit never encodes the instance.",
+    "image": "_static/reproduced_papers/bosonic_binary_solver.png",
+    "doc": "reproduced_papers/reproductions/bosonic_binary_solver",
+    "tags": [
+      "Makarovskiy et al.",
+      "2025",
+      "Partial",
+      "Knapsack",
+      "TSP"
+    ]
+  }
+]
