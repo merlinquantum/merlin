@@ -1,0 +1,28 @@
+[
+  {
+    "title": "Run the Bosonic Binary Solver package",
+    "summary": "Time-bin interferometer, trainable bit-flip layer and photonic parameter-shift training, with CPU, MerLin exact-gradient and batched GPU paths, classical baselines at a matched candidate budget, and 39 tests.",
+    "image": "_static/reproduced_papers/bosonic_binary_solver.png",
+    "url": "https://github.com/merlinquantum/reproduced_papers/tree/main/papers/bosonic_binary_solver",
+    "tags": [
+      "Reproduced papers",
+      "Binary optimisation",
+      "Knapsack",
+      "TSP",
+      "Time-bin",
+      "MerLin"
+    ]
+  },
+  {
+    "title": "Bosonic Binary Solver interactive notebook",
+    "summary": "Build the delay-line interferometer with Perceval primitives, wrap it in a MerLin QuantumLayer, and train it end to end on a small knapsack instance with exact gradients.",
+    "image": "_static/reproduced_papers/bosonic_binary_solver.png",
+    "doc": "notebooks/reproduced_papers/bosonic_binary_solver",
+    "tags": [
+      "Notebook",
+      "QuantumLayer",
+      "Knapsack",
+      "Exact gradients"
+    ]
+  }
+]
