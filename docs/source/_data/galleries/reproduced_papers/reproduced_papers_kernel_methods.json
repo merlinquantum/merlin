@@ -4,20 +4,47 @@
     "summary": "Kernel-based classification on a photonic processor with indistinguishable-versus-distinguishable photon comparisons.",
     "image": "_static/reproduced_papers/photonic_enhanced_kernels/results-for-readme/accuracy_vs_input_state/plot.png",
     "doc": "reproduced_papers/reproductions/photonic_kernel",
-    "tags": ["Yin et al.", "2025", "Complete", "Kernel methods"]
+    "tags": [
+      "Yin et al.",
+      "2025",
+      "Complete",
+      "Kernel methods"
+    ]
   },
   {
     "title": "Nearest Centroid Quantum Classification",
     "summary": "Amplitude-encoding nearest-centroid classification with quantum inner-product estimation.",
     "image": "_static/reproduced_papers/Centroids.png",
     "doc": "reproduced_papers/reproductions/nearest_centroids",
-    "tags": ["Johri et al.", "2020", "Complete", "Image TBD"]
+    "tags": [
+      "Johri et al.",
+      "2020",
+      "Complete",
+      "Image TBD"
+    ]
   },
   {
     "title": "RF Anomaly Detection with Quantum Kitchen Sinks",
     "summary": "Photonic and gate-based random quantum features for anomaly detection in measured LTE spectrograms.",
     "image": "_static/reproduced_papers/RF-QKS.png",
     "doc": "reproduced_papers/reproductions/rf_rqks",
-    "tags": ["Aaraba et al.", "2026", "Partial", "RF-QKS"]
+    "tags": [
+      "Aaraba et al.",
+      "2026",
+      "Partial",
+      "RF-QKS"
+    ]
+  },
+  {
+    "title": "Encrypted Traffic Analysis with Quantum ML",
+    "summary": "Classical, quantum and hybrid SVM/KNN on encrypted network traffic, with photonic reservoir feature maps under the same protocol.",
+    "image": "_static/reproduced_papers/qSVM_qKNN/svm_knn_comparison.png",
+    "doc": "reproduced_papers/reproductions/qsvm_qknn",
+    "tags": [
+      "Sodar et al.",
+      "2026",
+      "Partial",
+      "Kernel methods"
+    ]
   }
 ]
