@@ -4,41 +4,77 @@
     "summary": "Expressivity study of photonic variational models with increasing photon counts.",
     "image": "_static/img/Circ_simple.png",
     "doc": "reproduced_papers/reproductions/fock_state_expressivity",
-    "tags": ["Gan et al.", "2022", "Complete"]
+    "tags": [
+      "Gan et al.",
+      "2022",
+      "Complete"
+    ]
   },
   {
     "title": "HQNN: Myth or Reality?",
     "summary": "Controlled benchmark of hybrid quantum neural networks versus classical baselines across feature complexity.",
     "image": "_static/reproduced_papers/hqnn/blobs_dataset.png",
     "doc": "reproduced_papers/reproductions/hqnn-myth",
-    "tags": ["Kashif et al.", "2025", "Complete"]
+    "tags": [
+      "Kashif et al.",
+      "2025",
+      "Complete"
+    ]
   },
   {
     "title": "Experimental Data Re-uploading",
     "summary": "Resource-efficient photonic data re-uploading model reproduced on multiple datasets.",
     "image": "_static/reproduced_papers/DataReuploading.png",
     "doc": "reproduced_papers/reproductions/data_reuploading",
-    "tags": ["Mauser et al.", "2025", "Complete"]
+    "tags": [
+      "Mauser et al.",
+      "2025",
+      "Complete"
+    ]
   },
   {
     "title": "Limitations of Amplitude Encoding",
     "summary": "Theoretical and experimental study of amplitude-encoding concentration effects and their impact on quantum classification.",
     "image": "_static/reproduced_papers/AA_study.png",
     "doc": "reproduced_papers/reproductions/amplitude_limitations",
-    "tags": ["Wang et al.", "2025", "Complete"]
+    "tags": [
+      "Wang et al.",
+      "2025",
+      "Complete"
+    ]
   },
   {
     "title": "Neural Quantum Embedding",
     "summary": "Training the quantum embedding with a classical model to optimize its performance.",
     "image": "_static/reproduced_papers/nqe/phase_1_paper.png",
     "doc": "reproduced_papers/reproductions/nqe",
-    "tags": ["Hur et al.", "2024", "Complete"]
+    "tags": [
+      "Hur et al.",
+      "2024",
+      "Complete"
+    ]
   },
   {
     "title": "Barren Plateaus in QNN Training Landscapes",
     "summary": "Gradient-variance scaling reproduction with gate-based and MerLin photonic implementations.",
     "image": "_static/reproduced_papers/BP_QNN_figure3_merlin.png",
     "doc": "reproduced_papers/reproductions/BP_QNN",
-    "tags": ["McClean et al.", "2018", "Partial"]
+    "tags": [
+      "McClean et al.",
+      "2018",
+      "Partial"
+    ]
+  },
+  {
+    "title": "Fourier Fingerprints of Ansatzes",
+    "summary": "A diagnostic for ansatz selection ported to linear optics: fingerprints, the FCC metric, and how the encoding sets the reachable spectrum.",
+    "image": "_static/reproduced_papers/Fourier_Fingerprints/fcc_by_encoding.png",
+    "doc": "reproduced_papers/reproductions/fourier_fingerprints",
+    "tags": [
+      "Strobl et al.",
+      "2025",
+      "Partial",
+      "Ansatz analysis"
+    ]
   }
 ]

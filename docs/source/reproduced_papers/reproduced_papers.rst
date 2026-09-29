@@ -31,6 +31,7 @@ Kernel Methods
    reproductions/photonic_kernel
    reproductions/nearest_centroids
    reproductions/rf_rqks
+   reproductions/qsvm_qknn
 
 .. merlin-gallery::
    :data: _data/galleries/reproduced_papers/reproduced_papers_kernel_methods.json
@@ -50,6 +51,7 @@ For a Better Understanding of Photonic QML Theory
    reproductions/amplitude_limitations
    reproductions/nqe
    reproductions/BP_QNN
+   reproductions/fourier_fingerprints
 
 .. merlin-gallery::
    :data: _data/galleries/reproduced_papers/reproduced_papers_variational_methods.json
@@ -134,6 +136,7 @@ Distributed Training
    :hidden:
 
    reproductions/distributed_nn
+   reproductions/distributed_qml_cc
 
 .. merlin-gallery::
    :data: _data/galleries/reproduced_papers/reproduced_papers_distributed_training.json

@@ -1,0 +1,13 @@
+[
+  {
+    "title": "Run the Fourier Fingerprints Reproduction",
+    "summary": "Fingerprints and the FCC metric for photonic circuits, with the encoding-versus-spectrum sweep and the learning study.",
+    "image": "_static/reproduced_papers/Fourier_Fingerprints/fcc_by_encoding.png",
+    "url": "https://github.com/merlinquantum/reproduced_papers/tree/main/papers/Fourier_Fingerprints",
+    "tags": [
+      "External Link",
+      "Fourier_Fingerprints",
+      "Repository"
+    ]
+  }
+]

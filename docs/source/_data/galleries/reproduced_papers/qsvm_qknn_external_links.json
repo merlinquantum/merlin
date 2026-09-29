@@ -1,0 +1,13 @@
+[
+  {
+    "title": "Run the Encrypted-Traffic QML Reproduction",
+    "summary": "Classical, quantum and hybrid SVM/KNN variants on encrypted traffic, with photonic reservoir and ZZ feature-map extensions.",
+    "image": "_static/reproduced_papers/qSVM_qKNN/svm_knn_comparison.png",
+    "url": "https://github.com/merlinquantum/reproduced_papers/tree/main/papers/qSVM_qKNN",
+    "tags": [
+      "External Link",
+      "qSVM_qKNN",
+      "Repository"
+    ]
+  }
+]

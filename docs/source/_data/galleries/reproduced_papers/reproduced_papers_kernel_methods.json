@@ -34,5 +34,17 @@
       "Partial",
       "RF-QKS"
     ]
+  },
+  {
+    "title": "Encrypted Traffic Analysis with Quantum ML",
+    "summary": "Classical, quantum and hybrid SVM/KNN on encrypted network traffic, with photonic reservoir feature maps under the same protocol.",
+    "image": "_static/reproduced_papers/qSVM_qKNN/svm_knn_comparison.png",
+    "doc": "reproduced_papers/reproductions/qsvm_qknn",
+    "tags": [
+      "Sodar et al.",
+      "2026",
+      "Partial",
+      "Kernel methods"
+    ]
   }
 ]
