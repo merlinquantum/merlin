@@ -21,13 +21,6 @@
     "tags": ["Lu et al.", "2020", "Complete", "Image TBD"]
   },
   {
-    "title": "Photonic Quantum GAN",
-    "summary": "Photonic QGAN for classical image generation with a MerLin QuantumLayer patch generator.",
-    "image": "_static/reproduced_papers/photonicQGAN.png",
-    "doc": "reproduced_papers/reproductions/photonic_QGAN",
-    "tags": ["Sedrakyan and Salavrakos", "2025", "In Progress"]
-  },
-  {
     "title": "Hybrid Quantum PINN",
     "summary": "Physics-informed high-speed-flow benchmarks with classical, PennyLane, and MerLin photonic branches.",
     "image": "_static/reproduced_papers/HQPINN.png",
@@ -47,5 +40,12 @@
     "image": "_static/reproduced_papers/QRKD.png",
     "url": "https://github.com/merlinquantum/reproduced_papers/tree/main/papers/QRKD",
     "tags": ["Liu et al.", "2025", "Complete", "Knowledge Distillation"]
+  },
+  {
+    "title": "Weather QSciML with Photonic QNN",
+    "summary": "Dual-rail photonic reproduction of Experiment 1 (stream-function regression) from Jaderberg et al.",
+    "image": "_static/reproduced_papers/bve_qnn.png",
+    "doc": "reproduced_papers/reproductions/bve_qnn",
+    "tags": ["Jaderberg et al.", "2024", "Partial"]
   }
 ]

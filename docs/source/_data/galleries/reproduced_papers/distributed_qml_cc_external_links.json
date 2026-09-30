@@ -1,0 +1,13 @@
+[
+  {
+    "title": "Run the Distributed QML Reproduction",
+    "summary": "Four distributed schemes compared across circuit depth, with a photonic translation and an iso-parameter classical baseline.",
+    "image": "_static/reproduced_papers/distributed_qml_cc/fig4d_acc_vs_layers.png",
+    "url": "https://github.com/merlinquantum/reproduced_papers/tree/main/papers/distributed_qml_cc",
+    "tags": [
+      "External Link",
+      "distributed_qml_cc",
+      "Repository"
+    ]
+  }
+]

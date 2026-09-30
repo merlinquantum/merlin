@@ -30,6 +30,8 @@ Kernel Methods
 
    reproductions/photonic_kernel
    reproductions/nearest_centroids
+   reproductions/rf_rqks
+   reproductions/qsvm_qknn
 
 .. merlin-gallery::
    :data: _data/galleries/reproduced_papers/reproduced_papers_kernel_methods.json
@@ -48,6 +50,8 @@ For a Better Understanding of Photonic QML Theory
    reproductions/data_reuploading
    reproductions/amplitude_limitations
    reproductions/nqe
+   reproductions/BP_QNN
+   reproductions/fourier_fingerprints
 
 .. merlin-gallery::
    :data: _data/galleries/reproduced_papers/reproduced_papers_variational_methods.json
@@ -64,6 +68,7 @@ Computer Vision
    reproductions/quantum_reservoir_computing
    reproductions/photonic_qcnn
    reproductions/QCNN_data_classification
+   reproductions/photonic_quantum_accelerated_ml
 
 .. merlin-gallery::
    :data: _data/galleries/reproduced_papers/reproduced_papers_computer_vision.json
@@ -74,9 +79,32 @@ Computer Vision
 Sequential Tasks
 ~~~~~~~~~~~~~~~~
 
+.. toctree::
+   :maxdepth: 1
+   :hidden:
+
+   reproductions/qarima
+   reproductions/variational_qml_ts_benchmark
+
 .. merlin-gallery::
    :data: _data/galleries/reproduced_papers/reproduced_papers_sequential.json
    :columns: 3
+   :contour-color: #5648ED
+
+Generative Algorithms
+~~~~~~~~~~~~~~~~~~~~~
+
+.. toctree::
+   :maxdepth: 1
+   :hidden:
+
+   reproductions/photonic_QGAN
+   reproductions/LatentQGAN
+   reproductions/MolGAN_QRL
+
+.. merlin-gallery::
+   :data: _data/galleries/reproduced_papers/reproduced_papers_generative_algorithms.json
+   :columns: 2
    :contour-color: #5648ED
 
 Advanced Training Paradigms
@@ -89,9 +117,10 @@ Advanced Training Paradigms
    reproductions/qllm_finetuning
    reproductions/qssl
    reproductions/quantum_adversarial_ml
-   reproductions/photonic_QGAN
    reproductions/hqpinn
+   reproductions/bve_qnn
    reproductions/quantum_transfer_learning
+   reproductions/efficient_mutation_testing
 
 .. merlin-gallery::
    :data: _data/galleries/reproduced_papers/reproduced_papers_advanced_training.json
@@ -106,6 +135,7 @@ Distributed Training
    :hidden:
 
    reproductions/distributed_nn
+   reproductions/distributed_qml_cc
 
 .. merlin-gallery::
    :data: _data/galleries/reproduced_papers/reproduced_papers_distributed_training.json
@@ -123,6 +153,20 @@ Future-proofing
 
 .. merlin-gallery::
    :data: _data/galleries/reproduced_papers/reproduced_papers_future_proofing.json
+   :columns: 2
+   :contour-color: #5648ED
+
+Reinforcement Learning
+~~~~~~~~~~~~~~~~~~~~~~
+
+.. toctree::
+   :maxdepth: 1
+   :hidden:
+
+   reproductions/QTRL
+
+.. merlin-gallery::
+   :data: _data/galleries/reproduced_papers/QTRL.json
    :columns: 2
    :contour-color: #5648ED
 

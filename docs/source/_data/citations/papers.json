@@ -36,6 +36,42 @@
     "doc": "reproduced_papers/reproductions/qssl"
   },
   {
+    "key": "photonic_quantum_accelerated_ml",
+    "title": "Photonic Quantum-Accelerated Machine Learning",
+    "authors_short": "Rambach et al.",
+    "year": 2025,
+    "venue": "arXiv preprint",
+    "doi": "10.48550/arXiv.2512.08318",
+    "doc": "reproduced_papers/reproductions/photonic_quantum_accelerated_ml"
+  },
+  {
+    "key": "qarima",
+    "title": "QARIMA: A Quantum Approach To Classical Time Series Analysis",
+    "authors_short": "Mohanty et al.",
+    "year": 2026,
+    "venue": "arXiv preprint",
+    "doi": "10.48550/arXiv.2604.08277",
+    "doc": "reproduced_papers/reproductions/qarima"
+  },
+  {
+    "key": "variational_qml_ts_benchmark",
+    "title": "Quantum vs. Classical: A Comprehensive Benchmark Study for Predicting Time Series with Variational Quantum Machine Learning",
+    "authors_short": "Fellner et al.",
+    "year": 2026,
+    "venue": "Machine Learning: Science and Technology",
+    "doi": "10.1088/2632-2153/ae365f",
+    "doc": "reproduced_papers/reproductions/variational_qml_ts_benchmark"
+  },
+  {
+    "key": "rf_rqks",
+    "title": "RF Spectrogram Anomaly Detection with Quantum Kitchen Sinks: Architecture, Representation, and Hardware Validation",
+    "authors_short": "Aaraba et al.",
+    "year": 2026,
+    "venue": "IEEE Quantum Week",
+    "doi": "10.48550/arXiv.2607.13897",
+    "doc": "reproduced_papers/reproductions/rf_rqks"
+  },
+  {
     "key": "fock_state_expressivity",
     "title": "Fock State-enhanced Expressivity of Quantum Machine Learning Models",
     "authors_short": "Gan et al.",
@@ -153,6 +189,24 @@
     "doc": "reproduced_papers/reproductions/photonic_qcnn"
   },
   {
+    "key": "QTRL",
+    "title": "QTRL: Toward Practical Quantum Reinforcement Learning via Quantum-Train",
+    "authors_short": "Chen-Yu Liu et al.",
+    "year": 2024,
+    "venue": "arXiv preprint",
+    "doi": "10.48550/arXiv.2407.06103",
+    "doc": "reproduced_papers/reproductions/QTRL"
+  },
+  {
+    "key": "bve_qnn",
+    "title": "Potential of quantum scientific machine learning applied to weather modeling",
+    "authors_short": "Jaderberg et al.",
+    "year": 2024,
+    "venue": "Physical Review A",
+    "doi": "10.1103/PhysRevA.110.052423",
+    "doc": "reproduced_papers/reproductions/bve_qnn"
+  },
+  {
     "key": "data_reuploading",
     "title": "Experimental Data Re-uploading with Provable Enhanced Learning Capabilities",
     "authors_short": "Mauser et al.",
@@ -161,5 +215,70 @@
     "doi": "10.48550/arXiv.2507.05120",
     "doc": "reproduced_papers/reproductions/data_reuploading",
     "not_indexed": true
+  },
+  {
+    "key": "latentqgan",
+    "title": "LatentQGAN: A Hybrid QGAN with Classical Convolutional Autoencoder",
+    "authors_short": "Vieloszynski et al.",
+    "year": 2024,
+    "venue": "arXiv preprint",
+    "doi": "10.48550/arXiv.2409.14622",
+    "doc": "reproduced_papers/reproductions/LatentQGAN"
+  },
+  {
+    "key": "barren_plateaus",
+    "title": "Barren plateaus in quantum neural network training landscapes",
+    "authors_short": "McClean et al.",
+    "year": 2018,
+    "venue": "Nature Communications",
+    "doi": "10.1038/s41467-018-07090-4",
+    "doc": "reproduced_papers/reproductions/BP_QNN"
+  },
+  {
+    "key": "fourier_fingerprints",
+    "title": "Fourier Fingerprints of Ansatzes in Quantum Machine Learning",
+    "authors_short": "Strobl et al.",
+    "year": 2025,
+    "venue": "arXiv preprint",
+    "doi": "10.48550/arXiv.2508.20868",
+    "doc": "reproduced_papers/reproductions/fourier_fingerprints",
+    "not_indexed": true
+  },
+  {
+    "key": "distributed_qml_cc",
+    "title": "Distributed quantum machine learning via classical communication",
+    "authors_short": "Hwang et al.",
+    "year": 2025,
+    "venue": "Quantum Science and Technology",
+    "doi": "10.1088/2058-9565/ad9cb9",
+    "doc": "reproduced_papers/reproductions/distributed_qml_cc"
+  },
+  {
+    "key": "qsvm_qknn",
+    "title": "Encrypted network traffic analysis using quantum machine learning",
+    "authors_short": "Sodar et al.",
+    "year": 2026,
+    "venue": "EPJ Quantum Technology",
+    "doi": "10.1140/epjqt/s40507-025-00459-7",
+    "doc": "reproduced_papers/reproductions/qsvm_qknn"
+  }
+  ,
+  {
+    "key": "molgan_qrl",
+    "title": "MolGAN-QRL: Molecular Graph Generation using Photonic Quantum Reinforcement Learning",
+    "authors_short": "Harigua-Souiai & Hergli",
+    "year": 2026,
+    "venue": "Internal Technical Report",
+    "doi": "10.1186/s13321-025-01148-4",
+    "doc": "reproduced_papers/reproductions/MolGAN_QRL"
+  },
+  {
+    "key": "efficient_mutation_testing",
+    "title": "Mutation testing for quantum machine learning models",
+    "authors_short": "Andrews & Mishra",
+    "year": 2026,
+    "venue": "arXiv preprint",
+    "doi": "10.48550/arXiv.2605.00107",
+    "doc": "reproduced_papers/reproductions/efficient_mutation_testing"
   }
 ]

@@ -1,0 +1,9 @@
+[
+  {
+    "title": "Barren Plateaus in QNN Training Landscapes",
+    "summary": "Gate-based reproduction and MerLin photonic analogue of the gradient-variance scaling study.",
+    "image": "_static/reproduced_papers/BP_QNN_figure3_merlin.png",
+    "url": "https://github.com/merlinquantum/reproduced_papers/tree/main/papers/BP_QNN",
+    "tags": ["External Link", "McClean et al.", "2018", "Partial"]
+  }
+]

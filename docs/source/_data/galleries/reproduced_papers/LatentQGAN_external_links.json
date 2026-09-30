@@ -1,0 +1,9 @@
+[
+  {
+    "title": "LatentQGAN",
+    "summary": "Hybrid quantum-classical MNIST generation in a learned latent space, with a MerLin photonic variant.",
+    "image": "_static/reproduced_papers/LatentQGAN.png",
+    "url": "https://github.com/merlinquantum/reproduced_papers/tree/main/papers/LatentQGAN",
+    "tags": ["External Link", "LatentQGAN", "2024", "Partial"]
+  }
+]

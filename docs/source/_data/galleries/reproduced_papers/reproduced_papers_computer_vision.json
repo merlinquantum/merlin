@@ -19,5 +19,12 @@
     "image": "_static/reproduced_papers/QCNN_data_classification/Photonic_QConv.png",
     "doc": "reproduced_papers/reproductions/QCNN_data_classification",
     "tags": ["Hur et al.", "2022", "Complete"]
+  },
+  {
+    "title": "Photonic Quantum-Accelerated Machine Learning",
+    "summary": "Frozen boson-sampling features for MNIST and MedMNIST under sparse data, source noise, and optional QPU execution.",
+    "image": "_static/reproduced_papers/QORC_2_noisy.png",
+    "doc": "reproduced_papers/reproductions/photonic_quantum_accelerated_ml",
+    "tags": ["Rambach et al.", "2025", "Complete", "QORC"]
   }
 ]

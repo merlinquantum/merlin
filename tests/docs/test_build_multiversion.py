@@ -1,6 +1,9 @@
+"""Tests for multiversion documentation output and citation overlays."""
+
 from docs.build_multiversion import (
     _redirect_page,
     discover_docnames,
+    update_exported_citation_data,
     write_legacy_page_redirects,
 )
 
@@ -56,3 +59,36 @@ def test_discover_docnames_uses_posix_paths_and_skips_hidden_components(tmp_path
         "api_reference/api/merlin.core",
         "notebook",
     ]
+
+
+def test_update_exported_citation_data_updates_supported_tag(tmp_path):
+    # Model a release tag created after citation tracking was introduced.
+    checkout_path = tmp_path / "checkout"
+    citations_directory = (
+        checkout_path / "docs" / "source" / "_data" / "citations"
+    )
+    citations_directory.mkdir(parents=True)
+    (citations_directory / "papers.json").write_text("[]")
+    (citations_directory / "citations.json").write_text('{"old": true}')
+    refreshed_citations = tmp_path / "refreshed-citations.json"
+    refreshed_citations.write_text('{"new": true}')
+
+    assert update_exported_citation_data(checkout_path, refreshed_citations)
+    assert (citations_directory / "citations.json").read_text() == '{"new": true}'
+
+
+def test_update_exported_citation_data_skips_tag_without_registry(tmp_path):
+    # Older release tags have no citation registry and must remain untouched.
+    checkout_path = tmp_path / "checkout"
+    refreshed_citations = tmp_path / "refreshed-citations.json"
+    refreshed_citations.write_text('{"new": true}')
+
+    assert not update_exported_citation_data(checkout_path, refreshed_citations)
+    assert not (
+        checkout_path
+        / "docs"
+        / "source"
+        / "_data"
+        / "citations"
+        / "citations.json"
+    ).exists()

@@ -124,10 +124,55 @@ Key Contributions Reproduced
 Experimental Results
 ====================
 
-.. note::
-   The original paper reports additional batch-level diagnostics (recorded every 256-image batch) beyond the main loss curve:
-   average Hilbert-Schmidt distance between positive and negative pairs, mean positive-pair clustering, mean negative-pair clustering, and ensemble inter-cluster overlap.
-   These diagnostics are not yet included in this reproduction page and will be added in a future update.
+Hilbert-space distance diagnostics
+----------------------------------
+
+The reproduction now tracks the state-space diagnostics from Fig. 4 of the
+paper alongside the InfoNCE loss. For every tracked batch it records the mean
+Hilbert--Schmidt distance between positive-pair and negative-ensemble states,
+positive-pair clustering, negative-ensemble clustering, and their overlap.
+
+The Qiskit experiment reproduces the paper's qualitative behavior: the SSL loss
+decreases while the mean Hilbert--Schmidt distance between positive and negative
+states increases. Saved ``hilbert_schmidt_metrics.json`` files contain the loss
+and all four quantities for every tracked batch.
+
+The MerLin experiment is the photonic counterpart of this analysis. Since the
+MerLin layer exposes photon-count probabilities rather than complex amplitudes,
+each normalized probability vector is treated as the diagonal of a density
+matrix. For a positive pair ``i`` in a batch of size ``B``:
+
+.. math::
+
+   \rho_i = \frac{p_i^{(1)} + p_i^{(2)}}{2}, \qquad
+   \sigma_i = \frac{\sum_j p_j - p_i^{(1)} - p_i^{(2)}}{2B - 2}.
+
+The tracked distance is then
+
+.. math::
+
+   D_{\mathrm{HS}}(\rho_i, \sigma_i)
+   = \operatorname{tr}(\rho_i^2)
+   + \operatorname{tr}(\sigma_i^2)
+   - 2\operatorname{tr}(\rho_i\sigma_i)
+   = \lVert \rho_i - \sigma_i \rVert_2^2.
+
+This is the exact Hilbert--Schmidt distance for the diagonal density-matrix
+representation. It is a probability-space surrogate and does not include the
+optical phases or coherences of a full complex state vector.
+
+Run the MerLin experiment from the reproduced-papers repository root:
+
+.. code-block:: bash
+
+   python implementation.py --paper qSSL --config qSSL/configs/merlin_dhs.json
+
+The default config uses two CIFAR-10 classes, ten photonic modes, three SSL
+epochs, and per-batch tracking. ``--dhs-freq`` changes the sampling frequency.
+The run writes ``hilbert_schmidt_metrics.json`` and
+``hilbert_schmidt_tracking.png`` alongside the normal checkpoints and training
+summary. Existing metric files can be plotted again with
+``utils/plot_hilbert_schmidt.py`` without retraining.
 
 Original paper headline results (5 CIFAR-10 classes)
 -----------------------------------------------------

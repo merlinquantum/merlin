@@ -1,0 +1,9 @@
+[
+  {
+    "title": "Run Photonic Quantum-Accelerated ML",
+    "summary": "QORC experiments covering MedMNIST, sparse and imbalanced MNIST, photon-source noise, and optional QPU execution.",
+    "image": "_static/reproduced_papers/QORC_2_noisy.png",
+    "url": "https://github.com/merlinquantum/reproduced_papers/tree/main/papers/QORC",
+    "tags": ["External Link", "QORC", "Repository"]
+  }
+]
