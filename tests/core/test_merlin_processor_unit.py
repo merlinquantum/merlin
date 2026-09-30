@@ -17,8 +17,7 @@ import numpy as np
 import perceval as pcvl
 import pytest
 import torch
-from perceval.runtime import AProcessor, Processor, RemoteProcessor
-from perceval.runtime.session import ISession
+from perceval import AProcessor, ISession, Processor, RemoteProcessor
 
 import merlin.core.merlin_processor as merlin_processor_module
 import merlin.core.perceval_adapter as perceval_adapter_module

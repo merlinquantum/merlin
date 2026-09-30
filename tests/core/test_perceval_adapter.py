@@ -36,7 +36,7 @@ def patch_remote_config(token: str | None):
     """Patch perceval's RemoteConfig to return the given global token."""
     config = MagicMock()
     config.get_token.return_value = token
-    return patch("perceval.runtime.RemoteConfig", return_value=config)
+    return patch("perceval.RemoteConfig", return_value=config)
 
 
 # ---------------------------------------------------------------------------
@@ -103,7 +103,7 @@ class TestExtractToken:
         config = MagicMock()
         config.get_token.side_effect = RuntimeError("config broken")
 
-        with patch("perceval.runtime.RemoteConfig", return_value=config):
+        with patch("perceval.RemoteConfig", return_value=config):
             assert PercevalAdapter.extract_token(make_rp(SimpleNamespace())) is None
 
 

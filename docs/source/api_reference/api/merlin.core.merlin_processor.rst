@@ -16,7 +16,7 @@ classical layers local. It supports these backend entry points:
 * **Perceval** :class:`~pcvl.RemoteProcessor` — the original
   Quandela Cloud path. Passing a RemoteProcessor through ``processor=`` routes
   to this same path.
-* **Perceval** `pcvl.runtime.session.ISession <https://perceval.quandela.net/docs/v1.2/providers.html#scaleway>`_ — the preferred path
+* **Perceval** `pcvl.runtime.session.ISession <https://perceval.quandela.net/docs/v1.2/reference/providers.html#scaleway>`_ — the preferred path
   for Scaleway-hosted platforms (and any future session-based providers).
 
 All execution paths support batched execution, per-call/global timeouts,
@@ -59,6 +59,8 @@ Key current limitation
   directly the computation on the QPU.
 
 * Differentiation through the MerLin processor will be implemented in v0.5.
+
+* Not yet compatible with the Perceval 1.3.0 Computer API yet. It remains fully compatible with the AProcessor API in Perceval versions 1.2.x and 1.3.0.
 
 Class Reference
 ===============
@@ -159,7 +161,7 @@ MerlinProcessor
       :class:`~pcvl.RemoteProcessor` entry point. Pass the same object through
       ``processor=`` instead. Merlin clones it per chunk so concurrent jobs
       have independent state. Type: ``RemoteProcessor | None``.
-   :param session: A Perceval `pcvl.runtime.session.ISession <https://perceval.quandela.net/docs/v1.2/providers.html#scaleway>`_
+   :param session: A Perceval `pcvl.runtime.session.ISession <https://perceval.quandela.net/docs/v1.2/reference/providers.html#scaleway>`_
       object — e.g. from ``pcvl.providers.scaleway.Session``. Merlin calls
       ``session.build_remote_processor()`` per chunk, giving each chunk
       an independent RP. Type: ``ISession | None``.

@@ -6,7 +6,7 @@ import os
 
 import perceval as pcvl
 import pytest
-from perceval.runtime import RemoteConfig
+from perceval import RemoteConfig
 
 LOGGER = logging.getLogger(__name__)
 

@@ -23,9 +23,8 @@ from dataclasses import dataclass
 from typing import Any
 
 import perceval as pcvl
+from perceval import AProcessor, ISession, Processor, RemoteJob, RemoteProcessor
 from perceval.algorithm import Sampler
-from perceval.runtime import AProcessor, Processor, RemoteJob, RemoteProcessor
-from perceval.runtime.session import ISession
 
 logger = logging.getLogger(__name__)
 
@@ -158,7 +157,7 @@ class PercevalAdapter:
 
         # Last resort: check the global config
         try:
-            from perceval.runtime import RemoteConfig
+            from perceval import RemoteConfig
 
             global_token = (RemoteConfig().get_token() or "").strip()
             if global_token:
@@ -233,7 +232,7 @@ class PercevalAdapter:
 
         Parameters
         ----------
-        session : perceval.runtime.session.ISession
+        session : perceval.runtime.ISession
             Provider session (e.g. Scaleway) able to build processors.
 
         Returns
@@ -689,4 +688,5 @@ class PercevalAdapter:
             experiment._anon_herald_num = snapshot.anon_herald_num
 
         experiment._postselect = copy.copy(snapshot.postselection)
-        experiment._circuit_changed()
+        if hasattr(experiment, "_circuit_changed"):
+            experiment._circuit_changed()
