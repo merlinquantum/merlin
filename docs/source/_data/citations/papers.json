@@ -233,5 +233,33 @@
     "venue": "Nature Communications",
     "doi": "10.1038/s41467-018-07090-4",
     "doc": "reproduced_papers/reproductions/BP_QNN"
+  },
+  {
+    "key": "fourier_fingerprints",
+    "title": "Fourier Fingerprints of Ansatzes in Quantum Machine Learning",
+    "authors_short": "Strobl et al.",
+    "year": 2025,
+    "venue": "arXiv preprint",
+    "doi": "10.48550/arXiv.2508.20868",
+    "doc": "reproduced_papers/reproductions/fourier_fingerprints",
+    "not_indexed": true
+  },
+  {
+    "key": "distributed_qml_cc",
+    "title": "Distributed quantum machine learning via classical communication",
+    "authors_short": "Hwang et al.",
+    "year": 2025,
+    "venue": "Quantum Science and Technology",
+    "doi": "10.1088/2058-9565/ad9cb9",
+    "doc": "reproduced_papers/reproductions/distributed_qml_cc"
+  },
+  {
+    "key": "qsvm_qknn",
+    "title": "Encrypted network traffic analysis using quantum machine learning",
+    "authors_short": "Sodar et al.",
+    "year": 2026,
+    "venue": "EPJ Quantum Technology",
+    "doi": "10.1140/epjqt/s40507-025-00459-7",
+    "doc": "reproduced_papers/reproductions/qsvm_qknn"
   }
 ]

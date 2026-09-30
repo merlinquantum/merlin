@@ -4,6 +4,22 @@
     "summary": "Distributed photonic parameter generation for CNN compression and MNIST-classification experiments.",
     "image": "_static/reproduced_papers/DQNN.png",
     "doc": "reproduced_papers/reproductions/distributed_nn",
-    "tags": ["Chen et al.", "2025", "Complete"]
+    "tags": [
+      "Chen et al.",
+      "2025",
+      "Complete"
+    ]
+  },
+  {
+    "title": "Distributed QML via Classical Communication",
+    "summary": "Classical feedforward between processors recovers most of the benefit of a quantum link, reproduced on gate and photonic hardware models.",
+    "image": "_static/reproduced_papers/distributed_qml_cc/fig4d_acc_vs_layers.png",
+    "doc": "reproduced_papers/reproductions/distributed_qml_cc",
+    "tags": [
+      "Hwang et al.",
+      "2025",
+      "Complete",
+      "Distributed"
+    ]
   }
 ]
