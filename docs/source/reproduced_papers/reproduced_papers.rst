@@ -100,6 +100,7 @@ Generative Algorithms
 
    reproductions/photonic_QGAN
    reproductions/LatentQGAN
+   reproductions/MolGAN_QRL
 
 .. merlin-gallery::
    :data: _data/galleries/reproduced_papers/reproduced_papers_generative_algorithms.json
@@ -119,6 +120,7 @@ Advanced Training Paradigms
    reproductions/hqpinn
    reproductions/bve_qnn
    reproductions/quantum_transfer_learning
+   reproductions/efficient_mutation_testing
 
 .. merlin-gallery::
    :data: _data/galleries/reproduced_papers/reproduced_papers_advanced_training.json

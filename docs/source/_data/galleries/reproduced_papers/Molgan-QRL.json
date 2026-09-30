@@ -1,0 +1,9 @@
+[
+  {
+    "title": "Discover MolGAN-QRL",
+    "summary": "Molecular Graph Generation using Photonic Quantum Reinforcement Learning with MerLin.",
+    "image": "_static/reproduced_papers/MolGAN_QRL/molganqrl.jpg",
+    "url": "https://github.com/merlinquantum/reproduced_papers/tree/main/papers/MOLGAN-QRL",
+    "tags": ["External Link", "Generative Algorithms", "Chemistry", "Reinforcement Learning"]
+  }
+]

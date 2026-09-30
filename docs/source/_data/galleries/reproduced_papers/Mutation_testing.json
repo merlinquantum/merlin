@@ -1,0 +1,9 @@
+[
+  {
+    "title": "Discover Efficient Mutation Testing",
+    "summary": "Mutation testing for photonic quantum machine learning models with MerLin.",
+    "image": "_static/reproduced_papers/QML_MT/efficient_mutation_testing.png",
+    "url": "https://github.com/merlinquantum/reproduced_papers/tree/main/papers/QML_mutation_testing",
+    "tags": ["External Link", "Advanced Training", "Mutation Testing", "QNN"]
+  }
+]

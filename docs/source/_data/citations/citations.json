@@ -109,6 +109,14 @@
     "variational_qml_ts_benchmark": {
       "cited_by_count": 5,
       "openalex_id": "W4417089088"
+    },
+    "molgan_qrl": {
+      "cited_by_count": 1,
+      "openalex_id": "W7127113236"
+    },
+    "efficient_mutation_testing": {
+      "cited_by_count": 1,
+      "openalex_id": "W7160062117"
     }
   }
 }

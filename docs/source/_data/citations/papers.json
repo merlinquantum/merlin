@@ -262,4 +262,23 @@
     "doi": "10.1140/epjqt/s40507-025-00459-7",
     "doc": "reproduced_papers/reproductions/qsvm_qknn"
   }
+  ,
+  {
+    "key": "molgan_qrl",
+    "title": "MolGAN-QRL: Molecular Graph Generation using Photonic Quantum Reinforcement Learning",
+    "authors_short": "Harigua-Souiai & Hergli",
+    "year": 2026,
+    "venue": "Internal Technical Report",
+    "doi": "10.1186/s13321-025-01148-4",
+    "doc": "reproduced_papers/reproductions/MolGAN_QRL"
+  },
+  {
+    "key": "efficient_mutation_testing",
+    "title": "Mutation testing for quantum machine learning models",
+    "authors_short": "Andrews & Mishra",
+    "year": 2026,
+    "venue": "arXiv preprint",
+    "doi": "10.48550/arXiv.2605.00107",
+    "doc": "reproduced_papers/reproductions/efficient_mutation_testing"
+  }
 ]
