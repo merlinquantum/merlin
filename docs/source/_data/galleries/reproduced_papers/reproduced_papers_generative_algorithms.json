@@ -4,13 +4,33 @@
     "summary": "Photonic QGAN for classical image generation with a MerLin QuantumLayer patch generator.",
     "image": "_static/reproduced_papers/photonicQGAN.png",
     "doc": "reproduced_papers/reproductions/photonic_QGAN",
-    "tags": ["Sedrakyan and Salavrakos", "2025", "In Progress"]
+    "tags": [
+      "Sedrakyan and Salavrakos",
+      "2025",
+      "In Progress"
+    ]
   },
   {
     "title": "LatentQGAN",
     "summary": "Hybrid quantum-classical MNIST generation in a learned latent space with a MerLin photonic variant.",
     "image": "_static/reproduced_papers/LatentQGAN.png",
     "doc": "reproduced_papers/reproductions/LatentQGAN",
-    "tags": ["Vieloszynski et al.", "2024", "Partial"]
+    "tags": [
+      "Vieloszynski et al.",
+      "2024",
+      "Partial"
+    ]
+  },
+  {
+    "title": "Level Generation with Quantum Reservoir Computing",
+    "summary": "Gate-based and photonic reservoirs generating Super Mario Bros levels, with a temperature-tunable originality/playability trade-off.",
+    "image": "_static/reproduced_papers/qrc_level_generation/level_qrc_T1.png",
+    "doc": "reproduced_papers/reproductions/qrc_level_generation",
+    "tags": [
+      "Ferreira et al.",
+      "2025",
+      "Partial",
+      "Generative"
+    ]
   }
 ]

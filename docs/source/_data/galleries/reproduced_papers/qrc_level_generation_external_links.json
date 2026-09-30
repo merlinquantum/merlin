@@ -1,0 +1,9 @@
+[
+  {
+    "title": "Run the Level-Generation QRC Reproduction",
+    "summary": "Gate-based and MerLin photonic reservoirs generating Super Mario Bros levels, with originality and broken-transition metrics.",
+    "image": "_static/reproduced_papers/qrc_level_generation/level_qrc_T1.png",
+    "url": "https://github.com/merlinquantum/reproduced_papers/tree/main/papers/qrc_level_generation",
+    "tags": ["External Link", "qrc_level_generation", "Repository"]
+  }
+]

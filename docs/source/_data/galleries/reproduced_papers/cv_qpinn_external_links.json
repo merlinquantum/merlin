@@ -1,0 +1,9 @@
+[
+  {
+    "title": "Run the CV-QPINN Reproduction",
+    "summary": "Fock-truncated CV simulator, consistency-loss PINN, matched-parameter classical baseline and a MerLin linear-optics adaptation.",
+    "image": "_static/reproduced_papers/CV_QPINN_PDE/poisson_compare.png",
+    "url": "https://github.com/merlinquantum/reproduced_papers/tree/main/papers/CV_QPINN_PDE",
+    "tags": ["External Link", "CV_QPINN_PDE", "Repository"]
+  }
+]

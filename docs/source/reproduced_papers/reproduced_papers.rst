@@ -69,6 +69,7 @@ Computer Vision
    reproductions/photonic_qcnn
    reproductions/QCNN_data_classification
    reproductions/photonic_quantum_accelerated_ml
+   reproductions/quantum_vision_transformers
 
 .. merlin-gallery::
    :data: _data/galleries/reproduced_papers/reproduced_papers_computer_vision.json
@@ -100,6 +101,7 @@ Generative Algorithms
 
    reproductions/photonic_QGAN
    reproductions/LatentQGAN
+   reproductions/qrc_level_generation
 
 .. merlin-gallery::
    :data: _data/galleries/reproduced_papers/reproduced_papers_generative_algorithms.json
@@ -119,6 +121,7 @@ Advanced Training Paradigms
    reproductions/hqpinn
    reproductions/bve_qnn
    reproductions/quantum_transfer_learning
+   reproductions/cv_qpinn
 
 .. merlin-gallery::
    :data: _data/galleries/reproduced_papers/reproduced_papers_advanced_training.json

@@ -4,27 +4,56 @@
     "summary": "Boson-sampling reservoirs for image recognition and scalable photonic reservoir analysis.",
     "image": "_static/img/reservoir_scheme.png",
     "doc": "reproduced_papers/reproductions/quantum_reservoir_computing",
-    "tags": ["Sakurai et al.", "2025", "In Progress"]
+    "tags": [
+      "Sakurai et al.",
+      "2025",
+      "In Progress"
+    ]
   },
   {
     "title": "Photonic QCNN with State Injection",
     "summary": "Photonic quantum convolutional architecture with adaptive state injection for vision tasks.",
     "image": "_static/reproduced_papers/PhotonicQCNN.png",
     "doc": "reproduced_papers/reproductions/photonic_qcnn",
-    "tags": ["Monbroussou et al.", "2025", "Complete"]
+    "tags": [
+      "Monbroussou et al.",
+      "2025",
+      "Complete"
+    ]
   },
   {
     "title": "QCNN for Classical Data Classification",
     "summary": "Quantum pseudo-convolution workflow for PCA-compressed classical image classification.",
     "image": "_static/reproduced_papers/QCNN_data_classification/Photonic_QConv.png",
     "doc": "reproduced_papers/reproductions/QCNN_data_classification",
-    "tags": ["Hur et al.", "2022", "Complete"]
+    "tags": [
+      "Hur et al.",
+      "2022",
+      "Complete"
+    ]
   },
   {
     "title": "Photonic Quantum-Accelerated Machine Learning",
     "summary": "Frozen boson-sampling features for MNIST and MedMNIST under sparse data, source noise, and optional QPU execution.",
     "image": "_static/reproduced_papers/QORC_2_noisy.png",
     "doc": "reproduced_papers/reproductions/photonic_quantum_accelerated_ml",
-    "tags": ["Rambach et al.", "2025", "Complete", "QORC"]
+    "tags": [
+      "Rambach et al.",
+      "2025",
+      "Complete",
+      "QORC"
+    ]
+  },
+  {
+    "title": "Quantum Vision Transformers",
+    "summary": "Photonic transformers whose attention emerges from photon interference, matching a classical ViT with up to 8x fewer attention parameters.",
+    "image": "_static/reproduced_papers/quantum_vision_transformers/comparison_retinamnist.png",
+    "doc": "reproduced_papers/reproductions/quantum_vision_transformers",
+    "tags": [
+      "Cherrat et al.",
+      "2024",
+      "Complete",
+      "Computer vision"
+    ]
   }
 ]

@@ -1,0 +1,13 @@
+[
+  {
+    "title": "Run the Quantum Vision Transformers Reproduction",
+    "summary": "Six photonic transformer architectures on MedMNIST, with quantum attention matched against a classical ViT at a fraction of the attention parameters.",
+    "image": "_static/reproduced_papers/quantum_vision_transformers/comparison_retinamnist.png",
+    "url": "https://github.com/merlinquantum/reproduced_papers/tree/main/papers/quantum_vision_transformers",
+    "tags": [
+      "External Link",
+      "quantum_vision_transformers",
+      "Repository"
+    ]
+  }
+]

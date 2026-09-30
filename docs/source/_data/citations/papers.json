@@ -235,6 +235,31 @@
     "doc": "reproduced_papers/reproductions/BP_QNN"
   },
   {
+    "key": "cv_qpinn",
+    "title": "Quantum physics informed neural networks for multi-variable partial differential equations",
+    "authors_short": "Panichi et al.",
+    "year": 2025,
+    "venue": "arXiv preprint",
+    "doi": "10.48550/arXiv.2503.12244",
+    "doc": "reproduced_papers/reproductions/cv_qpinn"
+  },
+  {
+    "key": "qrc_level_generation",
+    "title": "Level Generation with Quantum Reservoir Computing",
+    "authors_short": "Ferreira et al.",
+    "year": 2025,
+    "venue": "IEEE Computer Graphics and Applications",
+    "doi": "10.1109/MCG.2025.3591956",
+    "doc": "reproduced_papers/reproductions/qrc_level_generation"
+  },
+  {
+    "key": "quantum_vision_transformers",
+    "title": "Quantum Vision Transformers",
+    "authors_short": "Cherrat et al.",
+    "year": 2024,
+    "venue": "Quantum",
+    "doi": "10.22331/q-2024-02-22-1265",
+    "doc": "reproduced_papers/reproductions/quantum_vision_transformers"
     "key": "fourier_fingerprints",
     "title": "Fourier Fingerprints of Ansatzes in Quantum Machine Learning",
     "authors_short": "Strobl et al.",

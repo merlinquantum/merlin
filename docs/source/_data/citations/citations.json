@@ -22,6 +22,10 @@
       "cited_by_count": 16,
       "openalex_id": "W4404465609"
     },
+    "cv_qpinn": {
+      "cited_by_count": 1,
+      "openalex_id": "W6892106443"
+    },
     "distributed_nn": {
       "cited_by_count": 0,
       "openalex_id": "W6910423078"
@@ -82,6 +86,10 @@
       "cited_by_count": 4,
       "openalex_id": "W4416874873"
     },
+    "qrc_level_generation": {
+      "cited_by_count": 0,
+      "openalex_id": "W4414687458"
+    },
     "qssl": {
       "cited_by_count": 40,
       "openalex_id": "W3141189820"
@@ -101,6 +109,10 @@
     "quantum_transfer_learning": {
       "cited_by_count": 415,
       "openalex_id": "W2995742898"
+    },
+    "quantum_vision_transformers": {
+      "cited_by_count": 91,
+      "openalex_id": "W4320032187"
     },
     "rf_rqks": {
       "cited_by_count": 0,

@@ -4,48 +4,93 @@
     "summary": "Photonic quantum heads for sentence-embedding classification with baseline-aware evaluation.",
     "image": "_static/reproduced_papers/qllm/qllm_setup.png",
     "doc": "reproduced_papers/reproductions/qllm_finetuning",
-    "tags": ["Kim et al.", "2025", "Complete"]
+    "tags": [
+      "Kim et al.",
+      "2025",
+      "Complete"
+    ]
   },
   {
     "title": "Quantum Self-Supervised Learning",
     "summary": "SimCLR-style qSSL reproduction with MerLin photonic, Qiskit, and classical backends.",
     "image": "_static/reproduced_papers/qSSL/qSSL_model.png",
     "doc": "reproduced_papers/reproductions/qssl",
-    "tags": ["Jaderberg et al.", "2022", "Complete"]
+    "tags": [
+      "Jaderberg et al.",
+      "2022",
+      "Complete"
+    ]
   },
   {
     "title": "Quantum Adversarial Machine Learning",
     "summary": "Adversarial attacks and defenses for hybrid quantum-classical photonic classifiers.",
     "image": "_static/reproduced_papers/AdversarialML.png",
     "doc": "reproduced_papers/reproductions/quantum_adversarial_ml",
-    "tags": ["Lu et al.", "2020", "Complete", "Image TBD"]
+    "tags": [
+      "Lu et al.",
+      "2020",
+      "Complete",
+      "Image TBD"
+    ]
   },
   {
     "title": "Hybrid Quantum PINN",
     "summary": "Physics-informed high-speed-flow benchmarks with classical, PennyLane, and MerLin photonic branches.",
     "image": "_static/reproduced_papers/HQPINN.png",
     "doc": "reproduced_papers/reproductions/hqpinn",
-    "tags": ["Leong et al.", "2025", "Complete", "PINN", "CFD"]
+    "tags": [
+      "Leong et al.",
+      "2025",
+      "Complete",
+      "PINN",
+      "CFD"
+    ]
   },
   {
     "title": "Quantum Transfer Learning",
     "summary": "Hybrid transfer learning with frozen classical feature extractors and trainable quantum heads.",
     "image": "_static/reproduced_papers/TransferLearning.png",
     "doc": "reproduced_papers/reproductions/quantum_transfer_learning",
-    "tags": ["Mari et al.", "2020", "Complete", "Transfer learning"]
+    "tags": [
+      "Mari et al.",
+      "2020",
+      "Complete",
+      "Transfer learning"
+    ]
   },
   {
     "title": "Quantum Relational Knowledge Distillation",
     "summary": "Knowledge distillation (KD) is a widely adopted technique for compressing large models into smaller, more efficient student models",
     "image": "_static/reproduced_papers/QRKD.png",
     "url": "https://github.com/merlinquantum/reproduced_papers/tree/main/papers/QRKD",
-    "tags": ["Liu et al.", "2025", "Complete", "Knowledge Distillation"]
+    "tags": [
+      "Liu et al.",
+      "2025",
+      "Complete",
+      "Knowledge Distillation"
+    ]
   },
   {
     "title": "Weather QSciML with Photonic QNN",
     "summary": "Dual-rail photonic reproduction of Experiment 1 (stream-function regression) from Jaderberg et al.",
     "image": "_static/reproduced_papers/bve_qnn.png",
     "doc": "reproduced_papers/reproductions/bve_qnn",
-    "tags": ["Jaderberg et al.", "2024", "Partial"]
+    "tags": [
+      "Jaderberg et al.",
+      "2024",
+      "Partial"
+    ]
+  },
+  {
+    "title": "CV-QPINN for PDEs",
+    "summary": "Continuous-variable quantum PINNs with a consistency loss, against a matched-parameter classical PINN and a MerLin adaptation.",
+    "image": "_static/reproduced_papers/CV_QPINN_PDE/poisson_compare.png",
+    "doc": "reproduced_papers/reproductions/cv_qpinn",
+    "tags": [
+      "Panichi et al.",
+      "2025",
+      "Partial",
+      "PDEs"
+    ]
   }
 ]
