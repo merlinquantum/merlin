@@ -232,7 +232,7 @@ class PercevalAdapter:
 
         Parameters
         ----------
-        session : perceval.runtime.session.ISession
+        session : perceval.runtime.ISession
             Provider session (e.g. Scaleway) able to build processors.
 
         Returns
